@@ -14,6 +14,7 @@
     --accent: #3454d1; --accent-soft: #eef1fd; --border: #e6e3dd;
     --warn-bg: #fff6ed; --warn-border: #f5b77e; --warn-text: #92400e;
     --ok-bg: #eefbf3; --ok-text: #067647;
+    --err-text: #b42318;
     --radius: 14px;
     --space-1: 4px; --space-2: 8px; --space-3: 12px; --space-4: 16px;
     --space-5: 20px; --space-6: 24px; --space-8: 32px;
@@ -37,18 +38,41 @@
   .stat .num { font-size: 20px; font-weight: 700; }
   .stat .lbl { font-size: 11px; color: var(--sub); margin-top: 2px; }
 
-  .panel { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: var(--space-4); margin-bottom: var(--space-4); }
-  .panel h2 { margin: 0 0 var(--space-3); font-size: 14px; font-weight: 600; }
-  .row { display: flex; gap: var(--space-2); flex-wrap: wrap; margin-bottom: var(--space-2); }
-  .row input, .row select {
-    font-family: inherit; font-size: 14px; padding: 10px 12px; border: 1px solid var(--border);
-    border-radius: 10px; background: #fff; flex: 1; min-width: 90px;
+  .panel { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: var(--space-4); margin-bottom: var(--space-3); }
+  .panel h2 { margin: 0 0 var(--space-3); font-size: 15px; font-weight: 600; display: flex; align-items: center; gap: 6px; }
+
+  .field { display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 110px; }
+  .field label { font-size: 12px; color: var(--sub); font-weight: 500; }
+  .field input, .field select {
+    font-family: inherit; font-size: 15px; padding: 11px 12px; border: 1px solid var(--border);
+    border-radius: 10px; background: #fff; min-height: 44px; width: 100%;
   }
-  .row button, .btn {
-    font-family: inherit; font-size: 14px; font-weight: 500; padding: 10px 16px; border: none;
-    border-radius: 10px; background: var(--accent); color: #fff; cursor: pointer;
+  .field input:focus, .field select:focus { outline: 2px solid var(--accent); outline-offset: 1px; border-color: var(--accent); }
+
+  .field-row { display: flex; gap: var(--space-3); align-items: flex-end; flex-wrap: wrap; }
+  .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: var(--space-2); margin-bottom: var(--space-3); }
+
+  .btn {
+    font-family: inherit; font-size: 14px; font-weight: 600; padding: 12px 20px; border: none;
+    border-radius: 10px; background: var(--accent); color: #fff; cursor: pointer; min-height: 44px;
+    white-space: nowrap; transition: background .15s ease, transform .1s ease;
   }
+  .btn:hover { background: #2a44b8; }
+  .btn:active { transform: scale(.98); }
+  .btn:disabled { opacity: .6; cursor: default; transform: none; }
   .btn.secondary { background: var(--accent-soft); color: var(--accent); }
+  .btn.secondary:hover { background: #dfe4fb; }
+  .btn.block { width: 100%; }
+
+  .msg { font-size: 13px; margin-top: var(--space-2); min-height: 16px; }
+  .msg.error { color: var(--err-text); }
+
+  .hint { font-size: 12px; color: var(--sub); margin-top: var(--space-2); }
+
+  @media (max-width: 480px) {
+    .field-row { flex-direction: column; align-items: stretch; }
+    .field-row .btn { width: 100%; }
+  }
 
   .lot-card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: var(--space-3); overflow: hidden; }
   .lot-head { padding: var(--space-3) var(--space-4); font-weight: 600; font-size: 14px; background: var(--accent-soft); display: flex; justify-content: space-between; align-items: baseline; gap: var(--space-2); }
@@ -60,11 +84,10 @@
   th, td { padding: var(--space-2) var(--space-3); text-align: right; border-top: 1px solid var(--border); font-variant-numeric: tabular-nums; }
   th:first-child, td:first-child { text-align: left; font-variant-numeric: normal; }
   th { color: var(--sub); font-weight: 500; font-size: 11px; }
-  .paid-badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11px; cursor: pointer; }
+  .paid-badge { display: inline-block; padding: 6px 10px; border-radius: 999px; font-size: 11px; cursor: pointer; min-height: 28px; line-height: 16px; }
   .paid-badge.paid { background: var(--ok-bg); color: var(--ok-text); }
   .paid-badge.unpaid { background: var(--warn-bg); color: var(--warn-text); }
 
-  .hint { font-size: 12px; color: var(--sub); margin-top: var(--space-2); }
   .loading { text-align: center; color: var(--sub); padding: var(--space-6); font-size: 13px; }
 </style>
 </head>
@@ -103,6 +126,7 @@
     function fmtBaht(n) { return Number(n).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
 
     let SETTINGS = null;
+    let lastSelectedLotId = null;
 
     async function loadSettings() {
       const { data, error } = await sb.from('settings').select('key,value');
@@ -142,7 +166,7 @@
 
       const summary = document.createElement('div');
       summary.className = 'summary-grid';
-      summary.innerHTLL = `
+      summary.innerHTML = `
         <div class="stat"><div class="num">${totalPieces}</div><div class="lbl">ชิ้นรวม</div></div>
         <div class="stat"><div class="num">${fmtBaht(grandTotalPrice)}</div><div class="lbl">ยอดรวมราคา (บาท)</div></div>
         <div class="stat"><div class="num">${round4(grandTotalYard).toFixed(2)}</div><div class="lbl">ผ้าที่ต้องใช้ (หลา)</div></div>
@@ -184,60 +208,114 @@
           const next = el.dataset.paid !== 'true';
           el.textContent = '...';
           const { error } = await sb.from('pieces').update({ paid: next }).eq('id', id);
-          if (error) { alert('อัปเดตไม่สำเร็จ: ' + error.message); }
+          if (error) { alert('อัปเดีไม่สำเร็จ: ' + error.message); }
           await loadAll();
         });
       });
     }
 
     function buildAddPanel(lots) {
-      const panel = document.createElement('div');
-      panel.className = 'panel';
-      const lotOptions = lots.map(l => `<option value="${l.id}">${esc(l.name)}</option>`).join('');
-      panel.innerHTML = `
-        <h2>เพิ่มล็อตใหม่</h2>
-        <div class="row">
-          <input id="newLotName" placeholder="ชื่อล็อต เช่น 9/8/69">
-          <button id="addLotBtn">+ เพิ่มล็อต</button>
+      const frag = document.createDocumentFragment();
+
+      if (lastSelectedLotId === null && lots.length) lastSelectedLotId = lots[0].id;
+
+      // ---- panel 1: เพิ่มล็อตใหม่ ----
+      const lotPanel = document.createElement('div');
+      lotPanel.className = 'panel';
+      lotPanel.innerHTML = `
+        <h2>➕ เพิ่มล็อตใหม่</h2>
+        <div class="field-row">
+          <div class="field">
+            <label for="newLotName">ชื่อล็อต</label>
+            <input id="newLotName" placeholder="เช่น 9/8/69">
+          </div>
+          <button id="addLotBtn" class="btn">+ เพิ่มล็อต</button>
         </div>
-        <h2 style="margin-top:var(--space-4)">เพิ่มชิ้นงาน</h2>
-        <div class="row">
+        <div class="msg" id="lotMsg"></div>
+      `;
+      const lotNameInput = lotPanel.querySelector('#newLotName');
+      const addLotBtn = lotPanel.querySelector('#addLotBtn');
+      const lotMsg = lotPanel.querySelector('#lotMsg');
+      async function submitLot() {
+        const name = lotNameInput.value.trim();
+        lotMsg.textContent = ''; lotMsg.className = 'msg';
+        if (!name) { lotMsg.textContent = 'กรอกชื่อล็อตก่อน'; lotMsg.className = 'msg error'; return; }
+        addLotBtn.disabled = true; addLotBtn.textContent = 'กำลังเพิ่ม...';
+        const { error } = await sb.from('lots').insert({ name });
+        if (error) {
+          lotMsg.textContent = 'เพิ่มล็อตไม่สำเร็จ: ' + error.message; lotMsg.className = 'msg error';
+          addLotBtn.disabled = false; addLotBtn.textContent = '+ เพิ่มล็อต';
+          return;
+        }
+        await loadAll();
+      }
+      addLotBtn.addEventListener('click', submitLot);
+      lotNameInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') submitLot(); });
+
+      // ---- panel 2: เพิ่มชิ้นงาน ----
+      const piecePanel = document.createElement('div');
+      piecePanel.className = 'panel';
+      const lotOptions = lots.map(l => `<option value="${l.id}" ${l.id === lastSelectedLotId ? 'selected' : ''}>${esc(l.name)}</option>`).join('');
+      piecePanel.innerHTML = `
+        <h2>🧵 เพิ่มชิ้นงาน</h2>
+        <div class="field" style="margin-bottom:var(--space-3)">
+          <label for="pieceLot">เลือกล็อต</label>
           <select id="pieceLot">${lotOptions || '<option value="">-- ยังไม่มีล็อต --</option>'}</select>
         </div>
-        <div class="row">
-          <input id="pieceLabel" placeholder="ชื่อ/รายละเอียด (ไม่บังคับ)">
-          <input id="pieceWidth" type="number" placeholder="กว้าง (ซม.)">
-          <input id="pieceLength" type="number" placeholder="ยาว (ซม.)">
-          <input id="pieceQty" type="number" placeholder="จำนวน" value="1" min="1">
+        <div class="form-grid">
+          <div class="field">
+            <label for="pieceLabel">ชื่อ/รายละเอียด</label>
+            <input id="pieceLabel" placeholder="ไม่บังคับ">
+          </div>
+          <div class="field">
+            <label for="pieceWidth">กว้าง (ซม.)</label>
+            <input id="pieceWidth" type="number" min="0" placeholder="0" inputmode="decimal">
+          </div>
+          <div class="field">
+            <label for="pieceLength">ยาว (ซม.)</label>
+            <input id="pieceLength" type="number" min="0" placeholder="0" inputmode="decimal">
+          </div>
+          <div class="field">
+            <label for="pieceQty">จำนวน</label>
+            <input id="pieceQty" type="number" min="1" value="1" inputmode="numeric">
+          </div>
         </div>
-        <div class="row">
-          <button id="addPieceBtn" class="btn secondary" style="flex:0">+ เพิ่มชิ้นงาน</button>
-        </div>
+        <button id="addPieceBtn" class="btn secondary block">+ เพิ่มชิ้นงาน</button>
+        <div class="msg" id="pieceMsg"></div>
         <div class="hint">ราคาต่อชิ้นคำนวณอัตโนมัติ = กว้าง x ยาว x ${SETTINGS.price_rate} บาท/ตร.ซม.</div>
       `;
-      panel.querySelector('#addLotBtn').addEventListener('click', async () => {
-        const name = panel.querySelector('#newLotName').value.trim();
-        if (!name) return;
-        const { error } = await sb.from('lots').insert({ name });
-        if (error) { alert('เพิ่มล็อตไม่สำเร็จ: ' + error.message); return; }
-        await loadAll();
+      piecePanel.querySelector('#pieceLot').addEventListener('change', (e) => {
+        lastSelectedLotId = e.target.value;
       });
-      panel.querySelector('#addPieceBtn').addEventListener('click', async () => {
-        const lotId = panel.querySelector('#pieceLot').value;
-        const label = panel.querySelector('#pieceLabel').value.trim();
-        const width = parseFloat(panel.querySelector('#pieceWidth').value);
-        const length = parseFloat(panel.querySelector('#pieceLength').value);
-        const qty = parseInt(panel.querySelector('#pieceQty').value) || 1;
-        if (!lotId || !width || !length) { alert('กรอกล็อต/กว้าง/ยาวให้ครบ'); return; }
+      piecePanel.querySelector('#addPieceBtn').addEventListener('click', async () => {
+        const lotId = piecePanel.querySelector('#pieceLot').value;
+        const label = piecePanel.querySelector('#pieceLabel').value.trim();
+        const width = parseFloat(piecePanel.querySelector('#pieceWidth').value);
+        const length = parseFloat(piecePanel.querySelector('#pieceLength').value);
+        const qty = parseInt(piecePanel.querySelector('#pieceQty').value) || 1;
+        const msg = piecePanel.querySelector('#pieceMsg');
+        const btn = piecePanel.querySelector('#addPieceBtn');
+        msg.textContent = ''; msg.className = 'msg';
+        if (!lotId) { msg.textContent = 'ยังไม่มีล็อต กรุณาเพิ่มล็อตก่อน'; msg.className = 'msg error'; return; }
+        if (!width || !length) { msg.textContent = 'กรอกกว้างและยาวให้ครบ'; msg.className = 'msg error'; return; }
+        btn.disabled = true; btn.textContent = 'กำลังเพิ่ม...';
+        lastSelectedLotId = lotId;
         const price = round2(width * length * SETTINGS.price_rate);
         const rowsToInsert = Array.from({ length: qty }, () => ({
           lot_id: lotId, width_cm: width, length_cm: length, label: label || null, price, paid: false
         }));
         const { error } = await sb.from('pieces').insert(rowsToInsert);
-        if (error) { alert('เพิ่มชิ้นงานไม่สำเร็จ: ' + error.message); return; }
+        if (error) {
+          msg.textContent = 'เพิ่มชิ้นงานไม่สำเร็จ: ' + error.message; msg.className = 'msg error';
+          btn.disabled = false; btn.textContent = '+ เพิ่มชิ้นงาน';
+          return;
+        }
         await loadAll();
       });
-      return panel;
+
+      frag.appendChild(lotPanel);
+      frag.appendChild(piecePanel);
+      return frag;
     }
 
     function esc(s) {
