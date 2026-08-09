@@ -352,46 +352,55 @@
 
     async function loadGlobalCustomers() {
       document.getElementById('statusMsg').textContent = 'กำลังโหลด...';
-      const { data: pieces, error: e1 } = await sb.from('pieces').select('label,price,sell_price,paid');
+      const { data: lots, error: e0 } = await sb.from('lots').select('id,name');
+      if (e0) throw e0;
+      const { data: pieces, error: e1 } = await sb.from('pieces').select('lot_id,label,width_cm,length_cm,sell_price');
       if (e1) throw e1;
-      const { data: orders, error: e2 } = await sb.from('product_orders').select('category,customer,quantity,unit_cost,unit_sell_price,paid');
+      const { data: orders, error: e2 } = await sb.from('product_orders').select('category,customer,name,quantity,unit_sell_price,created_at');
       if (e2) throw e2;
-      renderGlobalCustomers(pieces, orders);
+      renderGlobalCustomers(lots, pieces, orders);
       document.getElementById('statusMsg').textContent = 'อัปเดตล่าสุด: ' + new Date().toLocaleString('th-TH');
     }
 
-    function renderGlobalCustomers(pieces, orders) {
+    function renderGlobalCustomers(lots, pieces, orders) {
       const app = document.getElementById('app');
       app.innerHTML = '';
       app.appendChild(buildBackLink());
 
-      const note = document.createElement('div');
-      note.className = 'info-note';
-      note.textContent = 'ℹ️ "ต้นทุน" กับ "ค้างจ่ายร้านผลิต" = เงินที่ร้านเราต้องจ่ายให้ร้านที่ผลิต ไม่ใช่ยอดที่ลูกค้าต้องจ่ายเรา — ยอดลูกค้าจะขึ้นในช่อง "ราคาขายลูกค้า" เมื่อกรอกราคาขายแล้ว';
-      app.appendChild(note);
+      const lotNameById = {};
+      lots.forEach(l => lotNameById[l.id] = l.name);
 
       const customerMap = {};
-      function bump(rawName, cost, sell, paid, categoryLabel) {
+      function addItem(rawName, item) {
         const key = rawName && rawName.trim() ? rawName.trim() : 'ไม่ระบุชื่อ';
-        if (!customerMap[key]) customerMap[key] = { name: key, count: 0, cost: 0, sell: 0, hasSell: false, unpaidCost: 0, unpaidCount: 0, categories: new Set() };
-        const c = customerMap[key];
-        c.count += 1;
-        c.cost += cost;
-        if (sell !== null && sell !== undefined) { c.sell += sell; c.hasSell = true; }
-        if (!paid) { c.unpaidCost += cost; c.unpaidCount += 1; }
-        c.categories.add(categoryLabel);
+        if (!customerMap[key]) customerMap[key] = { name: key, items: [], categories: new Set() };
+        customerMap[key].items.push(item);
+        customerMap[key].categories.add(item.category);
       }
-      pieces.forEach(r => bump(r.label, Number(r.price), r.sell_price === null || r.sell_price === undefined ? null : Number(r.sell_price), r.paid, PRODUCT_CATEGORIES.fabric.label));
+
+      pieces.forEach(r => {
+        addItem(r.label, {
+          category: PRODUCT_CATEGORIES.fabric.label,
+          detail: r.width_cm + ' x ' + r.length_cm + ' ซม.',
+          qty: 1,
+          when: lotNameById[r.lot_id] || '',
+          sortKey: lotSortKey(lotNameById[r.lot_id] || ''),
+          sell: (r.sell_price === null || r.sell_price === undefined) ? null : Number(r.sell_price)
+        });
+      });
       orders.forEach(o => {
         const meta = PRODUCT_CATEGORIES[o.category];
-        const sell = (o.unit_sell_price === null || o.unit_sell_price === undefined) ? null : Number(o.unit_sell_price) * o.quantity;
-        bump(o.customer, Number(o.unit_cost) * o.quantity, sell, o.paid, meta ? meta.label : o.category);
+        addItem(o.customer, {
+          category: meta ? meta.label : o.category,
+          detail: o.name,
+          qty: o.quantity,
+          when: o.created_at ? new Date(o.created_at).toLocaleDateString('th-TH') : '',
+          sortKey: o.created_at ? new Date(o.created_at).getTime() : 0,
+          sell: (o.unit_sell_price === null || o.unit_sell_price === undefined) ? null : Number(o.unit_sell_price) * o.quantity
+        });
       });
 
-      const customerList = Object.values(customerMap).sort((a, b) => {
-        if (b.unpaidCost !== a.unpaidCost) return b.unpaidCost - a.unpaidCost;
-        return b.cost - a.cost;
-      });
+      const customerList = Object.values(customerMap).sort((a, b) => b.items.length - a.items.length);
 
       if (customerList.length === 0) {
         const empty = document.createElement('div');
@@ -402,21 +411,30 @@
       }
 
       customerList.forEach(c => {
+        c.items.sort((a, b) => b.sortKey - a.sortKey);
+        const anySell = c.items.some(i => i.sell !== null);
         const card = document.createElement('div');
-        card.className = 'month-card';
+        card.className = 'lot-card';
+        const rowsHtml = c.items.map(i => `
+          <tr>
+            <td data-label="รายการ">${esc(i.detail)}</td>
+            <td data-label="ประเภท">${esc(i.category)}</td>
+            <td data-label="จำนวน">${i.qty}</td>
+            <td data-label="วันที่/ล็อต">${esc(i.when || '-')}</td>
+            ${anySell ? `<td data-label="ราคาขาย">${i.sell !== null ? fmtBaht(i.sell) : '-'}</td>` : ''}
+          </tr>
+        `).join('');
         card.innerHTML = `
-          <h3>${esc(c.name)}</h3>
-          <div class="month-sub">${Array.from(c.categories).map(esc).join(' · ')} — ${c.unpaidCount > 0 ? `ยังไม่ได้จ่ายร้านผลิต ${c.unpaidCount} รายการ` : 'จ่ายร้านผลิตครบแล้ว ✅'}</div>
-          <div class="month-stats">
-            <div class="stat"><div class="num">${c.count}</div><div class="lbl">รายการรวม</div></div>
-            <div class="stat"><div class="num">${fmtBaht(round2(c.cost))}</div><div class="lbl">ต้นทุนรวม (บาท)</div></div>
-            <div class="stat"><div class="num">${fmtBaht(round2(c.unpaidCost))}</div><div class="lbl">ค้างจ่ายร้านผลิต (บาท)</div></div>
+          <div class="lot-head">
+            <span>${esc(c.name)}</span>
+            <span class="lot-head-right"><span class="lot-total">${c.items.length} รายการ</span><span class="lot-price">${Array.from(c.categories).map(esc).join(' · ')}</span></span>
           </div>
-          ${c.hasSell ? `
-          <div class="month-stats stats-2" style="margin-top:var(--space-2)">
-            <div class="stat"><div class="num">${fmtBaht(round2(c.sell))}</div><div class="lbl">ราคาขายลูกค้า (บาท)</div></div>
-            <div class="stat"><div class="num">${fmtBaht(round2(c.sell - c.cost))}</div><div class="lbl">กำไร (บาท)</div></div>
-          </div>` : ''}
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>รายการ</th><th>ประเภท</th><th>จำนวน</th><th>วันที่/ล็อต</th>${anySell ? '<th>ราคาขาย</th>' : ''}</tr></thead>
+              <tbody>${rowsHtml}</tbody>
+            </table>
+          </div>
         `;
         app.appendChild(card);
       });
