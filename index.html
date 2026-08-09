@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>สรุปออเดอร์ป้ายผ้า</title>
+<title>สรุปออเดอร์ป้าย้า</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -93,8 +93,8 @@
     align-items: baseline;
     gap: var(--space-2);
   }
-  .lot-head-right { text-align: right; }
   .lot-head .lot-total { color: var(--accent); font-variant-numeric: tabular-nums; }
+  .lot-head-right { text-align: right; }
   .lot-head .lot-price { display: block; font-size: 11px; font-weight: 400; color: var(--sub); margin-top: 1px; font-variant-numeric: tabular-nums; }
   .lot-bar-track { height: 4px; background: var(--border); }
   .lot-bar-fill { height: 100%; background: var(--accent); border-radius: 0 4px 4px 0; transition: width .5s ease-out; }
@@ -290,6 +290,12 @@
     }
 
     function loadData() {
+      // โหลดจากไฟล์แคส (data.json) ก่อน ให้หน้าเปิดเร็ว ไม่ต้องรอ Apps Script ตอบกลับ
+      fetch('./data.json')
+        .then(r => r.ok ? r.json() : Promise.reject())
+        .then(render)
+        .catch(function () {});
+      // แล้วค่อยดึงข้อมูลสดจาก Apps Script มาอัปเดตทับ (เผื่อมีของใหม่กว่าแคส)
       jsonp(API_URL, render);
     }
 
