@@ -208,7 +208,7 @@
           const next = el.dataset.paid !== 'true';
           el.textContent = '...';
           const { error } = await sb.from('pieces').update({ paid: next }).eq('id', id);
-          if (error) { alert('อัปเดีไม่สำเร็จ: ' + error.message); }
+          if (error) { alert('อัปเดตไม่สำเร็จ: ' + error.message); }
           await loadAll();
         });
       });
