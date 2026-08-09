@@ -115,7 +115,7 @@
     function calcPiece(widthCm, lengthCm, settings) {
       const shrinkLength = round2(lengthCm * settings.shrink_rate);
       const yardPerPiece = round4((widthCm * shrinkLength) / settings.yard_area_cm2);
-      const price = round2(widthCm * lengthCm * settings.price_rate);
+      const price = Math.round(widthCm * lengthCm * settings.price_rate);
       return { shrinkLength, yardPerPiece, price };
     }
     function lotSortKey(name) {
@@ -123,7 +123,7 @@
       if (!m) return -1;
       return parseInt(m[3]) * 10000 + parseInt(m[2]) * 100 + parseInt(m[1]);
     }
-    function fmtBaht(n) { return Number(n).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+    function fmtBaht(n) { return Number(n).toLocaleString('th-TH', { minimumFractionDigits: 0, maximumFractionDigits: 0 }); }
 
     let SETTINGS = null;
     let lastSelectedLotId = null;
@@ -300,7 +300,7 @@
         if (!width || !length) { msg.textContent = 'กรอกกว้างและยาวให้ครบ'; msg.className = 'msg error'; return; }
         btn.disabled = true; btn.textContent = 'กำลังเพิ่ม...';
         lastSelectedLotId = lotId;
-        const price = round2(width * length * SETTINGS.price_rate);
+        const price = Math.round(width * length * SETTINGS.price_rate);
         const rowsToInsert = Array.from({ length: qty }, () => ({
           lot_id: lotId, width_cm: width, length_cm: length, label: label || null, price, paid: false
         }));
