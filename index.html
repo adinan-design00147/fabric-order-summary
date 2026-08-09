@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>สรุปออเดอร์ป้ายผ้า</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --card: #ffffff; --text: #1c1f24; --sub: #6b7280;
+    --accent: #2563eb; --border: #e5e7eb; --warn-bg: #fff7ed; --warn-border: #fdba74;
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family: -apple-system,"Segoe UI",Roboto,"Noto Sans Thai",sans-serif; background: var(--bg); color: var(--text); padding-bottom:40px; }
+  header { position: sticky; top:0; z-index:5; background: var(--card); border-bottom:1px solid var(--border); padding:14px 16px; }
+  header h1 { margin:0; font-size:18px; }
+  header .meta { font-size:12px; color: var(--sub); margin-top:4px; }
+  .container { padding:12px 12px 0; max-width:720px; margin:0 auto; }
+  .summary-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-bottom:14px; }
+  .stat { background: var(--card); border:1px solid var(--border); border-radius:12px; padding:12px 10px; text-align:center; }
+  .stat .num { font-size:18px; font-weight:700; color: var(--accent); }
+  .stat .lbl { font-size:11px; color: var(--sub); margin-top:2px; }
+  .lot-card { background: var(--card); border:1px solid var(--border); border-radius:12px; margin-bottom:10px; overflow:hidden; }
+  .lot-head { padding:10px 14px; font-weight:600; font-size:14px; background:#f0f4ff; display:flex; justify-content:space-between; }
+  table { width:100%; border-collapse:collapse; font-size:13px; }
+  th, td { padding:8px 10px; text-align:right; border-top:1px solid var(--border); }
+  th:first-child, td:first-child { text-align:left; }
+  th { color: var(--sub); font-weight:500; font-size:11px; }
+  .warn { background: var(--warn-bg); border:1px solid var(--warn-border); border-radius:12px; padding:12px 14px; margin-bottom:14px; font-size:13px; }
+  .warn h3 { margin:0 0 6px; font-size:14px; }
+  .warn ul { margin:0; padding-left:18px; }
+  .warn a { color: var(--accent); }
+  .refresh-btn { position:fixed; bottom:18px; right:18px; background: var(--accent); color:white; border:none; border-radius:999px; padding:12px 18px; font-size:13px; box-shadow:0 4px 12px rgba(37,99,235,.35); }
+  .refresh-btn:disabled { opacity:.6; }
+  .loading { text-align:center; padding:40px; color: var(--sub); }
+</style>
+</head>
+<body>
+  <header>
+    <h1>สรุปออเดอร์ป้ายผ้า</h1>
+    <div class="meta" id="generatedAt">กำลังโหลดข้อมูล...</div>
+  </header>
+
+  <div class="container" id="app">
+    <div class="loading">กำลังดึงข้อมูลจาก Drive...</div>
+  </div>
+
+  <button class="refresh-btn" id="refreshBtn" onclick="doRefresh()">รีเฟรชตอนนี้</button>
+
+  <script>
+    // ===== ตั้งค่า =====
+    // ใส่ URL เว็บแอป Apps Script ของคุณ (ลงท้ายด้วย /exec)
+    const API_URL = 'https://script.google.com/macros/s/AKfycby5_2FMi0onES_WQPJAHnmnkVZlGIeVsNoHdJyF4SYA0HlmuDdCh9fHa4d6kebVHd1mxQ/exec';
+
+    function render(data) {
+      document.getElementById('generatedAt').textContent =
+        'อัปเดตล่าสุด: ' + new Date(data.generatedAt).toLocaleString('th-TH');
+
+      const app = document.getElementById('app');
+      app.innerHTML = '';
+
+      const summary = document.createElement('div');
+      summary.className = 'summary-grid';
+      summary.innerHTML = `
+        <div class="stat"><div class="num">${data.totals.pieces}</div><div class="lbl">ชิ้นรวม</div></div>
+        <div class="stat"><div class="num">${data.totals.grandTotalYard.toFixed(2)}</div><div class="lbl">ผ้าที่ต้องใช้ (หลา)</div></div>
+        <div class="stat"><div class="num">${data.totals.bufferYard.toFixed(2)}</div><div class="lbl">แนะนำสั่งซื้อ +5% (หลา)</div></div>
+      `;
+      app.appendChild(summary);
+
+      if (data.unresolved && data.unresolved.length) {
+        const warn = document.createElement('div');
+        warn.className = 'warn';
+        const items = data.unresolved.map(u =>
+          `<li>[${u.lot}] <a href="${u.url}" target="_blank">${u.fileName}</a></li>`
+        ).join('');
+        warn.innerHTML = `<h3>⚠️ ไม่พบขนาดในชื่อไฟล์ (${data.unresolved.length} ไฟล์)</h3>
+          <ul>${items}</ul>
+          <div style="margin-top:8px;color:#92400e;">แก้ชื่อไฟล์ให้มีรูปแบบ "กว้าง x ยาว" เช่น "65 x 85" แล้วกดรีเฟรช ระบบจะอ่านให้ใหม่</div>`;
+        app.appendChild(warn);
+      }
+
+      const byLot = {};
+      data.rows.forEach(r => {
+        if (!byLot[r.lot]) byLot[r.lot] = [];
+        byLot[r.lot].push(r);
+      });
+
+      Object.keys(byLot).forEach(lot => {
+        const rowsForLot = byLot[lot];
+        const lotTotal = rowsForLot.reduce((s, r) => s + r.totalYard, 0);
+        const card = document.createElement('div');
+        card.className = 'lot-card';
+        const rowsHtml = rowsForLot.map(r => `
+          <tr>
+            <td>${r.width} x ${r.length}</td>
+            <td>${r.count}</td>
+            <td>${r.totalYard.toFixed(2)}</td>
+          </tr>
+        `).join('');
+        card.innerHTML = `
+          <div class="lot-head"><span>${lot}</span><span>${lotTotal.toFixed(2)} หลา</span></div>
+          <table>
+            <thead><tr><th>ขนาด (ซม.)</th><th>จำนวน</th><th>ผ้า (หลา)</th></tr></thead>
+            <tbody>${rowsHtml}</tbody>
+          </table>
+        `;
+        app.appendChild(card);
+      });
+    }
+
+    // ใช้ JSONP เรียกข้าม origin ไปหา Apps Script (Apps Script ไม่รองรับ CORS แบบ fetch ตรงๆ)
+    function jsonp(url, cb) {
+      const cbName = 'jsonp_cb_' + Date.now();
+      window[cbName] = function (data) {
+        cb(data);
+        delete window[cbName];
+        script.remove();
+      };
+      const script = document.createElement('script');
+      script.src = url + (url.indexOf('?') > -1 ? '&' : '?') + 'callback=' + cbName;
+      document.body.appendChild(script);
+    }
+
+    function loadData() {
+      jsonp(API_URL, render);
+    }
+
+    function doRefresh() {
+      const btn = document.getElementById('refreshBtn');
+      btn.disabled = true;
+      btn.textContent = 'กำลังรีเฟรช...';
+      jsonp(API_URL + '?refresh=1', function (data) {
+        render(data);
+        btn.disabled = false;
+        btn.textContent = 'รีเฟรชตอนนี้';
+      });
+    }
+
+    loadData();
+  </script>
+</body>
+</html>
