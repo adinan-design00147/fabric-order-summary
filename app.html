@@ -58,13 +58,13 @@
   .field { display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 110px; }
   .field label { font-size: 12px; color: var(--sub); font-weight: 500; }
   .field input, .field select {
-    font-family: inherit; font-size: 15px; padding: 11px 12px; border: 1px solid var(--border);
+    font-family: inherit; font-size: 16px; padding: 11px 12px; border: 1px solid var(--border);
     border-radius: 10px; background: #fff; min-height: 44px; width: 100%;
   }
   .field input:focus, .field select:focus { outline: 2px solid var(--accent); outline-offset: 1px; border-color: var(--accent); }
 
   .field-row { display: flex; gap: var(--space-3); align-items: flex-end; flex-wrap: wrap; }
-  .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: var(--space-2); margin-bottom: var(--space-3); }
+  .form-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--space-2); margin-bottom: var(--space-3); }
 
   .btn {
     font-family: inherit; font-size: 14px; font-weight: 600; padding: 12px 20px; border: none;
@@ -83,13 +83,40 @@
 
   .hint { font-size: 12px; color: var(--sub); margin-top: var(--space-2); }
 
-  @media (max-width: 480px) {
+  @media (max-width: 640px) {
     .field-row { flex-direction: column; align-items: stretch; }
     .field-row .btn { width: 100%; }
+
+    .form-grid { grid-template-columns: repeat(2, 1fr); }
+
+    .tabs { display: grid; grid-template-columns: repeat(2, 1fr); }
+
+    .pay-row { flex-wrap: wrap; row-gap: var(--space-2); }
+    .pay-row-right { flex-wrap: wrap; row-gap: var(--space-2); }
+
+    /* ตาราง -> การ์ดรายการ บนจอมือถือ กันเลื่อนแนวนอน อ่านง่ายขึ้น */
+    .table-wrap table, .table-wrap tbody, .table-wrap tr, .table-wrap td {
+      display: block; width: 100%;
+    }
+    .table-wrap thead { display: none; }
+    .table-wrap tr { border-top: 1px solid var(--border); padding: var(--space-3) var(--space-4); }
+    .table-wrap tr:first-child { border-top: none; }
+    .table-wrap td {
+      display: flex; align-items: center; justify-content: space-between; gap: var(--space-3);
+      padding: 5px 0; border-top: none; text-align: right;
+    }
+    .table-wrap td::before {
+      content: attr(data-label); font-size: 11px; font-weight: 500; color: var(--sub);
+      text-align: left; flex-shrink: 0;
+    }
+    .table-wrap td.row-actions { justify-content: flex-end; }
+    .table-wrap td.row-actions::before { display: none; }
+    .table-wrap td.empty-cell { display: block; text-align: center; }
+    .table-wrap td.empty-cell::before { display: none; }
   }
 
   .lot-card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: var(--space-3); overflow: hidden; }
-  .lot-head { padding: var(--space-3) var(--space-4); font-weight: 600; font-size: 14px; background: var(--accent-soft); display: flex; justify-content: space-between; align-items: baseline; gap: var(--space-2); }
+  .lot-head { padding: var(--space-3) var(--space-4); font-weight: 600; font-size: 14px; background: var(--accent-soft); display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: var(--space-2); }
   .lot-head .lot-total { color: var(--accent); font-variant-numeric: tabular-nums; }
   .lot-head-right { text-align: right; }
   .lot-head .lot-price { display: block; font-size: 11px; font-weight: 400; color: var(--sub); margin-top: 1px; }
@@ -111,6 +138,7 @@
   .paid-badge.unpaid { background: var(--warn-bg); color: var(--warn-text); }
 
   .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .empty-cell { text-align: center; color: var(--sub); }
 
   .month-card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: var(--space-4); margin-bottom: var(--space-3); }
   .month-card h3 { margin: 0; font-size: 15px; font-weight: 600; }
@@ -140,14 +168,14 @@
   .icon-btn-delete:hover { background: #fdecea; color: var(--err-text); border-color: var(--err-text); }
 
   .edit-row { display: flex; gap: var(--space-2); align-items: center; flex-wrap: wrap; padding: var(--space-2) 0; }
-  .edit-row input { font-family: inherit; font-size: 13px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; flex: 1; min-width: 70px; min-height: 40px; }
+  .edit-row input { font-family: inherit; font-size: 16px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; flex: 1; min-width: 90px; min-height: 44px; }
   .edit-row .btn { padding: 0 14px; font-size: 12px; min-height: 44px; }
 
   .lot-actions { padding: var(--space-2) var(--space-4); border-top: 1px solid var(--border); background: #fafafa; }
   .btn-sm { font-size: 12px; padding: 0 14px; min-height: 44px; white-space: nowrap; }
 
   .search-wrap { margin-bottom: var(--space-3); }
-  .search-wrap input { font-family: inherit; font-size: 15px; padding: 11px 14px; border: 1px solid var(--border); border-radius: 10px; background: #fff; min-height: 44px; width: 100%; }
+  .search-wrap input { font-family: inherit; font-size: 16px; padding: 11px 14px; border: 1px solid var(--border); border-radius: 10px; background: #fff; min-height: 44px; width: 100%; }
   .search-wrap input:focus { outline: 2px solid var(--accent); outline-offset: 1px; border-color: var(--accent); }
 
   .loading { text-align: center; color: var(--sub); padding: var(--space-6); font-size: 13px; }
@@ -316,12 +344,12 @@
         const rowsHtml = rows.map(r => {
           const { yardPerPiece } = calcPiece(r.width_cm, r.length_cm, SETTINGS);
           return `<tr>
-            <td>${esc(r.label || '-')}</td>
-            <td>${r.width_cm} x ${r.length_cm}</td>
-            <td>${fmtBaht(r.price)}</td>
-            <td>${yardPerPiece.toFixed(2)}</td>
-            <td><span class="paid-badge ${r.paid ? 'paid' : 'unpaid'}" data-id="${r.id}" data-paid="${r.paid}">${r.paid ? 'จ่ายแล้ว' : 'ยังไม่จ่าย'}</span></td>
-            <td class="row-actions">
+            <td data-label="รายการ">${esc(r.label || '-')}</td>
+            <td data-label="ขนาด (ซม.)">${r.width_cm} x ${r.length_cm}</td>
+            <td data-label="ราคา">${fmtBaht(r.price)}</td>
+            <td data-label="ผ้า (หลา)">${yardPerPiece.toFixed(2)}</td>
+            <td data-label="สถานะ"><span class="paid-badge ${r.paid ? 'paid' : 'unpaid'}" data-id="${r.id}" data-paid="${r.paid}">${r.paid ? 'จ่ายแล้ว' : 'ยังไม่จ่าย'}</span></td>
+            <td class="row-actions" data-label="จัดการ">
               <button class="icon-btn icon-btn-edit edit-piece" data-id="${r.id}" data-label="${esc(r.label || '')}" data-width="${r.width_cm}" data-length="${r.length_cm}" aria-label="แก้ไขชิ้นงาน" title="แก้ไข">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
               </button>
@@ -340,7 +368,7 @@
           <div class="table-wrap">
             <table>
               <thead><tr><th>รายการ</th><th>ขนาด (ซม.)</th><th>ราคา</th><th>ผ้า (หลา)</th><th>สถานะ</th><th>จัดการ</th></tr></thead>
-              <tbody>${rowsHtml || '<tr><td colspan="6" style="text-align:center;color:var(--sub)">ยังไม่มีชิ้นงาน</td></tr>'}</tbody>
+              <tbody>${rowsHtml || '<tr><td colspan="6" class="empty-cell">ยังไม่มีชิ้นงาน</td></tr>'}</tbody>
             </table>
           </div>
         `;
@@ -537,11 +565,11 @@
         const histRowsHtml = paidRows.map(({ lot, r }) => {
           const { yardPerPiece } = calcPiece(r.width_cm, r.length_cm, SETTINGS);
           return `<tr>
-            <td>${esc(lot.name)}${r.label ? ' — ' + esc(r.label) : ''}</td>
-            <td>${r.width_cm} x ${r.length_cm}</td>
-            <td>${fmtBaht(r.price)}</td>
-            <td>${yardPerPiece.toFixed(2)}</td>
-            <td><span class="paid-badge paid" data-id="${r.id}" data-paid="true">จ่ายแล้ว</span></td>
+            <td data-label="ล็อต / รายการ">${esc(lot.name)}${r.label ? ' — ' + esc(r.label) : ''}</td>
+            <td data-label="ขนาด (ซม.)">${r.width_cm} x ${r.length_cm}</td>
+            <td data-label="ราคา">${fmtBaht(r.price)}</td>
+            <td data-label="ผ้า (หลา)">${yardPerPiece.toFixed(2)}</td>
+            <td data-label="สถานะ"><span class="paid-badge paid" data-id="${r.id}" data-paid="true">จ่ายแล้ว</span></td>
           </tr>`;
         }).join('');
         histCard.innerHTML = `
