@@ -117,6 +117,21 @@
   .pay-row-count { font-size: 12px; font-weight: 400; color: var(--sub); }
   .pay-row-price { color: var(--accent); font-variant-numeric: tabular-nums; }
 
+  .row-actions { white-space: nowrap; }
+  .icon-btn { background: none; border: none; cursor: pointer; font-size: 14px; padding: 4px 6px; min-height: 28px; border-radius: 6px; }
+  .icon-btn:hover { background: var(--accent-soft); }
+
+  .edit-row { display: flex; gap: var(--space-2); align-items: center; flex-wrap: wrap; padding: var(--space-2) 0; }
+  .edit-row input { font-family: inherit; font-size: 13px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; flex: 1; min-width: 70px; }
+  .edit-row .btn { padding: 8px 14px; font-size: 12px; min-height: 36px; }
+
+  .lot-actions { padding: var(--space-2) var(--space-4); border-top: 1px solid var(--border); background: #fafafa; }
+  .btn-sm { font-size: 12px; padding: 6px 12px; min-height: 32px; white-space: nowrap; }
+
+  .search-wrap { margin-bottom: var(--space-3); }
+  .search-wrap input { font-family: inherit; font-size: 15px; padding: 11px 14px; border: 1px solid var(--border); border-radius: 10px; background: #fff; min-height: 44px; width: 100%; }
+  .search-wrap input:focus { outline: 2px solid var(--accent); outline-offset: 1px; border-color: var(--accent); }
+
   .loading { text-align: center; color: var(--sub); padding: var(--space-6); font-size: 13px; }
 </style>
 </head>
@@ -223,6 +238,7 @@
         <button class="tab-btn ${activeTab === 'daily' ? 'active' : ''}" data-tab="daily">📅 รายวัน</button>
         <button class="tab-btn ${activeTab === 'monthly' ? 'active' : ''}" data-tab="monthly">🗓️ รายเดือน</button>
         <button class="tab-btn ${activeTab === 'payment' ? 'active' : ''}" data-tab="payment">💰 การชำระเงิน</button>
+        <button class="tab-btn ${activeTab === 'customer' ? 'active' : ''}" data-tab="customer">👤 ลูกค้า</button>
       `;
       app.appendChild(tabs);
 
@@ -268,10 +284,17 @@
 
       dailyEl.appendChild(buildAddPanel(lots));
 
+      const searchWrap = document.createElement('div');
+      searchWrap.className = 'search-wrap';
+      searchWrap.innerHTML = `<input id="lotSearch" type="text" placeholder="🔍 ค้นหาล็อตหรือชื่อลูกค้า...">`;
+      dailyEl.appendChild(searchWrap);
+
       lotBlocks.forEach(({ lot, rows, lotYard, lotPrice }) => {
         const lotBufferYard = round4(lotYard * SETTINGS.buffer_rate);
+        const hasUnpaid = rows.some(r => !r.paid);
         const card = document.createElement('div');
         card.className = 'lot-card';
+        card.dataset.search = (lot.name + ' ' + rows.map(r => r.label || '').join(' ')).toLowerCase();
         const rowsHtml = rows.map(r => {
           const { yardPerPiece } = calcPiece(r.width_cm, r.length_cm, SETTINGS);
           return `<tr>
@@ -280,6 +303,10 @@
             <td>${fmtBaht(r.price)}</td>
             <td>${yardPerPiece.toFixed(2)}</td>
             <td><span class="paid-badge ${r.paid ? 'paid' : 'unpaid'}" data-id="${r.id}" data-paid="${r.paid}">${r.paid ? 'จ่ายแล้ว' : 'ยังไม่จ่าย'}</span></td>
+            <td class="row-actions">
+              <button class="icon-btn edit-piece" data-id="${r.id}" data-label="${esc(r.label || '')}" data-width="${r.width_cm}" data-length="${r.length_cm}" title="แก้ไข">✏️</button>
+              <button class="icon-btn delete-piece" data-id="${r.id}" title="ลบ">🗑️</button>
+            </td>
           </tr>`;
         }).join('');
         card.innerHTML = `
@@ -287,15 +314,23 @@
             <span>${esc(lot.name)}</span>
             <span class="lot-head-right"><span class="lot-total">${lotYard.toFixed(2)} หลา</span><span class="lot-price">${fmtBaht(lotPrice)} บาท</span><span class="lot-buffer">+5%: ${lotBufferYard.toFixed(2)} หลา</span></span>
           </div>
+          ${hasUnpaid ? `<div class="lot-actions"><button class="btn secondary btn-sm mark-lot-paid" data-lot="${lot.id}">✅ จ่ายครบล็อตนี้</button></div>` : ''}
           <table>
-            <thead><tr><th>รายการ</th><th>ขนาด (ซม.)</th><th>ราคา</th><th>ผ้า (หลา)</th><th>สถานะ</th></tr></thead>
-            <tbody>${rowsHtml || '<tr><td colspan="5" style="text-align:center;color:var(--sub)">ยังไม่มีชิ้นงาน</td></tr>'}</tbody>
+            <thead><tr><th>รายการ</th><th>ขนาด (ซม.)</th><th>ราคา</th><th>ผ้า (หลา)</th><th>สถานะ</th><th></th></tr></thead>
+            <tbody>${rowsHtml || '<tr><td colspan="6" style="text-align:center;color:var(--sub)">ยังไม่มีชิ้นงาน</td></tr>'}</tbody>
           </table>
         `;
         dailyEl.appendChild(card);
       });
 
       app.appendChild(dailyEl);
+
+      searchWrap.querySelector('#lotSearch').addEventListener('input', (e) => {
+        const q = e.target.value.trim().toLowerCase();
+        dailyEl.querySelectorAll('.lot-card').forEach(card => {
+          card.style.display = !q || card.dataset.search.includes(q) ? '' : 'none';
+        });
+      });
 
       // ---- แท็บรายเดือน ----
       const monthlyEl = document.createElement('div');
@@ -452,7 +487,7 @@
           row.className = 'pay-row';
           row.innerHTML = `
             <span class="pay-row-name">${esc(lot.name)}</span>
-            <span class="pay-row-right"><span class="pay-row-count">${count} ชิ้น</span><span class="pay-row-price">${fmtBaht(price)} บาท</span></span>
+            <span class="pay-row-right"><span class="pay-row-count">${count} ชิ้น</span><span class="pay-row-price">${fmtBaht(price)} บาท</span><button class="btn secondary btn-sm mark-lot-paid" data-lot="${lot.id}">✅ จ่ายครบ</button></span>
           `;
           paymentEl.appendChild(row);
         });
@@ -496,9 +531,50 @@
 
       app.appendChild(paymentEl);
 
+      // ---- แท็บลูกค้า ----
+      const customerEl = document.createElement('div');
+      customerEl.id = 'customerContent';
+
+      const customerMap = {};
+      lotBlocks.forEach(({ rows }) => {
+        rows.forEach(r => {
+          const name = r.label && r.label.trim() ? r.label.trim() : 'ไม่ระบุชื่อ';
+          if (!customerMap[name]) customerMap[name] = { name, pieces: 0, total: 0, unpaid: 0, unpaidCount: 0 };
+          customerMap[name].pieces += 1;
+          customerMap[name].total += Number(r.price);
+          if (!r.paid) { customerMap[name].unpaid += Number(r.price); customerMap[name].unpaidCount += 1; }
+        });
+      });
+      const customerList = Object.values(customerMap).sort((a, b) => {
+        if (b.unpaid !== a.unpaid) return b.unpaid - a.unpaid;
+        return b.total - a.total;
+      });
+
+      if (customerList.length === 0) {
+        customerEl.innerHTML = `<div class="loading">ยังไม่มีข้อมูลลูกค้า</div>`;
+      } else {
+        customerList.forEach(c => {
+          const card = document.createElement('div');
+          card.className = 'month-card';
+          card.innerHTML = `
+            <h3>${esc(c.name)}</h3>
+            <div class="month-sub">${c.unpaidCount > 0 ? `ค้าง ${c.unpaidCount} ชิ้น` : 'จ่ายครบแล้ว ✅'}</div>
+            <div class="month-stats">
+              <div class="stat"><div class="num">${c.pieces}</div><div class="lbl">ชิ้นรวม</div></div>
+              <div class="stat"><div class="num">${fmtBaht(round2(c.total))}</div><div class="lbl">ยอดรวม (บาท)</div></div>
+              <div class="stat"><div class="num">${fmtBaht(round2(c.unpaid))}</div><div class="lbl">ค้างชำระ (บาท)</div></div>
+            </div>
+          `;
+          customerEl.appendChild(card);
+        });
+      }
+
+      app.appendChild(customerEl);
+
       dailyEl.style.display = activeTab === 'daily' ? '' : 'none';
       monthlyEl.style.display = activeTab === 'monthly' ? '' : 'none';
       paymentEl.style.display = activeTab === 'payment' ? '' : 'none';
+      customerEl.style.display = activeTab === 'customer' ? '' : 'none';
 
       tabs.querySelectorAll('.tab-btn').forEach(btn => {
         btn.addEventListener('click', () => {
@@ -507,6 +583,7 @@
           dailyEl.style.display = activeTab === 'daily' ? '' : 'none';
           monthlyEl.style.display = activeTab === 'monthly' ? '' : 'none';
           paymentEl.style.display = activeTab === 'payment' ? '' : 'none';
+          customerEl.style.display = activeTab === 'customer' ? '' : 'none';
         });
       });
 
@@ -517,6 +594,59 @@
           el.textContent = '...';
           const { error } = await sb.from('pieces').update({ paid: next }).eq('id', id);
           if (error) { alert('อัปเดตไม่สำเร็จ: ' + error.message); }
+          await loadAll();
+        });
+      });
+
+      app.querySelectorAll('.edit-piece').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const tr = btn.closest('tr');
+          const id = btn.dataset.id;
+          const label = btn.dataset.label;
+          const width = btn.dataset.width;
+          const length = btn.dataset.length;
+          tr.innerHTML = `
+            <td colspan="6">
+              <div class="edit-row">
+                <input class="edit-label" placeholder="ชื่อ/รายละเอียด" value="${esc(label)}">
+                <input class="edit-width" type="number" min="0" step="any" value="${width}" placeholder="กว้าง">
+                <input class="edit-length" type="number" min="0" step="any" value="${length}" placeholder="ยาว">
+                <button class="btn btn-sm save-piece">✅ บันทึก</button>
+                <button class="btn secondary btn-sm cancel-edit">✖️ ยกเลิก</button>
+              </div>
+            </td>
+          `;
+          tr.querySelector('.cancel-edit').addEventListener('click', () => loadAll());
+          tr.querySelector('.save-piece').addEventListener('click', async () => {
+            const newLabel = tr.querySelector('.edit-label').value.trim();
+            const newWidth = parseFloat(tr.querySelector('.edit-width').value);
+            const newLength = parseFloat(tr.querySelector('.edit-length').value);
+            if (!newWidth || !newLength) { alert('กรอกกว้างและยาวให้ครบ'); return; }
+            const newPrice = Math.round(newWidth * newLength * SETTINGS.price_rate);
+            const { error } = await sb.from('pieces').update({ label: newLabel || null, width_cm: newWidth, length_cm: newLength, price: newPrice }).eq('id', id);
+            if (error) { alert('บันทึกไม่สำเร็จ: ' + error.message); return; }
+            await loadAll();
+          });
+        });
+      });
+
+      app.querySelectorAll('.delete-piece').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          if (!confirm('ลบชิ้นงานนี้?')) return;
+          const id = btn.dataset.id;
+          const { error } = await sb.from('pieces').delete().eq('id', id);
+          if (error) { alert('ลบไม่สำเร็จ: ' + error.message); return; }
+          await loadAll();
+        });
+      });
+
+      app.querySelectorAll('.mark-lot-paid').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          if (!confirm('มาร์คทุกชิ้นในล็อตนี้ว่าจ่ายแล้ว?')) return;
+          const lotId = btn.dataset.lot;
+          btn.disabled = true; btn.textContent = 'กำลังบันทึก...';
+          const { error } = await sb.from('pieces').update({ paid: true }).eq('lot_id', lotId);
+          if (error) { alert('อัปเดตไม่สำเร็จ: ' + error.message); btn.disabled = false; return; }
           await loadAll();
         });
       });
