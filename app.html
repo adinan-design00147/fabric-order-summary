@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>คำนวณผ้าดิบ (Supabase)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Prompt:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+<style>
+  :root {
+    --bg: #f7f5f2; --card: #ffffff; --text: #1f2430; --sub: #6b7280;
+    --accent: #3454d1; --accent-soft: #eef1fd; --border: #e6e3dd;
+    --warn-bg: #fff6ed; --warn-border: #f5b77e; --warn-text: #92400e;
+    --ok-bg: #eefbf3; --ok-text: #067647;
+    --radius: 14px;
+    --space-1: 4px; --space-2: 8px; --space-3: 12px; --space-4: 16px;
+    --space-5: 20px; --space-6: 24px; --space-8: 32px;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; font-family: 'Prompt', -apple-system, "Segoe UI", Roboto, "Noto Sans Thai", sans-serif;
+    background: var(--bg); color: var(--text); padding-bottom: 96px;
+  }
+  header {
+    position: sticky; top: 0; z-index: 5; background: rgba(255,255,255,.92); backdrop-filter: blur(8px);
+    border-bottom: 1px solid var(--border); padding: var(--space-4) var(--space-5);
+    display: flex; align-items: center; justify-content: space-between; gap: var(--space-3);
+  }
+  header h1 { margin: 0; font-size: 17px; font-weight: 600; }
+  header .meta { font-size: 12px; color: var(--sub); margin-top: 2px; }
+  .container { padding: var(--space-4) var(--space-4) 0; max-width: 720px; margin: 0 auto; }
+
+  .summary-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: var(--space-2); margin-bottom: var(--space-4); }
+  .stat { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: var(--space-4) var(--space-2); text-align: center; }
+  .stat .num { font-size: 20px; font-weight: 700; }
+  .stat .lbl { font-size: 11px; color: var(--sub); margin-top: 2px; }
+
+  .panel { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: var(--space-4); margin-bottom: var(--space-4); }
+  .panel h2 { margin: 0 0 var(--space-3); font-size: 14px; font-weight: 600; }
+  .row { display: flex; gap: var(--space-2); flex-wrap: wrap; margin-bottom: var(--space-2); }
+  .row input, .row select {
+    font-family: inherit; font-size: 14px; padding: 10px 12px; border: 1px solid var(--border);
+    border-radius: 10px; background: #fff; flex: 1; min-width: 90px;
+  }
+  .row button, .btn {
+    font-family: inherit; font-size: 14px; font-weight: 500; padding: 10px 16px; border: none;
+    border-radius: 10px; background: var(--accent); color: #fff; cursor: pointer;
+  }
+  .btn.secondary { background: var(--accent-soft); color: var(--accent); }
+
+  .lot-card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: var(--space-3); overflow: hidden; }
+  .lot-head { padding: var(--space-3) var(--space-4); font-weight: 600; font-size: 14px; background: var(--accent-soft); display: flex; justify-content: space-between; align-items: baseline; gap: var(--space-2); }
+  .lot-head .lot-total { color: var(--accent); font-variant-numeric: tabular-nums; }
+  .lot-head-right { text-align: right; }
+  .lot-head .lot-price { display: block; font-size: 11px; font-weight: 400; color: var(--sub); margin-top: 1px; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { padding: var(--space-2) var(--space-3); text-align: right; border-top: 1px solid var(--border); font-variant-numeric: tabular-nums; }
+  th:first-child, td:first-child { text-align: left; font-variant-numeric: normal; }
+  th { color: var(--sub); font-weight: 500; font-size: 11px; }
+  .paid-badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11px; cursor: pointer; }
+  .paid-badge.paid { background: var(--ok-bg); color: var(--ok-text); }
+  .paid-badge.unpaid { background: var(--warn-bg); color: var(--warn-text); }
+
+  .hint { font-size: 12px; color: var(--sub); margin-top: var(--space-2); }
+  .loading { text-align: center; color: var(--sub); padding: var(--space-6); font-size: 13px; }
+</style>
+</head>
+<body>
+  <header>
+    <div>
+      <h1>คำนวณผ้าดิบ</h1>
+      <div class="meta" id="statusMsg">กำลังโหลด...</div>
+    </div>
+  </header>
+
+  <div class="container" id="app">
+    <div class="loading">กำลังโหลดข้อมูล...</div>
+  </div>
+
+  <script>
+    // ===== ตั้งค่า Supabase =====
+    const SUPABASE_URL = 'https://pmcnamlesodpuynakkuk.supabase.co';
+    const SUPABASE_ANON_KEY = 'sb_publishable_qkWioinGX5ybtENThpRjLw_9R3OL_Gw';
+    const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    // ===== logic คำนวณ (ย้ายมาจาก calc.js) =====
+    function round2(n) { return Math.round(n * 100) / 100; }
+    function round4(n) { return Math.round(n * 10000) / 10000; }
+    function calcPiece(widthCm, lengthCm, settings) {
+      const shrinkLength = round2(lengthCm * settings.shrink_rate);
+      const yardPerPiece = round4((widthCm * shrinkLength) / settings.yard_area_cm2);
+      const price = round2(widthCm * lengthCm * settings.price_rate);
+      return { shrinkLength, yardPerPiece, price };
+    }
+    function lotSortKey(name) {
+      const m = name.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
+      if (!m) return -1;
+      return parseInt(m[3]) * 10000 + parseInt(m[2]) * 100 + parseInt(m[1]);
+    }
+    function fmtBaht(n) { return Number(n).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+
+    let SETTINGS = null;
+
+    async function loadSettings() {
+      const { data, error } = await sb.from('settings').select('key,value');
+      if (error) throw error;
+      const s = {};
+      data.forEach(r => s[r.key] = Number(r.value));
+      return s;
+    }
+
+    async function loadAll() {
+      document.getElementById('statusMsg').textContent = 'กำลังโหลด...';
+      SETTINGS = await loadSettings();
+
+      const { data: lots, error: e1 } = await sb.from('lots').select('id,name,lot_date,created_at');
+      if (e1) throw e1;
+      const { data: pieces, error: e2 } = await sb.from('pieces').select('id,lot_id,width_cm,length_cm,label,price,paid');
+      if (e2) throw e2;
+
+      lots.sort((a, b) => lotSortKey(b.name) - lotSortKey(a.name));
+      render(lots, pieces);
+      document.getElementById('statusMsg').textContent = 'อัปเดตล่าสุด: ' + new Date().toLocaleString('th-TH');
+    }
+
+    function render(lots, pieces) {
+      const app = document.getElementById('app');
+      app.innerHTML = '';
+
+      let totalPieces = 0, grandTotalYard = 0, grandTotalPrice = 0;
+      const lotBlocks = lots.map(lot => {
+        const rows = pieces.filter(p => p.lot_id === lot.id);
+        let lotYard = 0, lotPrice = 0;
+        rows.forEach(r => { lotYard += calcPiece(r.width_cm, r.length_cm, SETTINGS).yardPerPiece; lotPrice += Number(r.price); });
+        totalPieces += rows.length; grandTotalYard += lotYard; grandTotalPrice += lotPrice;
+        return { lot, rows, lotYard: round4(lotYard), lotPrice: round2(lotPrice) };
+      });
+      const bufferYard = round4(grandTotalYard * SETTINGS.buffer_rate);
+
+      const summary = document.createElement('div');
+      summary.className = 'summary-grid';
+      summary.innerHTLL = `
+        <div class="stat"><div class="num">${totalPieces}</div><div class="lbl">ชิ้นรวม</div></div>
+        <div class="stat"><div class="num">${fmtBaht(grandTotalPrice)}</div><div class="lbl">ยอดรวมราคา (บาท)</div></div>
+        <div class="stat"><div class="num">${round4(grandTotalYard).toFixed(2)}</div><div class="lbl">ผ้าที่ต้องใช้ (หลา)</div></div>
+        <div class="stat"><div class="num">${bufferYard.toFixed(2)}</div><div class="lbl">แนะนำสั่งซื้อ +5% (หลา)</div></div>
+      `;
+      app.appendChild(summary);
+
+      app.appendChild(buildAddPanel(lots));
+
+      lotBlocks.forEach(({ lot, rows, lotYard, lotPrice }) => {
+        const card = document.createElement('div');
+        card.className = 'lot-card';
+        const rowsHtml = rows.map(r => {
+          const { yardPerPiece } = calcPiece(r.width_cm, r.length_cm, SETTINGS);
+          return `<tr>
+            <td>${esc(r.label || '-')}</td>
+            <td>${r.width_cm} x ${r.length_cm}</td>
+            <td>${fmtBaht(r.price)}</td>
+            <td>${yardPerPiece.toFixed(2)}</td>
+            <td><span class="paid-badge ${r.paid ? 'paid' : 'unpaid'}" data-id="${r.id}" data-paid="${r.paid}">${r.paid ? 'จ่ายแล้ว' : 'ยังไม่จ่าย'}</span></td>
+          </tr>`;
+        }).join('');
+        card.innerHTML = `
+          <div class="lot-head">
+            <span>${esc(lot.name)}</span>
+            <span class="lot-head-right"><span class="lot-total">${lotYard.toFixed(2)} หลา</span><span class="lot-price">${fmtBaht(lotPrice)} บาท</span></span>
+          </div>
+          <table>
+            <thead><tr><th>รายการ</th><th>ขนาด (ซม.)</th><th>ราคา</th><th>ผ้า (หลา)</th><th>สถานะ</th></tr></thead>
+            <tbody>${rowsHtml || '<tr><td colspan="5" style="text-align:center;color:var(--sub)">ยังไม่มีชิ้นงาน</td></tr>'}</tbody>
+          </table>
+        `;
+        app.appendChild(card);
+      });
+
+      app.querySelectorAll('.paid-badge').forEach(el => {
+        el.addEventListener('click', async () => {
+          const id = el.dataset.id;
+          const next = el.dataset.paid !== 'true';
+          el.textContent = '...';
+          const { error } = await sb.from('pieces').update({ paid: next }).eq('id', id);
+          if (error) { alert('อัปเดตไม่สำเร็จ: ' + error.message); }
+          await loadAll();
+        });
+      });
+    }
+
+    function buildAddPanel(lots) {
+      const panel = document.createElement('div');
+      panel.className = 'panel';
+      const lotOptions = lots.map(l => `<option value="${l.id}">${esc(l.name)}</option>`).join('');
+      panel.innerHTML = `
+        <h2>เพิ่มล็อตใหม่</h2>
+        <div class="row">
+          <input id="newLotName" placeholder="ชื่อล็อต เช่น 9/8/69">
+          <button id="addLotBtn">+ เพิ่มล็อต</button>
+        </div>
+        <h2 style="margin-top:var(--space-4)">เพิ่มชิ้นงาน</h2>
+        <div class="row">
+          <select id="pieceLot">${lotOptions || '<option value="">-- ยังไม่มีล็อต --</option>'}</select>
+        </div>
+        <div class="row">
+          <input id="pieceLabel" placeholder="ชื่อ/รายละเอียด (ไม่บังคับ)">
+          <input id="pieceWidth" type="number" placeholder="กว้าง (ซม.)">
+          <input id="pieceLength" type="number" placeholder="ยาว (ซม.)">
+          <input id="pieceQty" type="number" placeholder="จำนวน" value="1" min="1">
+        </div>
+        <div class="row">
+          <button id="addPieceBtn" class="btn secondary" style="flex:0">+ เพิ่มชิ้นงาน</button>
+        </div>
+        <div class="hint">ราคาต่อชิ้นคำนวณอัตโนมัติ = กว้าง x ยาว x ${SETTINGS.price_rate} บาท/ตร.ซม.</div>
+      `;
+      panel.querySelector('#addLotBtn').addEventListener('click', async () => {
+        const name = panel.querySelector('#newLotName').value.trim();
+        if (!name) return;
+        const { error } = await sb.from('lots').insert({ name });
+        if (error) { alert('เพิ่มล็อตไม่สำเร็จ: ' + error.message); return; }
+        await loadAll();
+      });
+      panel.querySelector('#addPieceBtn').addEventListener('click', async () => {
+        const lotId = panel.querySelector('#pieceLot').value;
+        const label = panel.querySelector('#pieceLabel').value.trim();
+        const width = parseFloat(panel.querySelector('#pieceWidth').value);
+        const length = parseFloat(panel.querySelector('#pieceLength').value);
+        const qty = parseInt(panel.querySelector('#pieceQty').value) || 1;
+        if (!lotId || !width || !length) { alert('กรอกล็อต/กว้าง/ยาวให้ครบ'); return; }
+        const price = round2(width * length * SETTINGS.price_rate);
+        const rowsToInsert = Array.from({ length: qty }, () => ({
+          lot_id: lotId, width_cm: width, length_cm: length, label: label || null, price, paid: false
+        }));
+        const { error } = await sb.from('pieces').insert(rowsToInsert);
+        if (error) { alert('เพิ่มชิ้นงานไม่สำเร็จ: ' + error.message); return; }
+        await loadAll();
+      });
+      return panel;
+    }
+
+    function esc(s) {
+      return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    }
+
+    loadAll().catch(err => {
+      document.getElementById('statusMsg').textContent = 'โหลดไม่สำเร็จ: ' + err.message;
+    });
+  </script>
+</body>
+</html>
