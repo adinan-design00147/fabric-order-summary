@@ -181,6 +181,27 @@
   .search-wrap input:focus { outline: 2px solid var(--accent); outline-offset: 1px; border-color: var(--accent); }
 
   .loading { text-align: center; color: var(--sub); padding: var(--space-6); font-size: 13px; }
+
+  .picker-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: var(--space-3); margin-top: var(--space-2); }
+  .picker-card {
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--space-2);
+    background: var(--card); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: var(--space-6) var(--space-3); cursor: pointer; font-family: inherit;
+    min-height: 120px; transition: border-color .15s ease, transform .1s ease;
+  }
+  .picker-card:hover { border-color: var(--accent); }
+  .picker-card:active { transform: scale(.98); }
+  .picker-card:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .picker-icon { font-size: 32px; }
+  .picker-label { font-size: 14px; font-weight: 600; color: var(--text); }
+
+  .back-link {
+    display: inline-flex; align-items: center; gap: 6px; background: none; border: none;
+    color: var(--sub); font-family: inherit; font-size: 13px; font-weight: 500; cursor: pointer;
+    padding: var(--space-2) 0; margin-bottom: var(--space-2); min-height: 36px;
+  }
+  .back-link:hover { color: var(--accent); }
+  .back-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 </style>
 </head>
 <body>
@@ -242,6 +263,254 @@
     let SETTINGS = null;
     let lastSelectedLotId = null;
     let activeTab = 'daily';
+    let currentView = 'picker';
+
+    const PRODUCT_CATEGORIES = {
+      fabric:   { label: 'ป้ายผ้า',    icon: '🏷️' },
+      favor:    { label: 'ของชำร่วย',  icon: '🎁' },
+      notebook: { label: 'สมุดเล็ก',   icon: '📓' },
+      card:     { label: 'การ์ด',      icon: '🎴' },
+    };
+
+    function updateHeaderTitle() {
+      const h1 = document.querySelector('header h1');
+      if (currentView === 'picker') { h1.textContent = 'เมนูสินค้า'; return; }
+      const meta = PRODUCT_CATEGORIES[currentView];
+      h1.textContent = meta ? meta.icon + ' ' + meta.label : 'ระบบจัดการร้าน';
+    }
+
+    function buildBackLink() {
+      const btn = document.createElement('button');
+      btn.className = 'back-link';
+      btn.innerHTML = '← เมนูสินค้า';
+      btn.addEventListener('click', () => { currentView = 'picker'; boot(); });
+      return btn;
+    }
+
+    function renderPicker() {
+      document.getElementById('statusMsg').textContent = 'เลือกสินค้าที่ต้องการจัดการ';
+      const app = document.getElementById('app');
+      app.innerHTML = '';
+      const grid = document.createElement('div');
+      grid.className = 'picker-grid';
+      grid.innerHTML = Object.entries(PRODUCT_CATEGORIES).map(([key, meta]) => `
+        <button class="picker-card" data-key="${key}">
+          <span class="picker-icon">${meta.icon}</span>
+          <span class="picker-label">${esc(meta.label)}</span>
+        </button>
+      `).join('');
+      app.appendChild(grid);
+      grid.querySelectorAll('.picker-card').forEach(btn => {
+        btn.addEventListener('click', () => {
+          currentView = btn.dataset.key;
+          boot();
+        });
+      });
+    }
+
+    async function boot() {
+      updateHeaderTitle();
+      if (currentView === 'picker') { renderPicker(); return; }
+      document.getElementById('app').innerHTML = '<div class="loading">กำลังโหลดข้อมูล...</div>';
+      try {
+        if (currentView === 'fabric') {
+          await loadAll();
+        } else {
+          await loadProducts(currentView);
+        }
+      } catch (err) {
+        document.getElementById('statusMsg').textContent = 'โหลดไม่สำเร็จ: ' + err.message;
+      }
+    }
+
+    async function loadProducts(category) {
+      document.getElementById('statusMsg').textContent = 'กำลังโหลด...';
+      const { data: orders, error } = await sb.from('product_orders')
+        .select('id,category,name,quantity,unit_cost,unit_sell_price,customer,notes,paid,created_at')
+        .eq('category', category).order('created_at', { ascending: false });
+      if (error) throw error;
+      renderProductCategory(category, orders);
+      document.getElementById('statusMsg').textContent = 'อัปเดตล่าสุด: ' + new Date().toLocaleString('th-TH');
+    }
+
+    function buildProductAddPanel(category) {
+      const meta = PRODUCT_CATEGORIES[category];
+      const panel = document.createElement('div');
+      panel.className = 'panel';
+      panel.innerHTML = `
+        <h2>➕ เพิ่มออเดอร์${meta ? ' ' + esc(meta.label) : ''}</h2>
+        <div class="form-grid">
+          <div class="field">
+            <label for="oName">ชื่อ/แบบ</label>
+            <input id="oName" placeholder="เช่น การ์ดแต่งงานลายดอกไม้">
+          </div>
+          <div class="field">
+            <label for="oCustomer">ลูกค้า/งาน</label>
+            <input id="oCustomer" placeholder="ไม่บังคับ">
+          </div>
+          <div class="field">
+            <label for="oQty">จำนวน</label>
+            <input id="oQty" type="number" min="1" value="1" inputmode="numeric">
+          </div>
+          <div class="field">
+            <label for="oCost">ต้นทุน/ชิ้น (บาท)</label>
+            <input id="oCost" type="number" min="0" placeholder="0" inputmode="decimal">
+          </div>
+          <div class="field">
+            <label for="oSell">ราคาขาย/ชิ้น (บาท)</label>
+            <input id="oSell" type="number" min="0" placeholder="ไม่บังคับ" inputmode="decimal">
+          </div>
+        </div>
+        <button id="addOrderBtn" class="btn secondary block">+ เพิ่มออเดอร์</button>
+        <div class="msg" id="orderMsg"></div>
+      `;
+      panel.querySelector('#addOrderBtn').addEventListener('click', async () => {
+        const name = panel.querySelector('#oName').value.trim();
+        const customer = panel.querySelector('#oCustomer').value.trim();
+        const qty = parseInt(panel.querySelector('#oQty').value) || 1;
+        const cost = parseFloat(panel.querySelector('#oCost').value);
+        const sellRaw = panel.querySelector('#oSell').value;
+        const sell = sellRaw === '' ? null : parseFloat(sellRaw);
+        const msg = panel.querySelector('#orderMsg');
+        const btn = panel.querySelector('#addOrderBtn');
+        msg.textContent = ''; msg.className = 'msg';
+        if (!name) { msg.textContent = 'กรอกชื่อ/แบบก่อน'; msg.className = 'msg error'; return; }
+        if (isNaN(cost)) { msg.textContent = 'กรอกต้นทุนต่อชิ้น'; msg.className = 'msg error'; return; }
+        btn.disabled = true; btn.textContent = 'กำลังเพิ่ม...';
+        const { error } = await sb.from('product_orders').insert({
+          category, name, customer: customer || null, quantity: qty, unit_cost: cost, unit_sell_price: sell, paid: false
+        });
+        if (error) {
+          msg.textContent = 'เพิ่มไม่สำเร็จ: ' + error.message; msg.className = 'msg error';
+          btn.disabled = false; btn.textContent = '+ เพิ่มออเดอร์';
+          return;
+        }
+        await loadProducts(category);
+      });
+      return panel;
+    }
+
+    function renderProductCategory(category, orders) {
+      const app = document.getElementById('app');
+      app.innerHTML = '';
+      app.appendChild(buildBackLink());
+
+      let totalQty = 0, totalCost = 0, totalSell = 0, hasSell = false, unpaidCost = 0, unpaidCount = 0;
+      orders.forEach(o => {
+        const cost = Number(o.unit_cost) * o.quantity;
+        totalQty += o.quantity;
+        totalCost += cost;
+        if (o.unit_sell_price !== null && o.unit_sell_price !== undefined) { totalSell += Number(o.unit_sell_price) * o.quantity; hasSell = true; }
+        if (!o.paid) { unpaidCost += cost; unpaidCount++; }
+      });
+      const profit = totalSell - totalCost;
+
+      const summary = document.createElement('div');
+      summary.className = 'summary-grid';
+      summary.innerHTML = `
+        <div class="stat"><div class="num">${orders.length}</div><div class="lbl">ออเดอร์ทั้งหมด</div></div>
+        <div class="stat"><div class="num">${fmtBaht(round2(totalCost))}</div><div class="lbl">ต้นทุนรวม (บาท)</div></div>
+        <div class="stat"><div class="num">${fmtBaht(round2(unpaidCost))}</div><div class="lbl">ค้างชำระต้นทุน (บาท)</div></div>
+        ${hasSell
+          ? `<div class="stat"><div class="num">${fmtBaht(round2(profit))}</div><div class="lbl">กำไรรวม (บาท)</div></div>`
+          : `<div class="stat"><div class="num">${totalQty}</div><div class="lbl">จำนวนรวม (ชิ้น)</div></div>`}
+      `;
+      app.appendChild(summary);
+
+      app.appendChild(buildProductAddPanel(category));
+
+      const listCard = document.createElement('div');
+      listCard.className = 'lot-card';
+      const rowsHtml = orders.map(o => {
+        const cost = round2(Number(o.unit_cost) * o.quantity);
+        const sell = (o.unit_sell_price !== null && o.unit_sell_price !== undefined) ? round2(Number(o.unit_sell_price) * o.quantity) : null;
+        return `<tr>
+          <td class="piece-name" data-label="รายการ">
+            <span class="piece-name-text">${esc(o.name)}${o.customer ? ' — ' + esc(o.customer) : ''}</span>
+            <span class="piece-name-actions">
+              <button class="icon-btn icon-btn-edit edit-order" data-id="${o.id}" data-name="${esc(o.name)}" data-customer="${esc(o.customer || '')}" data-qty="${o.quantity}" data-cost="${o.unit_cost}" data-sell="${o.unit_sell_price ?? ''}" aria-label="แก้ไขออเดอร์" title="แก้ไข">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+              </button>
+              <button class="icon-btn icon-btn-delete delete-order" data-id="${o.id}" aria-label="ลบออเดอร์" title="ลบ">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>
+              </button>
+            </span>
+          </td>
+          <td data-label="จำนวน">${o.quantity}</td>
+          <td data-label="ต้นทุน">${fmtBaht(cost)}</td>
+          <td data-label="ราคาขาย">${sell !== null ? fmtBaht(sell) : '-'}</td>
+          <td data-label="สถานะ"><span class="paid-badge ${o.paid ? 'paid' : 'unpaid'}" data-id="${o.id}" data-paid="${o.paid}">${o.paid ? 'จ่ายแล้ว' : 'ยังไม่จ่าย'}</span></td>
+        </tr>`;
+      }).join('');
+      listCard.innerHTML = `
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>รายการ</th><th>จำนวน</th><th>ต้นทุน</th><th>ราคาขาย</th><th>สถานะ</th></tr></thead>
+            <tbody>${rowsHtml || '<tr><td colspan="5" class="empty-cell">ยังไม่มีออเดอร์</td></tr>'}</tbody>
+          </table>
+        </div>
+      `;
+      app.appendChild(listCard);
+
+      app.querySelectorAll('.paid-badge').forEach(el => {
+        el.addEventListener('click', async () => {
+          const id = el.dataset.id;
+          const next = el.dataset.paid !== 'true';
+          el.textContent = '...';
+          const { error } = await sb.from('product_orders').update({ paid: next }).eq('id', id);
+          if (error) alert('อัปเดตไม่สำเร็จ: ' + error.message);
+          await loadProducts(category);
+        });
+      });
+
+      app.querySelectorAll('.piece-name').forEach(td => {
+        td.addEventListener('click', () => td.classList.toggle('active'));
+      });
+
+      app.querySelectorAll('.edit-order').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const tr = btn.closest('tr');
+          const id = btn.dataset.id;
+          tr.innerHTML = `
+            <td colspan="5">
+              <div class="edit-row">
+                <input class="edit-o-name" placeholder="ชื่อ/แบบ" aria-label="ชื่อ/แบบ" value="${esc(btn.dataset.name)}">
+                <input class="edit-o-customer" placeholder="ลูกค้า/งาน" aria-label="ลูกค้า/งาน" value="${esc(btn.dataset.customer)}">
+                <input class="edit-o-qty" type="number" min="1" step="1" placeholder="จำนวน" aria-label="จำนวน" value="${btn.dataset.qty}">
+                <input class="edit-o-cost" type="number" min="0" step="any" placeholder="ต้นทุน/ชิ้น" aria-label="ต้นทุนต่อชิ้น" value="${btn.dataset.cost}">
+                <input class="edit-o-sell" type="number" min="0" step="any" placeholder="ราคาขาย/ชิ้น" aria-label="ราคาขายต่อชิ้น" value="${btn.dataset.sell}">
+                <button class="btn btn-sm save-order">✅ บันทึก</button>
+                <button class="btn secondary btn-sm cancel-order">✖️ ยกเลิก</button>
+              </div>
+            </td>
+          `;
+          tr.querySelector('.cancel-order').addEventListener('click', () => loadProducts(category));
+          tr.querySelector('.save-order').addEventListener('click', async () => {
+            const name = tr.querySelector('.edit-o-name').value.trim();
+            const customer = tr.querySelector('.edit-o-customer').value.trim();
+            const qty = parseInt(tr.querySelector('.edit-o-qty').value) || 1;
+            const cost = parseFloat(tr.querySelector('.edit-o-cost').value) || 0;
+            const sellRaw = tr.querySelector('.edit-o-sell').value;
+            const sell = sellRaw === '' ? null : parseFloat(sellRaw);
+            if (!name) { alert('กรอกชื่อ/แบบก่อน'); return; }
+            const { error } = await sb.from('product_orders').update({ name, customer: customer || null, quantity: qty, unit_cost: cost, unit_sell_price: sell }).eq('id', id);
+            if (error) { alert('บันทึกไม่สำเร็จ: ' + error.message); return; }
+            await loadProducts(category);
+          });
+        });
+      });
+
+      app.querySelectorAll('.delete-order').forEach(btn => {
+        btn.addEventListener('click', async (e) => {
+          e.stopPropagation();
+          if (!confirm('ลบออเดอร์นี้?')) return;
+          const { error } = await sb.from('product_orders').delete().eq('id', btn.dataset.id);
+          if (error) { alert('ลบไม่สำเร็จ: ' + error.message); return; }
+          await loadProducts(category);
+        });
+      });
+    }
 
     async function loadSettings() {
       const { data, error } = await sb.from('settings').select('key,value');
@@ -257,7 +526,7 @@
 
       const { data: lots, error: e1 } = await sb.from('lots').select('id,name,lot_date,created_at');
       if (e1) throw e1;
-      const { data: pieces, error: e2 } = await sb.from('pieces').select('id,lot_id,width_cm,length_cm,label,price,paid');
+      const { data: pieces, error: e2 } = await sb.from('pieces').select('id,lot_id,width_cm,length_cm,label,price,sell_price,paid');
       if (e2) throw e2;
 
       lots.sort((a, b) => lotSortKey(b.name) - lotSortKey(a.name));
@@ -268,16 +537,22 @@
     function render(lots, pieces) {
       const app = document.getElementById('app');
       app.innerHTML = '';
+      app.appendChild(buildBackLink());
 
-      let totalPieces = 0, grandTotalYard = 0, grandTotalPrice = 0;
+      let totalPieces = 0, grandTotalYard = 0, grandTotalPrice = 0, grandTotalSell = 0, hasSell = false;
       const lotBlocks = lots.map(lot => {
         const rows = pieces.filter(p => p.lot_id === lot.id);
         let lotYard = 0, lotPrice = 0;
-        rows.forEach(r => { lotYard += calcPiece(r.width_cm, r.length_cm, SETTINGS).yardPerPiece; lotPrice += Number(r.price); });
+        rows.forEach(r => {
+          lotYard += calcPiece(r.width_cm, r.length_cm, SETTINGS).yardPerPiece;
+          lotPrice += Number(r.price);
+          if (r.sell_price !== null && r.sell_price !== undefined) { grandTotalSell += Number(r.sell_price); hasSell = true; }
+        });
         totalPieces += rows.length; grandTotalYard += lotYard; grandTotalPrice += lotPrice;
         return { lot, rows, lotYard: round4(lotYard), lotPrice: round2(lotPrice) };
       });
       const bufferYard = round4(grandTotalYard * SETTINGS.buffer_rate);
+      const grandProfit = grandTotalSell - grandTotalPrice;
 
       // ---- tab bar ----
       const tabs = document.createElement('div');
@@ -298,9 +573,10 @@
       summary.className = 'summary-grid';
       summary.innerHTML = `
         <div class="stat"><div class="num">${totalPieces}</div><div class="lbl">ชิ้นรวม</div></div>
-        <div class="stat"><div class="num">${fmtBaht(grandTotalPrice)}</div><div class="lbl">ยอดรวมราคา (บาท)</div></div>
+        <div class="stat"><div class="num">${fmtBaht(grandTotalPrice)}</div><div class="lbl">ต้นทุนรวม (บาท)</div></div>
         <div class="stat"><div class="num">${round4(grandTotalYard).toFixed(2)}</div><div class="lbl">ผ้าที่ต้องใช้ (หลา)</div></div>
         <div class="stat"><div class="num">${bufferYard.toFixed(2)}</div><div class="lbl">แนะนำสั่งซื้อ +5% (หลา)</div></div>
+        ${hasSell ? `<div class="stat"><div class="num">${fmtBaht(round2(grandProfit))}</div><div class="lbl">กำไรรวม (บาท)</div></div>` : ''}
       `;
       dailyEl.appendChild(summary);
 
@@ -349,7 +625,7 @@
             <td class="piece-name" data-label="รายการ">
               <span class="piece-name-text">${esc(r.label || '-')}</span>
               <span class="piece-name-actions">
-                <button class="icon-btn icon-btn-edit edit-piece" data-id="${r.id}" data-label="${esc(r.label || '')}" data-width="${r.width_cm}" data-length="${r.length_cm}" aria-label="แก้ไขชิ้นงาน" title="แก้ไข">
+                <button class="icon-btn icon-btn-edit edit-piece" data-id="${r.id}" data-label="${esc(r.label || '')}" data-width="${r.width_cm}" data-length="${r.length_cm}" data-sell="${r.sell_price ?? ''}" aria-label="แก้ไขชิ้นงาน" title="แก้ไข">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
                 </button>
                 <button class="icon-btn icon-btn-delete delete-piece" data-id="${r.id}" aria-label="ลบชิ้นงาน" title="ลบ">
@@ -358,7 +634,8 @@
               </span>
             </td>
             <td data-label="ขนาด (ซม.)">${r.width_cm} x ${r.length_cm}</td>
-            <td data-label="ราคา">${fmtBaht(r.price)}</td>
+            <td data-label="ต้นทุน">${fmtBaht(r.price)}</td>
+            <td data-label="ราคาขาย">${r.sell_price !== null && r.sell_price !== undefined ? fmtBaht(r.sell_price) : '-'}</td>
             <td data-label="ผ้า (หลา)">${yardPerPiece.toFixed(2)}</td>
             <td data-label="สถานะ"><span class="paid-badge ${r.paid ? 'paid' : 'unpaid'}" data-id="${r.id}" data-paid="${r.paid}">${r.paid ? 'จ่ายแล้ว' : 'ยังไม่จ่าย'}</span></td>
           </tr>`;
@@ -371,8 +648,8 @@
           ${hasUnpaid ? `<div class="lot-actions"><button class="btn secondary btn-sm mark-lot-paid" data-lot="${lot.id}">✅ จ่ายครบล็อตนี้</button></div>` : ''}
           <div class="table-wrap">
             <table>
-              <thead><tr><th>รายการ</th><th>ขนาด (ซม.)</th><th>ราคา</th><th>ผ้า (หลา)</th><th>สถานะ</th></tr></thead>
-              <tbody>${rowsHtml || '<tr><td colspan="5" class="empty-cell">ยังไม่มีชิ้นงาน</td></tr>'}</tbody>
+              <thead><tr><th>รายการ</th><th>ขนาด (ซม.)</th><th>ต้นทุน</th><th>ราคาขาย</th><th>ผ้า (หลา)</th><th>สถานะ</th></tr></thead>
+              <tbody>${rowsHtml || '<tr><td colspan="6" class="empty-cell">ยังไม่มีชิ้นงาน</td></tr>'}</tbody>
             </table>
           </div>
         `;
@@ -665,11 +942,12 @@
           const width = btn.dataset.width;
           const length = btn.dataset.length;
           tr.innerHTML = `
-            <td colspan="5">
+            <td colspan="6">
               <div class="edit-row">
                 <input class="edit-label" placeholder="ชื่อ/รายละเอียด" aria-label="ชื่อ/รายละเอียด" value="${esc(label)}">
                 <input class="edit-width" type="number" min="0" step="any" value="${width}" placeholder="กว้าง" aria-label="กว้าง (ซม.)">
                 <input class="edit-length" type="number" min="0" step="any" value="${length}" placeholder="ยาว" aria-label="ยาว (ซม.)">
+                <input class="edit-sell" type="number" min="0" step="any" value="${btn.dataset.sell || ''}" placeholder="ราคาขาย" aria-label="ราคาขาย">
                 <button class="btn btn-sm save-piece">✅ บันทึก</button>
                 <button class="btn secondary btn-sm cancel-edit">✖️ ยกเลิก</button>
               </div>
@@ -680,9 +958,11 @@
             const newLabel = tr.querySelector('.edit-label').value.trim();
             const newWidth = parseFloat(tr.querySelector('.edit-width').value);
             const newLength = parseFloat(tr.querySelector('.edit-length').value);
+            const sellRaw = tr.querySelector('.edit-sell').value;
+            const newSell = sellRaw === '' ? null : parseFloat(sellRaw);
             if (!newWidth || !newLength) { alert('กรอกกว้างและยาวให้ครบ'); return; }
             const newPrice = Math.round(newWidth * newLength * SETTINGS.price_rate);
-            const { error } = await sb.from('pieces').update({ label: newLabel || null, width_cm: newWidth, length_cm: newLength, price: newPrice }).eq('id', id);
+            const { error } = await sb.from('pieces').update({ label: newLabel || null, width_cm: newWidth, length_cm: newLength, price: newPrice, sell_price: newSell }).eq('id', id);
             if (error) { alert('บันทึกไม่สำเร็จ: ' + error.message); return; }
             await loadAll();
           });
@@ -783,10 +1063,14 @@
             <label for="pieceQty">จำนวน</label>
             <input id="pieceQty" type="number" min="1" value="1" inputmode="numeric">
           </div>
+          <div class="field">
+            <label for="pieceSell">ราคาขาย (ไม่บังคับ)</label>
+            <input id="pieceSell" type="number" min="0" placeholder="ต่อชิ้น" inputmode="decimal">
+          </div>
         </div>
         <button id="addPieceBtn" class="btn secondary block">+ เพิ่มชิ้นงาน</button>
         <div class="msg" id="pieceMsg"></div>
-        <div class="hint">ราคาต่อชิ้นคำนวณอัตโนมัติ = กว้าง x ยาว x ${SETTINGS.price_rate} บาท/ตร.ซม.</div>
+        <div class="hint">ต้นทุนต่อชิ้นคำนวณอัตโนมัติ = กว้าง x ยาว x ${SETTINGS.price_rate} บาท/ตร.ซม. (ราคาขายกรอกเองแยกต่างหาก)</div>
       `;
       piecePanel.querySelector('#pieceLot').addEventListener('change', (e) => {
         lastSelectedLotId = e.target.value;
@@ -797,6 +1081,8 @@
         const width = parseFloat(piecePanel.querySelector('#pieceWidth').value);
         const length = parseFloat(piecePanel.querySelector('#pieceLength').value);
         const qty = parseInt(piecePanel.querySelector('#pieceQty').value) || 1;
+        const sellRaw = piecePanel.querySelector('#pieceSell').value;
+        const sellPrice = sellRaw === '' ? null : parseFloat(sellRaw);
         const msg = piecePanel.querySelector('#pieceMsg');
         const btn = piecePanel.querySelector('#addPieceBtn');
         msg.textContent = ''; msg.className = 'msg';
@@ -806,7 +1092,7 @@
         lastSelectedLotId = lotId;
         const price = Math.round(width * length * SETTINGS.price_rate);
         const rowsToInsert = Array.from({ length: qty }, () => ({
-          lot_id: lotId, width_cm: width, length_cm: length, label: label || null, price, paid: false
+          lot_id: lotId, width_cm: width, length_cm: length, label: label || null, price, sell_price: sellPrice, paid: false
         }));
         const { error } = await sb.from('pieces').insert(rowsToInsert);
         if (error) {
@@ -826,9 +1112,7 @@
       return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
     }
 
-    loadAll().catch(err => {
-      document.getElementById('statusMsg').textContent = 'โหลดไม่สำเร็จ: ' + err.message;
-    });
+    boot();
   </script>
 </body>
 </html>
