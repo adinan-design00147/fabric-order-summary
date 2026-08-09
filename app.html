@@ -108,6 +108,14 @@
   .month-card .month-sub { font-size: 12px; color: var(--sub); margin-top: 2px; margin-bottom: var(--space-3); }
   .month-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-2); }
   .month-stats .stat { padding: var(--space-3) var(--space-2); }
+  .month-stats.stats-2 { grid-template-columns: repeat(2, 1fr); }
+
+  .section-title { font-size: 15px; font-weight: 600; margin: var(--space-5) 0 var(--space-3); display: flex; align-items: center; gap: 6px; }
+
+  .pay-row { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: var(--space-3) var(--space-4); margin-bottom: var(--space-2); display: flex; justify-content: space-between; align-items: center; font-size: 14px; font-weight: 600; }
+  .pay-row-right { display: flex; gap: var(--space-3); align-items: baseline; }
+  .pay-row-count { font-size: 12px; font-weight: 400; color: var(--sub); }
+  .pay-row-price { color: var(--accent); font-variant-numeric: tabular-nums; }
 
   .loading { text-align: center; color: var(--sub); padding: var(--space-6); font-size: 13px; }
 </style>
@@ -214,6 +222,7 @@
       tabs.innerHTML = `
         <button class="tab-btn ${activeTab === 'daily' ? 'active' : ''}" data-tab="daily">📅 รายวัน</button>
         <button class="tab-btn ${activeTab === 'monthly' ? 'active' : ''}" data-tab="monthly">🗓️ รายเดือน</button>
+        <button class="tab-btn ${activeTab === 'payment' ? 'active' : ''}" data-tab="payment">💰 การชำระเงิน</button>
       `;
       app.appendChild(tabs);
 
@@ -344,8 +353,152 @@
 
       app.appendChild(monthlyEl);
 
+      // ---- แท็บการชำระเงิน ----
+      const paymentEl = document.createElement('div');
+      paymentEl.id = 'paymentContent';
+
+      let paidPieces = 0, paidPrice = 0, unpaidPieces = 0, unpaidPrice = 0;
+      const lotOutstanding = [];
+      lotBlocks.forEach(({ lot, rows }) => {
+        let lp = 0, lc = 0;
+        rows.forEach(r => {
+          if (r.paid) { paidPieces++; paidPrice += Number(r.price); }
+          else { unpaidPieces++; unpaidPrice += Number(r.price); lp += Number(r.price); lc++; }
+        });
+        if (lc > 0) lotOutstanding.push({ lot, count: lc, price: round2(lp) });
+      });
+
+      const paySummary = document.createElement('div');
+      paySummary.className = 'summary-grid';
+      paySummary.innerHTML = `
+        <div class="stat"><div class="num">${fmtBaht(round2(unpaidPrice))}</div><div class="lbl">ยอดค้างชำระรวม (บาท)</div></div>
+        <div class="stat"><div class="num">${unpaidPieces}</div><div class="lbl">ชิ้นที่ยังไม่จ่าย</div></div>
+        <div class="stat"><div class="num">${fmtBaht(round2(paidPrice))}</div><div class="lbl">ยอดจ่ายแล้วรวม (บาท)</div></div>
+        <div class="stat"><div class="num">${paidPieces}</div><div class="lbl">ชิ้นที่จ่ายแล้ว</div></div>
+      `;
+      paymentEl.appendChild(paySummary);
+
+      // ค้างชำระรายเดือน
+      const payMonthHeading = document.createElement('h2');
+      payMonthHeading.className = 'section-title';
+      payMonthHeading.textContent = '📆 ค้างชำระรายเดือน';
+      paymentEl.appendChild(payMonthHeading);
+
+      const oGroups = {};
+      const oUnknown = { count: 0, price: 0, lots: [] };
+      lotBlocks.forEach(({ lot, rows }) => {
+        const unpaidRows = rows.filter(r => !r.paid);
+        if (unpaidRows.length === 0) return;
+        const count = unpaidRows.length;
+        const price = round2(unpaidRows.reduce((s, r) => s + Number(r.price), 0));
+        const ym = parseLotYM(lot.name);
+        if (!ym) { oUnknown.count += count; oUnknown.price += price; oUnknown.lots.push(lot.name); return; }
+        const key = ym.yy + '-' + ym.month;
+        if (!oGroups[key]) oGroups[key] = { yy: ym.yy, month: ym.month, count: 0, price: 0, lots: [] };
+        oGroups[key].count += count;
+        oGroups[key].price += price;
+        oGroups[key].lots.push(lot.name);
+      });
+      const oGroupList = Object.values(oGroups).sort((a, b) => (b.yy * 100 + b.month) - (a.yy * 100 + a.month));
+
+      if (oGroupList.length === 0 && oUnknown.lots.length === 0) {
+        const empty = document.createElement('div');
+        empty.className = 'loading';
+        empty.textContent = 'ไม่มียอดค้างชำระ 🎉';
+        paymentEl.appendChild(empty);
+      } else {
+        oGroupList.forEach(g => {
+          const card = document.createElement('div');
+          card.className = 'month-card';
+          card.innerHTML = `
+            <h3>${THAI_MONTHS[g.month]} ${g.yy + 2500}</h3>
+            <div class="month-sub">${g.lots.length} ล็อตที่ค้าง: ${g.lots.map(esc).join(', ')}</div>
+            <div class="month-stats stats-2">
+              <div class="stat"><div class="num">${g.count}</div><div class="lbl">ชิ้นค้าง</div></div>
+              <div class="stat"><div class="num">${fmtBaht(round2(g.price))}</div><div class="lbl">ยอดค้าง (บาท)</div></div>
+            </div>
+          `;
+          paymentEl.appendChild(card);
+        });
+        if (oUnknown.lots.length) {
+          const card = document.createElement('div');
+          card.className = 'month-card';
+          card.innerHTML = `
+            <h3>ไม่ระบุเดือน</h3>
+            <div class="month-sub">${oUnknown.lots.length} ล็อตที่ค้าง: ${oUnknown.lots.map(esc).join(', ')}</div>
+            <div class="month-stats stats-2">
+              <div class="stat"><div class="num">${oUnknown.count}</div><div class="lbl">ชิ้นค้าง</div></div>
+              <div class="stat"><div class="num">${fmtBaht(round2(oUnknown.price))}</div><div class="lbl">ยอดค้าง (บาท)</div></div>
+            </div>
+          `;
+          paymentEl.appendChild(card);
+        }
+      }
+
+      // ค้างชำระรายล็อต
+      const payLotHeading = document.createElement('h2');
+      payLotHeading.className = 'section-title';
+      payLotHeading.textContent = '📦 ค้างชำระรายล็อต';
+      paymentEl.appendChild(payLotHeading);
+
+      if (lotOutstanding.length === 0) {
+        const empty = document.createElement('div');
+        empty.className = 'loading';
+        empty.textContent = 'ทุกล็อตจ่ายครบแล้ว 🎉';
+        paymentEl.appendChild(empty);
+      } else {
+        lotOutstanding.forEach(({ lot, count, price }) => {
+          const row = document.createElement('div');
+          row.className = 'pay-row';
+          row.innerHTML = `
+            <span class="pay-row-name">${esc(lot.name)}</span>
+            <span class="pay-row-right"><span class="pay-row-count">${count} ชิ้น</span><span class="pay-row-price">${fmtBaht(price)} บาท</span></span>
+          `;
+          paymentEl.appendChild(row);
+        });
+      }
+
+      // ประวัติที่จ่ายแล้ว
+      const payHistHeading = document.createElement('h2');
+      payHistHeading.className = 'section-title';
+      payHistHeading.textContent = '🧾 ประวัติที่จ่ายแล้ว';
+      paymentEl.appendChild(payHistHeading);
+
+      const paidRows = [];
+      lotBlocks.forEach(({ lot, rows }) => {
+        rows.forEach(r => { if (r.paid) paidRows.push({ lot, r }); });
+      });
+      paidRows.sort((a, b) => lotSortKey(b.lot.name) - lotSortKey(a.lot.name));
+
+      const histCard = document.createElement('div');
+      histCard.className = 'lot-card';
+      if (paidRows.length === 0) {
+        histCard.innerHTML = `<div class="loading">ยังไม่มีรายการที่จ่ายแล้ว</div>`;
+      } else {
+        const histRowsHtml = paidRows.map(({ lot, r }) => {
+          const { yardPerPiece } = calcPiece(r.width_cm, r.length_cm, SETTINGS);
+          return `<tr>
+            <td>${esc(lot.name)}${r.label ? ' — ' + esc(r.label) : ''}</td>
+            <td>${r.width_cm} x ${r.length_cm}</td>
+            <td>${fmtBaht(r.price)}</td>
+            <td>${yardPerPiece.toFixed(2)}</td>
+            <td><span class="paid-badge paid" data-id="${r.id}" data-paid="true">จ่ายแล้ว</span></td>
+          </tr>`;
+        }).join('');
+        histCard.innerHTML = `
+          <table>
+            <thead><tr><th>ล็อต / รายการ</th><th>ขนาด (ซม.)</th><th>ราคา</th><th>ผ้า (หลา)</th><th>สถานะ</th></tr></thead>
+            <tbody>${histRowsHtml}</tbody>
+          </table>
+        `;
+      }
+      paymentEl.appendChild(histCard);
+
+      app.appendChild(paymentEl);
+
       dailyEl.style.display = activeTab === 'daily' ? '' : 'none';
       monthlyEl.style.display = activeTab === 'monthly' ? '' : 'none';
+      paymentEl.style.display = activeTab === 'payment' ? '' : 'none';
 
       tabs.querySelectorAll('.tab-btn').forEach(btn => {
         btn.addEventListener('click', () => {
@@ -353,6 +506,7 @@
           tabs.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b === btn));
           dailyEl.style.display = activeTab === 'daily' ? '' : 'none';
           monthlyEl.style.display = activeTab === 'monthly' ? '' : 'none';
+          paymentEl.style.display = activeTab === 'payment' ? '' : 'none';
         });
       });
 
