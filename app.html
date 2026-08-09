@@ -182,6 +182,12 @@
 
   .loading { text-align: center; color: var(--sub); padding: var(--space-6); font-size: 13px; }
 
+  .info-note {
+    background: var(--warn-bg); border: 1px solid var(--warn-border); color: var(--warn-text);
+    border-radius: var(--radius); padding: var(--space-3) var(--space-4); font-size: 12px;
+    line-height: 1.6; margin-bottom: var(--space-3);
+  }
+
   .picker-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: var(--space-3); margin-top: var(--space-2); }
   .picker-card {
     display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--space-2);
@@ -346,9 +352,9 @@
 
     async function loadGlobalCustomers() {
       document.getElementById('statusMsg').textContent = 'กำลังโหลด...';
-      const { data: pieces, error: e1 } = await sb.from('pieces').select('label,price,paid');
+      const { data: pieces, error: e1 } = await sb.from('pieces').select('label,price,sell_price,paid');
       if (e1) throw e1;
-      const { data: orders, error: e2 } = await sb.from('product_orders').select('category,customer,quantity,unit_cost,paid');
+      const { data: orders, error: e2 } = await sb.from('product_orders').select('category,customer,quantity,unit_cost,unit_sell_price,paid');
       if (e2) throw e2;
       renderGlobalCustomers(pieces, orders);
       document.getElementById('statusMsg').textContent = 'อัปเดตล่าสุด: ' + new Date().toLocaleString('th-TH');
@@ -359,25 +365,32 @@
       app.innerHTML = '';
       app.appendChild(buildBackLink());
 
+      const note = document.createElement('div');
+      note.className = 'info-note';
+      note.textContent = 'ℹ️ "ต้นทุน" กับ "ค้างจ่ายร้านผลิต" = เงินที่ร้านเราต้องจ่ายให้ร้านที่ผลิต ไม่ใช่ยอดที่ลูกค้าต้องจ่ายเรา — ยอดลูกค้าจะขึ้นในช่อง "ราคาขายลูกค้า" เมื่อกรอกราคาขายแล้ว';
+      app.appendChild(note);
+
       const customerMap = {};
-      function bump(rawName, cost, paid, categoryLabel) {
+      function bump(rawName, cost, sell, paid, categoryLabel) {
         const key = rawName && rawName.trim() ? rawName.trim() : 'ไม่ระบุชื่อ';
-        if (!customerMap[key]) customerMap[key] = { name: key, count: 0, total: 0, unpaid: 0, unpaidCount: 0, categories: new Set() };
+        if (!customerMap[key]) customerMap[key] = { name: key, count: 0, cost: 0, sell: 0, hasSell: false, unpaidCost: 0, unpaidCount: 0, categories: new Set() };
         const c = customerMap[key];
         c.count += 1;
-        c.total += cost;
-        if (!paid) { c.unpaid += cost; c.unpaidCount += 1; }
+        c.cost += cost;
+        if (sell !== null && sell !== undefined) { c.sell += sell; c.hasSell = true; }
+        if (!paid) { c.unpaidCost += cost; c.unpaidCount += 1; }
         c.categories.add(categoryLabel);
       }
-      pieces.forEach(r => bump(r.label, Number(r.price), r.paid, PRODUCT_CATEGORIES.fabric.label));
+      pieces.forEach(r => bump(r.label, Number(r.price), r.sell_price === null || r.sell_price === undefined ? null : Number(r.sell_price), r.paid, PRODUCT_CATEGORIES.fabric.label));
       orders.forEach(o => {
         const meta = PRODUCT_CATEGORIES[o.category];
-        bump(o.customer, Number(o.unit_cost) * o.quantity, o.paid, meta ? meta.label : o.category);
+        const sell = (o.unit_sell_price === null || o.unit_sell_price === undefined) ? null : Number(o.unit_sell_price) * o.quantity;
+        bump(o.customer, Number(o.unit_cost) * o.quantity, sell, o.paid, meta ? meta.label : o.category);
       });
 
       const customerList = Object.values(customerMap).sort((a, b) => {
-        if (b.unpaid !== a.unpaid) return b.unpaid - a.unpaid;
-        return b.total - a.total;
+        if (b.unpaidCost !== a.unpaidCost) return b.unpaidCost - a.unpaidCost;
+        return b.cost - a.cost;
       });
 
       if (customerList.length === 0) {
@@ -393,12 +406,17 @@
         card.className = 'month-card';
         card.innerHTML = `
           <h3>${esc(c.name)}</h3>
-          <div class="month-sub">${Array.from(c.categories).map(esc).join(' · ')} — ${c.unpaidCount > 0 ? `ค้าง ${c.unpaidCount} รายการ` : 'จ่ายครบแล้ว ✅'}</div>
+          <div class="month-sub">${Array.from(c.categories).map(esc).join(' · ')} — ${c.unpaidCount > 0 ? `ยังไม่ได้จ่ายร้านผลิต ${c.unpaidCount} รายการ` : 'จ่ายร้านผลิตครบแล้ว ✅'}</div>
           <div class="month-stats">
             <div class="stat"><div class="num">${c.count}</div><div class="lbl">รายการรวม</div></div>
-            <div class="stat"><div class="num">${fmtBaht(round2(c.total))}</div><div class="lbl">ยอดรวม (บาท)</div></div>
-            <div class="stat"><div class="num">${fmtBaht(round2(c.unpaid))}</div><div class="lbl">ค้างชำระ (บาท)</div></div>
+            <div class="stat"><div class="num">${fmtBaht(round2(c.cost))}</div><div class="lbl">ต้นทุนรวม (บาท)</div></div>
+            <div class="stat"><div class="num">${fmtBaht(round2(c.unpaidCost))}</div><div class="lbl">ค้างจ่ายร้านผลิต (บาท)</div></div>
           </div>
+          ${c.hasSell ? `
+          <div class="month-stats stats-2" style="margin-top:var(--space-2)">
+            <div class="stat"><div class="num">${fmtBaht(round2(c.sell))}</div><div class="lbl">ราคาขายลูกค้า (บาท)</div></div>
+            <div class="stat"><div class="num">${fmtBaht(round2(c.sell - c.cost))}</div><div class="lbl">กำไร (บาท)</div></div>
+          </div>` : ''}
         `;
         app.appendChild(card);
       });
@@ -820,9 +838,9 @@
       const paySummary = document.createElement('div');
       paySummary.className = 'summary-grid';
       paySummary.innerHTML = `
-        <div class="stat"><div class="num">${fmtBaht(round2(unpaidPrice))}</div><div class="lbl">ยอดค้างชำระรวม (บาท)</div></div>
+        <div class="stat"><div class="num">${fmtBaht(round2(unpaidPrice))}</div><div class="lbl">ค้างจ่ายร้านผลิต (บาท)</div></div>
         <div class="stat"><div class="num">${unpaidPieces}</div><div class="lbl">ชิ้นที่ยังไม่จ่าย</div></div>
-        <div class="stat"><div class="num">${fmtBaht(round2(paidPrice))}</div><div class="lbl">ยอดจ่ายแล้วรวม (บาท)</div></div>
+        <div class="stat"><div class="num">${fmtBaht(round2(paidPrice))}</div><div class="lbl">จ่ายร้านผลิตแล้ว (บาท)</div></div>
         <div class="stat"><div class="num">${paidPieces}</div><div class="lbl">ชิ้นที่จ่ายแล้ว</div></div>
       `;
       paymentEl.appendChild(paySummary);
