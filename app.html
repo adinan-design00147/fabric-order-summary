@@ -293,6 +293,9 @@
     border-radius: var(--radius); margin-bottom: var(--space-2); cursor: pointer;
     font-family: inherit; width: 100%; text-align: left;
   }
+  a.ord-row, a.rc-row, a.nav-item { text-decoration: none; color: inherit; }
+  a.nav-item { color: var(--sub); }
+  a.nav-item.active { color: var(--accent); }
   .ord-row:hover { border-color: var(--accent); }
   .ord-main { min-width: 0; flex: 1; }
   .ord-top { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; }
@@ -833,6 +836,46 @@
     let viewingOrderId = null;
     let orderFilter = 'all';
 
+    // ===== URL routing (ทำให้กดค้าง/คลิกขวา → เปิดในแท็บใหม่ได้ และปุ่ม back ใช้งานได้) =====
+    const VALID_VIEWS = ['dashboard', 'calendar', 'orders', 'products', 'fabric', 'customers', 'receipts'];
+
+    function routeFor(view, id) {
+      if (view === 'orderView') return '#/order/' + id;
+      if (view === 'receiptView') return '#/receipt/' + id;
+      return '#/' + view;
+    }
+
+    function currentHash() {
+      if (currentView === 'orderView') return routeFor('orderView', viewingOrderId);
+      if (currentView === 'receiptView') return routeFor('receiptView', viewingReceiptId);
+      return '#/' + currentView;
+    }
+
+    let suppressHash = false;
+    function syncHash() {
+      const h = currentHash();
+      if (location.hash !== h) {
+        suppressHash = true;
+        location.hash = h;
+        setTimeout(() => { suppressHash = false; }, 0);
+      }
+    }
+
+    function applyHash() {
+      const raw = (location.hash || '').replace(/^#\/?/, '');
+      if (!raw) { currentView = 'dashboard'; return; }
+      const [seg, id] = raw.split('/');
+      if (seg === 'order' && id) { currentView = 'orderView'; viewingOrderId = id; return; }
+      if (seg === 'receipt' && id) { currentView = 'receiptView'; viewingReceiptId = id; return; }
+      currentView = VALID_VIEWS.includes(seg) ? seg : 'dashboard';
+    }
+
+    window.addEventListener('hashchange', () => {
+      if (suppressHash) return;
+      applyHash();
+      boot();
+    });
+
     // ===== สถานะการเลือกชิ้นงาน =====
     let selectedPieces = new Map();   // id -> ข้อมูลชิ้นงาน
     let viewingReceiptId = null;
@@ -841,9 +884,9 @@
       const list = document.getElementById('navList');
       list.innerHTML = NAV_ITEMS.map(it => it.sep
         ? '<div class="nav-sep"></div>'
-        : `<button class="nav-item ${currentView === it.key ? 'active' : ''}" data-key="${it.key}">
+        : `<a class="nav-item ${currentView === it.key ? 'active' : ''}" href="${routeFor(it.key)}" data-key="${it.key}">
              <span class="nav-ico">${icon(it.icon, 19)}</span><span>${esc(it.label)}</span>
-           </button>`
+           </a>`
       ).join('');
 
       const bottom = document.getElementById('bottomNav');
@@ -851,21 +894,15 @@
       bottom.innerHTML = MOBILE_NAV.map(k => {
         const m = viewMeta(k);
         const label = k === 'fabric' ? 'ต้นทุนผลิต' : m.label;
-        return `<button class="nav-item ${currentView === k ? 'active' : ''}" data-key="${k}">
+        return `<a class="nav-item ${currentView === k ? 'active' : ''}" href="${routeFor(k)}" data-key="${k}">
                   <span class="nav-ico">${icon(m.icon, 21)}</span><span>${esc(label)}</span>
-                </button>`;
+                </a>`;
       }).join('') + `
         <button class="nav-item ${moreActive ? 'active' : ''}" id="moreBtn">
           <span class="nav-ico">${icon('more', 21)}</span><span>เพิ่มเติม</span>
         </button>`;
 
-      document.querySelectorAll('.nav-item[data-key]').forEach(btn => {
-        btn.addEventListener('click', () => {
-          if (btn.dataset.key === currentView) return;
-          currentView = btn.dataset.key;
-          boot();
-        });
-      });
+      // ลิงก์เปลี่ยนหน้าเองผ่าน hash — ไม่ต้องผูก click (จะได้กดค้างเปิดแท็บใหม่ได้)
       document.getElementById('moreBtn')?.addEventListener('click', openMoreSheet);
     }
 
@@ -933,6 +970,7 @@
     }
 
     async function boot() {
+      syncHash();
       destroyCharts();
       // การเลือกชิ้นงานใช้ได้เฉพาะหน้าป้ายผ้า ออกจากหน้านี้ให้ล้างทิ้ง
       if (currentView !== 'fabric' && selectedPieces.size) selectedPieces.clear();
@@ -1429,8 +1467,9 @@
 
       shown.forEach(o => {
         const st = ORDER_STATUS[o.status] || ORDER_STATUS.new;
-        const btn = document.createElement('button');
+        const btn = document.createElement('a');
         btn.className = 'ord-row';
+        btn.href = routeFor('orderView', o.id);
         btn.innerHTML = `
           <span class="ord-main">
             <span class="ord-top">
@@ -1442,7 +1481,6 @@
           </span>
           <span class="ord-amt">${fmtBaht(round2(o.total))} บาท</span>
         `;
-        btn.addEventListener('click', () => { viewingOrderId = o.id; currentView = 'orderView'; boot(); });
         app.appendChild(btn);
       });
     }
@@ -2109,8 +2147,9 @@
       app.appendChild(sum);
 
       list.forEach(r => {
-        const btn = document.createElement('button');
+        const btn = document.createElement('a');
         btn.className = 'rc-row';
+        btn.href = routeFor('receiptView', r.id);
         btn.innerHTML = `
           <span class="rc-main">
             <span class="rc-no">${esc(r.receipt_no)} <span class="st ${r.order_id ? 'st-paid' : 'st-cancel'}">${r.order_id ? 'จากออเดอร์' : 'จากต้นทุนผลิต'}</span></span>
@@ -2118,11 +2157,6 @@
           </span>
           <span class="rc-amt">${fmtBaht(round2(r.total))} บาท</span>
         `;
-        btn.addEventListener('click', () => {
-          viewingReceiptId = r.id;
-          currentView = 'receiptView';
-          boot();
-        });
         app.appendChild(btn);
       });
     }
@@ -2420,22 +2454,19 @@
         detail.innerHTML = `
           <h3>${dd} ${THAI_MONTHS[mm + 1]} ${yy + 543}</h3>
           <div class="panel-sub">${items.length} รายการ · รวม ${fmtBaht(round2(items.reduce((s, r) => s + r.amount, 0)))} บาท</div>
-          <div class="mini-list">${items.length ? items.map((r, idx) => `
-            <div class="mini-row ${r.orderId ? 'cal-jump' : ''}" data-oid="${r.orderId || ''}" ${r.orderId ? 'style="cursor:pointer"' : ''}>
+          <div class="mini-list">${items.length ? items.map(r => {
+            const inner = `
               <div class="mini-main">
                 <div class="mini-title">${esc(r.title)}</div>
                 <div class="mini-meta">${esc(LAYER_META[r.layer].label)} · ${esc(r.sub)}</div>
               </div>
-              <div class="mini-amt">${fmtBaht(round2(r.amount))}</div>
-            </div>`).join('') : '<div class="mini-empty">ไม่มีรายการวันนี้</div>'}</div>
+              <div class="mini-amt">${fmtBaht(round2(r.amount))}</div>`;
+            return r.orderId
+              ? `<a class="mini-row" href="${routeFor('orderView', r.orderId)}" style="text-decoration:none;color:inherit">${inner}</a>`
+              : `<div class="mini-row">${inner}</div>`;
+          }).join('') : '<div class="mini-empty">ไม่มีรายการวันนี้</div>'}</div>
         `;
         app.appendChild(detail);
-        detail.querySelectorAll('.cal-jump').forEach(el => el.addEventListener('click', () => {
-          if (!el.dataset.oid) return;
-          viewingOrderId = el.dataset.oid;
-          currentView = 'orderView';
-          boot();
-        }));
       }
 
       top.querySelector('#calPrev').addEventListener('click', () => {
@@ -2648,8 +2679,8 @@
               <tbody>${b.orders.map(o => {
                 const st = ORDER_STATUS[o.status] || ORDER_STATUS.new;
                 const bal = Math.max(0, Number(o.total) - Number(o.paid_amount || 0));
-                return `<tr class="cust-order" data-oid="${o.id}" style="cursor:pointer">
-                  <td data-label="เลขที่">${esc(o.order_no)}</td>
+                return `<tr>
+                  <td data-label="เลขที่"><a href="${routeFor('orderView', o.id)}" style="color:var(--accent);font-weight:600;text-decoration:none">${esc(o.order_no)}</a></td>
                   <td data-label="วันที่">${new Date(o.created_at).toLocaleDateString('th-TH')}</td>
                   <td data-label="สถานะ"><span class="st ${st.cls}">${esc(st.label)}</span></td>
                   <td data-label="ยอด">${fmtBaht(round2(o.total))}</td>
@@ -2661,11 +2692,6 @@
           app.appendChild(card);
         });
 
-        app.querySelectorAll('.cust-order').forEach(tr => tr.addEventListener('click', () => {
-          viewingOrderId = tr.dataset.oid;
-          currentView = 'orderView';
-          boot();
-        }));
       }
 
       const prodHead = document.createElement('h2');
@@ -3533,6 +3559,7 @@
     }
 
     initTheme();
+    applyHash();
     boot();
   </script>
 </body>
