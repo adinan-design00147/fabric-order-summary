@@ -206,6 +206,16 @@
     display: inline-flex; align-items: center; justify-content: center;
   }
   .gallery-del:hover { background: var(--err-text); }
+  .gallery-fallback {
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
+    width: 100%; height: 100%; padding: var(--space-2); text-align: center; font-size: 18px;
+    background: var(--accent-soft); color: var(--accent);
+  }
+  .gallery-fallback .gf-name {
+    font-size: 10px; font-weight: 600; color: var(--text); line-height: 1.3;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; word-break: break-all;
+  }
+  .gallery-fallback .gf-hint { font-size: 9px; color: var(--sub); }
   .gallery-empty { font-size: 12px; color: var(--sub); padding: var(--space-3) 0; }
   .gallery-bar { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; margin-bottom: var(--space-3); }
   .gallery-msg { font-size: 12px; color: var(--sub); }
@@ -475,12 +485,26 @@
         }
         grid.innerHTML = files.map(f => `
           <div class="gallery-item">
-            <a href="${esc(f.view)}" target="_blank" rel="noopener">
+            <a href="${esc(f.view)}" target="_blank" rel="noopener" title="${esc(f.name)}">
               <img src="${esc(f.thumb)}" alt="${esc(f.name)}" loading="lazy" referrerpolicy="no-referrer">
+              <span class="gallery-fallback" hidden>🖼️<span class="gf-name">${esc(f.name)}</span><span class="gf-hint">เปิดในไดรฟ์</span></span>
             </a>
             <button class="gallery-del" data-id="${esc(f.id)}" aria-label="ลบรูป" title="ลบรูป">✕</button>
           </div>
         `).join('');
+        // บางไฟล์ Drive ไม่สร้าง thumbnail ให้ — ลองขนาดอื่นก่อน ถ้ายังไม่ได้ค่อยโชว์ชื่อไฟล์แทนช่องว่าง
+        grid.querySelectorAll('.gallery-item img').forEach((img, i) => {
+          let tried = 0;
+          img.addEventListener('error', () => {
+            const id = files[i].id;
+            tried++;
+            if (tried === 1) { img.src = 'https://lh3.googleusercontent.com/d/' + id + '=w800'; return; }
+            if (tried === 2) { img.src = 'https://drive.google.com/thumbnail?id=' + id + '&sz=w400'; return; }
+            img.hidden = true;
+            const fb = img.parentElement.querySelector('.gallery-fallback');
+            if (fb) fb.hidden = false;
+          });
+        });
         grid.querySelectorAll('.gallery-del').forEach(b => {
           b.addEventListener('click', async () => {
             if (!confirm('ลบรูปนี้ออกจากไดรฟ์?')) return;
