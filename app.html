@@ -136,6 +136,9 @@
     }
     .table-wrap td.empty-cell { display: block; text-align: center; }
     .table-wrap td.empty-cell::before { display: none; }
+    .table-wrap tr.cat-row { padding: 0; border-top: none; }
+    .table-wrap tr.cat-row td { display: block; text-align: left; }
+    .table-wrap tr.cat-row td::before { display: none; }
   }
 
   .lot-card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: var(--space-3); overflow: hidden; }
@@ -262,6 +265,10 @@
   .receipt-total { display: flex; justify-content: flex-end; gap: var(--space-5); margin-top: var(--space-4); padding-top: var(--space-3); border-top: 2px solid #1f2430; font-size: 16px; font-weight: 700; }
   .receipt-note { margin-top: var(--space-4); font-size: 12px; color: #6b7280; white-space: pre-wrap; }
   .receipt-foot { margin-top: var(--space-6); font-size: 11px; color: #9aa3b4; text-align: center; }
+
+  /* หัวข้อหมวดในตารางสินค้า */
+  .cat-row td { background: var(--accent-soft); font-weight: 700; font-size: 13px; letter-spacing: .2px; padding: 10px 12px !important; }
+  .cat-count { display: inline-block; margin-left: 6px; font-size: 11px; font-weight: 600; color: var(--sub); }
 
   /* กล่องเลขบัญชีท้ายใบออเดอร์/ใบเสร็จ */
   .pay-block { margin-top: var(--space-5); padding: var(--space-4); border: 1px dashed #c9c3b8; border-radius: 10px; background: #faf8f4; color: #1f2430; }
@@ -1278,6 +1285,24 @@
       return p.name + ' — ' + price + (p.note === 'ขนาดขายดี' ? ' ★' : '');
     }
 
+    /** ตัวเลือกสินค้าในฟอร์มออเดอร์ จัดกลุ่มตามหมวด (optgroup) */
+    function productOptionsHTML() {
+      const groups = new Map();
+      PRODUCTS.forEach(p => {
+        const key = p.category || 'อื่นๆ';
+        if (!groups.has(key)) groups.set(key, []);
+        groups.get(key).push(p);
+      });
+      return [...groups.entries()].map(([cat, items]) => {
+        const opts = items
+          .slice()
+          .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0))
+          .map(p => `<option value="${p.id}">${esc(productOptionLabel(p))}</option>`)
+          .join('');
+        return `<optgroup label="${esc(cat)}">${opts}</optgroup>`;
+      }).join('');
+    }
+
     async function loadProductCatalog() {
       document.getElementById('statusMsg').textContent = 'กำลังโหลด...';
       renderProductCatalog(await fetchProducts());
@@ -1366,15 +1391,25 @@
       // รายการสินค้า
       const card = document.createElement('div');
       card.className = 'lot-card';
-      const rows = list.map(p => `<tr>
-        <td data-label="สินค้า">${esc(p.name)}${p.note === 'ขนาดขายดี' ? ' <span class="st st-paid">ขายดี</span>' : ''}${p.category ? '<br><span style="font-size:11px;color:var(--sub)">' + esc(p.category) + (p.width_cm && p.length_cm ? ' · ' + p.width_cm + ' x ' + p.length_cm + ' ซม.' : '') + '</span>' : ''}</td>
+      const catGroups = new Map();
+      list.forEach(p => {
+        const key = p.category || 'อื่นๆ';
+        if (!catGroups.has(key)) catGroups.set(key, []);
+        catGroups.get(key).push(p);
+      });
+      const productRow = p => `<tr>
+        <td data-label="สินค้า">${esc(p.name)}${p.note === 'ขนาดขายดี' ? ' <span class="st st-paid">ขายดี</span>' : ''}${p.width_cm && p.length_cm ? '<br><span style="font-size:11px;color:var(--sub)">' + p.width_cm + ' x ' + p.length_cm + ' ซม.</span>' : ''}</td>
         <td data-label="คิดราคา">${p.pricing_mode === 'per_area' ? 'ตามขนาด' : p.pricing_mode === 'tier' ? 'ตามจำนวน' : 'ตายตัว'}</td>
         <td data-label="ราคาขาย">${esc(priceLabel(p))}</td>
         <td data-label="จัดการ" class="row-actions">
           <button class="icon-btn icon-btn-edit edit-product" data-id="${p.id}" data-name="${esc(p.name)}" data-cat="${esc(p.category || '')}" data-unit="${esc(p.unit)}" data-mode="${p.pricing_mode}" data-tiers="${esc(tierText(p))}" data-price="${p.pricing_mode === 'per_area' ? (p.area_rate ?? '') : (p.unit_price ?? '')}" aria-label="แก้ไขสินค้า" title="แก้ไข">${icon('edit', 18)}</button>
           <button class="icon-btn icon-btn-delete del-product" data-id="${p.id}" aria-label="ลบสินค้า" title="ลบ">${icon('trash', 18)}</button>
         </td>
-      </tr>`).join('');
+      </tr>`;
+      const rows = [...catGroups.entries()].map(([cat, items]) => (
+        `<tr class="cat-row"><td colspan="4">${esc(cat)} <span class="cat-count">${items.length}</span></td></tr>` +
+        items.slice().sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0)).map(productRow).join('')
+      )).join('');
       card.innerHTML = `
         <div class="table-wrap"><table>
           <thead><tr><th>สินค้า</th><th>คิดราคา</th><th>ราคาขาย</th><th>จัดการ</th></tr></thead>
@@ -1702,7 +1737,7 @@
             <label>สินค้า</label>
             <select class="i-prod">
               <option value="">— ขนาดพิเศษ / พิมพ์เอง —</option>
-              ${PRODUCTS.map(p => `<option value="${p.id}">${esc(productOptionLabel(p))}</option>`).join('')}
+              ${productOptionsHTML()}
             </select>
             <input class="i-name" placeholder="ชื่อรายการ / ขนาดที่ลูกค้าต้องการ" aria-label="ชื่อรายการ" style="margin-top:6px">
             <div class="i-tier-hint hint" style="display:none;margin-top:4px"></div>
