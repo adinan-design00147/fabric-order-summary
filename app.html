@@ -1312,6 +1312,48 @@
       }));
     }
 
+    // ===== ประวัติการแก้ไข =====
+    const ACTION_META = {
+      created:        { label: 'สร้าง',        cls: 'st-new' },
+      updated:        { label: 'แก้ไข',        cls: 'st-prod' },
+      status:         { label: 'เปลี่ยนสถานะ', cls: 'st-deliv' },
+      payment:        { label: 'รับเงิน',      cls: 'st-paid' },
+      payment_delete: { label: 'ลบรายการเงิน', cls: 'st-cancel' },
+      receipt:        { label: 'ออกใบเสร็จ',   cls: 'st-paid' },
+      deleted:        { label: 'ลบ',           cls: 'st-cancel' },
+    };
+
+    async function logActivity(entityType, entityId, label, action, detail) {
+      try {
+        await sb.from('activity_log').insert({
+          entity_type: entityType, entity_id: entityId || null,
+          entity_label: label || null, action, detail: detail || null,
+        });
+      } catch (e) { /* บันทึกประวัติล้มเหลวไม่ควรทำให้งานหลักพัง */ }
+    }
+
+    function buildHistoryPanel(logs) {
+      const panel = document.createElement('div');
+      panel.className = 'panel no-print';
+      panel.innerHTML = `
+        <h2>${icon('clock', 17)}ประวัติการแก้ไข</h2>
+        ${logs.length ? logs.map(l => {
+          const m = ACTION_META[l.action] || { label: l.action, cls: 'st-cancel' };
+          const d = new Date(l.created_at);
+          return `<div class="pay-line">
+            <span style="min-width:0">
+              <span class="st ${m.cls}">${esc(m.label)}</span>
+              <span style="margin-left:8px">${esc(l.detail || '')}</span>
+            </span>
+            <span style="font-size:11px;color:var(--sub);white-space:nowrap">
+              ${d.toLocaleDateString('th-TH')} ${d.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })}
+            </span>
+          </div>`;
+        }).join('') : '<div class="hint" style="margin:0">ยังไม่มีประวัติ</div>'}
+      `;
+      return panel;
+    }
+
     // ===== ออเดอร์ (รับออเดอร์ลูกค้า) =====
     async function nextOrderNo() {
       const now = new Date();
@@ -1599,7 +1641,7 @@
             total,
           };
 
-          let orderId;
+          let orderId, orderNo;
           if (isEdit) {
             const { error: e1 } = await sb.from('orders').update(headFields).eq('id', editOrder.id);
             if (e1) throw new Error(e1.message);
@@ -1607,9 +1649,11 @@
             const { error: eDel } = await sb.from('order_items').delete().eq('order_id', editOrder.id);
             if (eDel) throw new Error(eDel.message);
             orderId = editOrder.id;
+            orderNo = editOrder.order_no;
           } else {
+            orderNo = await nextOrderNo();
             const { data: ord, error: e1 } = await sb.from('orders')
-              .insert({ order_no: await nextOrderNo(), ...headFields })
+              .insert({ order_no: orderNo, ...headFields })
               .select('id').single();
             if (e1) throw new Error(e1.message);
             orderId = ord.id;
@@ -1618,6 +1662,18 @@
           const { error: e2 } = await sb.from('order_items')
             .insert(items.map(i => ({ ...i, order_id: orderId })));
           if (e2) throw new Error(e2.message);
+
+          if (isEdit) {
+            const oldTotal = Number(editOrder.total);
+            const diff = total - oldTotal;
+            await logActivity('order', orderId, orderNo, 'updated',
+              `${items.length} รายการ · ยอด ${fmtBaht(round2(oldTotal))} → ${fmtBaht(round2(total))} บาท` +
+              (diff !== 0 ? ` (${diff > 0 ? '+' : ''}${fmtBaht(round2(diff))})` : ''));
+          } else {
+            await logActivity('order', orderId, orderNo, 'created',
+              `${items.length} รายการ · รวม ${fmtBaht(round2(total))} บาท` +
+              (headFields.customer ? ' · ' + headFields.customer : ''));
+          }
 
           viewingOrderId = orderId;
           currentView = 'orderView';
@@ -1637,18 +1693,22 @@
         sb.from('orders').select('id,order_no,customer,channel,status,due_date,note,total,created_at,phone,address,payment_method,paid_amount').eq('id', id).single(),
         sb.from('order_items').select('id,product_id,name,width_cm,length_cm,qty,unit_price,line_total').eq('order_id', id),
       ]);
-      const payRes = await sb.from('order_payments').select('id,amount,method,note,paid_at')
-        .eq('order_id', id).order('paid_at');
+      const [payRes, logRes] = await Promise.all([
+        sb.from('order_payments').select('id,amount,method,note,paid_at').eq('order_id', id).order('paid_at'),
+        sb.from('activity_log').select('action,detail,created_at')
+          .eq('entity_type', 'order').eq('entity_id', id).order('created_at', { ascending: false }),
+      ]);
       await fetchProducts();
       if (oRes.error) throw oRes.error;
       if (iRes.error) throw iRes.error;
       if (payRes.error) throw payRes.error;
-      renderOrderDetail(oRes.data, iRes.data, payRes.data);
+      renderOrderDetail(oRes.data, iRes.data, payRes.data, logRes.data || []);
       document.getElementById('statusMsg').textContent = 'อัปเดตล่าสุด: ' + new Date().toLocaleString('th-TH');
     }
 
-    function renderOrderDetail(o, items, payments) {
+    function renderOrderDetail(o, items, payments, logs) {
       payments = payments || [];
+      logs = logs || [];
       const paid = payments.reduce((s, p) => s + Number(p.amount), 0);
       const balance = round2(Number(o.total) - paid);
       const app = document.getElementById('app');
@@ -1662,6 +1722,7 @@
         <button class="btn btn-sm" id="oEdit">${icon('edit', 15)}แก้ไขออเดอร์</button>
         <button class="btn secondary btn-sm" id="oPrint">${icon('printer', 15)}พิมพ์ออเดอร์</button>
         <button class="btn secondary btn-sm" id="oShip">${icon('truck', 15)}ใบปะหน้าพัสดุ</button>
+        <button class="btn secondary btn-sm" id="oReceipt">${icon('receipt', 15)}ออกใบเสร็จ</button>
         <button class="btn secondary btn-sm icon-btn-delete" id="oDel" style="width:auto;height:auto;padding:0 14px;min-height:44px">${icon('trash', 15)}ลบออเดอร์</button>
       `;
       app.appendChild(bar);
@@ -1669,6 +1730,19 @@
       bar.querySelector('#oEdit').addEventListener('click', () => openOrderForm(o, items));
       bar.querySelector('#oPrint').addEventListener('click', () => window.print());
       bar.querySelector('#oShip').addEventListener('click', () => openShippingLabel(o));
+      bar.querySelector('#oReceipt').addEventListener('click', async () => {
+        const b = bar.querySelector('#oReceipt');
+        b.disabled = true; b.textContent = 'กำลังออกใบเสร็จ...';
+        try {
+          const rid = await createReceiptFromOrder(o, items);
+          viewingReceiptId = rid;
+          currentView = 'receiptView';
+          await boot();
+        } catch (e) {
+          alert('ออกใบเสร็จไม่สำเร็จ: ' + e.message);
+          b.disabled = false; b.innerHTML = icon('receipt', 15) + 'ออกใบเสร็จ';
+        }
+      });
       bar.querySelector('#oDel').addEventListener('click', async () => {
         if (!confirm('ลบออเดอร์ ' + o.order_no + ' ?')) return;
         const { error } = await sb.from('orders').delete().eq('id', o.id);
@@ -1683,8 +1757,11 @@
         .map(([k, v]) => `<button class="chip ${o.status === k ? 'active' : ''}" data-s="${k}">${esc(v.label)}</button>`).join('');
       app.appendChild(stBar);
       stBar.querySelectorAll('.chip').forEach(c => c.addEventListener('click', async () => {
+        if (c.dataset.s === o.status) return;
         const { error } = await sb.from('orders').update({ status: c.dataset.s }).eq('id', o.id);
         if (error) { alert('เปลี่ยนสถานะไม่สำเร็จ: ' + error.message); return; }
+        await logActivity('order', o.id, o.order_no, 'status',
+          (ORDER_STATUS[o.status] || {}).label + ' → ' + (ORDER_STATUS[c.dataset.s] || {}).label);
         await boot();
       }));
 
@@ -1744,18 +1821,24 @@
         });
         if (error) { msg.textContent = 'บันทึกไม่สำเร็จ: ' + error.message; msg.className = 'msg error'; btn.disabled = false; return; }
         const sum = await syncPaidAmount();
+        await logActivity('order', o.id, o.order_no, 'payment',
+          `รับ ${fmtBaht(round2(amt))} บาท (${payPanel.querySelector('#payMethod').value}) · คงเหลือ ${fmtBaht(round2(Math.max(0, Number(o.total) - sum)))} บาท`);
         // รับครบแล้วเลื่อนสถานะเป็นเก็บเงินแล้วให้อัตโนมัติ
         if (sum >= Number(o.total) && o.status !== 'cancelled') {
           await sb.from('orders').update({ status: 'paid' }).eq('id', o.id);
+          await logActivity('order', o.id, o.order_no, 'status', 'รับเงินครบ → เก็บเงินแล้ว (อัตโนมัติ)');
         }
         await boot();
       });
 
       payPanel.querySelectorAll('.del-pay').forEach(b => b.addEventListener('click', async () => {
         if (!confirm('ลบรายการรับเงินนี้?')) return;
+        const rec = payments.find(p => p.id === b.dataset.id);
         const { error } = await sb.from('order_payments').delete().eq('id', b.dataset.id);
         if (error) { alert('ลบไม่สำเร็จ: ' + error.message); return; }
         await syncPaidAmount();
+        await logActivity('order', o.id, o.order_no, 'payment_delete',
+          'ลบรายการรับเงิน ' + fmtBaht(round2(rec ? rec.amount : 0)) + ' บาท');
         await boot();
       }));
 
@@ -1802,6 +1885,32 @@
         ${o.note ? `<div class="receipt-note">หมายเหตุ: ${esc(o.note)}</div>` : ''}
       `;
       app.appendChild(paper);
+      app.appendChild(buildHistoryPanel(logs));
+    }
+
+    // ออกใบเสร็จจากออเดอร์ (ใช้ราคาขายจริงที่ลูกค้าจ่าย)
+    async function createReceiptFromOrder(o, items) {
+      const receipt_no = await nextReceiptNo();
+      const { data: rc, error: e1 } = await sb.from('receipts').insert({
+        receipt_no,
+        recipient: o.customer || null,
+        note: 'ออกจากออเดอร์ ' + o.order_no + (o.note ? ' · ' + o.note : ''),
+        total: Number(o.total),
+        item_count: items.length,
+        order_id: o.id,
+      }).select('id').single();
+      if (e1) throw new Error(e1.message);
+
+      const rows = items.map(i => ({
+        receipt_id: rc.id, piece_id: null, lot_name: null,
+        label: i.name + (i.qty > 1 ? ' x' + i.qty : ''),
+        width_cm: i.width_cm, length_cm: i.length_cm, price: i.line_total,
+      }));
+      const { error: e2 } = await sb.from('receipt_items').insert(rows);
+      if (e2) throw new Error(e2.message);
+
+      await logActivity('order', o.id, o.order_no, 'receipt', 'ออกใบเสร็จ ' + receipt_no);
+      return rc.id;
     }
 
     // ---- ใบปะหน้าพัสดุ ----
@@ -1962,13 +2071,15 @@
       const { error: e3 } = await sb.from('pieces').update({ paid: true }).in('id', items.map(p => p.id));
       if (e3) throw new Error('อัปเดตสถานะจ่ายไม่สำเร็จ: ' + e3.message);
 
+      await logActivity('receipt', rc.id, receipt_no, 'created',
+        `${items.length} ชิ้น · ${fmtBaht(round2(total))} บาท (จากต้นทุนผลิต)`);
       return rc.id;
     }
 
     async function loadReceipts() {
       document.getElementById('statusMsg').textContent = 'กำลังโหลด...';
       const { data, error } = await sb.from('receipts')
-        .select('id,receipt_no,recipient,note,total,item_count,created_at')
+        .select('id,receipt_no,recipient,note,total,item_count,created_at,order_id')
         .order('created_at', { ascending: false });
       if (error) throw error;
       renderReceipts(data);
@@ -2002,8 +2113,8 @@
         btn.className = 'rc-row';
         btn.innerHTML = `
           <span class="rc-main">
-            <span class="rc-no">${esc(r.receipt_no)}</span>
-            <span class="rc-sub">${new Date(r.created_at).toLocaleString('th-TH')} · ${r.item_count} ชิ้น${r.recipient ? ' · ' + esc(r.recipient) : ''}</span>
+            <span class="rc-no">${esc(r.receipt_no)} <span class="st ${r.order_id ? 'st-paid' : 'st-cancel'}">${r.order_id ? 'จากออเดอร์' : 'จากต้นทุนผลิต'}</span></span>
+            <span class="rc-sub">${new Date(r.created_at).toLocaleString('th-TH')} · ${r.item_count} รายการ${r.recipient ? ' · ' + esc(r.recipient) : ''}</span>
           </span>
           <span class="rc-amt">${fmtBaht(round2(r.total))} บาท</span>
         `;
@@ -2462,14 +2573,105 @@
       if (e1) throw e1;
       const { data: orders, error: e2 } = await sb.from('product_orders').select('category,customer,name,quantity,unit_sell_price,created_at');
       if (e2) throw e2;
-      renderGlobalCustomers(lots, pieces, orders);
+      const { data: sales, error: e3 } = await sb.from('orders')
+        .select('id,order_no,customer,channel,status,total,paid_amount,phone,address,due_date,created_at');
+      if (e3) throw e3;
+      renderGlobalCustomers(lots, pieces, orders, sales);
       document.getElementById('statusMsg').textContent = 'อัปเดตล่าสุด: ' + new Date().toLocaleString('th-TH');
     }
 
-    function renderGlobalCustomers(lots, pieces, orders) {
+    function renderGlobalCustomers(lots, pieces, orders, sales) {
+      sales = sales || [];
       const app = document.getElementById('app');
       app.innerHTML = '';
-      app.appendChild(buildPageHead('ข้อมูลลูกค้า', 'รายการออเดอร์ของลูกค้าแต่ละราย (ทุกสินค้า)'));
+      app.appendChild(buildPageHead('ข้อมูลลูกค้า', 'ยอดซื้อ ค้างชำระ และประวัติออเดอร์ของลูกค้าแต่ละราย'));
+
+      // ===== ลูกค้าจากระบบออเดอร์ (ฝั่งขาย) =====
+      const buyers = {};
+      sales.filter(s => s.status !== 'cancelled').forEach(s => {
+        const key = (s.customer || '').trim() || 'ไม่ระบุชื่อ';
+        if (!buyers[key]) buyers[key] = {
+          name: key, orders: [], total: 0, paid: 0,
+          channels: new Set(), phone: '', address: '', last: null,
+        };
+        const b = buyers[key];
+        b.orders.push(s);
+        b.total += Number(s.total);
+        b.paid += Number(s.paid_amount || 0);
+        if (s.channel) b.channels.add(s.channel);
+        if (s.phone && !b.phone) b.phone = s.phone;
+        if (s.address && !b.address) b.address = s.address;
+        const d = new Date(s.created_at);
+        if (!b.last || d > b.last) b.last = d;
+      });
+      const buyerList = Object.values(buyers).sort((a, b) => {
+        const ao = a.total - a.paid, bo = b.total - b.paid;
+        if (bo !== ao) return bo - ao;
+        return b.total - a.total;
+      });
+
+      if (buyerList.length) {
+        const h = document.createElement('h2');
+        h.className = 'section-title';
+        h.style.marginTop = '0';
+        h.innerHTML = icon('cash', 17) + 'ลูกค้าที่สั่งซื้อ (จากออเดอร์)';
+        app.appendChild(h);
+
+        const totAll = buyerList.reduce((s, b) => s + b.total, 0);
+        const outAll = buyerList.reduce((s, b) => s + Math.max(0, b.total - b.paid), 0);
+        const sum = document.createElement('div');
+        sum.className = 'summary-grid';
+        sum.innerHTML = `
+          <div class="stat"><div class="num">${buyerList.length}</div><div class="lbl">ลูกค้าทั้งหมด</div></div>
+          <div class="stat"><div class="num">${fmtBaht(round2(totAll))}</div><div class="lbl">ยอดซื้อรวม (บาท)</div></div>
+          <div class="stat"><div class="num" style="color:${outAll > 0 ? 'var(--warn-text)' : 'var(--ok-text)'}">${fmtBaht(round2(outAll))}</div><div class="lbl">ค้างเก็บรวม (บาท)</div></div>
+          <div class="stat"><div class="num">${sales.filter(s => s.status !== 'cancelled').length}</div><div class="lbl">ออเดอร์ทั้งหมด</div></div>
+        `;
+        app.appendChild(sum);
+
+        buyerList.forEach(b => {
+          const outstanding = Math.max(0, b.total - b.paid);
+          const card = document.createElement('div');
+          card.className = 'lot-card';
+          card.innerHTML = `
+            <div class="lot-head">
+              <span>${esc(b.name)}${outstanding > 0 ? ` <span class="st st-prod">ค้าง ${fmtBaht(round2(outstanding))}</span>` : ' <span class="st st-paid">ชำระครบ</span>'}</span>
+              <span class="lot-head-right">
+                <span class="lot-total">${fmtBaht(round2(b.total))} บาท</span>
+                <span class="lot-price">${b.orders.length} ออเดอร์ · ${Array.from(b.channels).map(esc).join(', ') || 'ไม่ระบุช่องทาง'}</span>
+                ${b.phone || b.address ? `<span class="lot-buffer">${b.phone ? 'โทร ' + esc(b.phone) : ''}</span>` : ''}
+              </span>
+            </div>
+            ${b.address ? `<div style="padding:var(--space-2) var(--space-4);font-size:12px;color:var(--sub);border-top:1px solid var(--border)">${icon('pin2',13)} ${esc(b.address)}</div>` : ''}
+            <div class="table-wrap"><table>
+              <thead><tr><th>เลขที่</th><th>วันที่</th><th>สถานะ</th><th>ยอด</th><th>ค้าง</th></tr></thead>
+              <tbody>${b.orders.map(o => {
+                const st = ORDER_STATUS[o.status] || ORDER_STATUS.new;
+                const bal = Math.max(0, Number(o.total) - Number(o.paid_amount || 0));
+                return `<tr class="cust-order" data-oid="${o.id}" style="cursor:pointer">
+                  <td data-label="เลขที่">${esc(o.order_no)}</td>
+                  <td data-label="วันที่">${new Date(o.created_at).toLocaleDateString('th-TH')}</td>
+                  <td data-label="สถานะ"><span class="st ${st.cls}">${esc(st.label)}</span></td>
+                  <td data-label="ยอด">${fmtBaht(round2(o.total))}</td>
+                  <td data-label="ค้าง">${bal > 0 ? fmtBaht(round2(bal)) : '—'}</td>
+                </tr>`;
+              }).join('')}</tbody>
+            </table></div>
+          `;
+          app.appendChild(card);
+        });
+
+        app.querySelectorAll('.cust-order').forEach(tr => tr.addEventListener('click', () => {
+          viewingOrderId = tr.dataset.oid;
+          currentView = 'orderView';
+          boot();
+        }));
+      }
+
+      const prodHead = document.createElement('h2');
+      prodHead.className = 'section-title';
+      prodHead.innerHTML = icon('factory', 17) + 'ชื่อที่ระบุในงานผลิต (ป้ายผ้า)';
+      app.appendChild(prodHead);
 
       const lotNameById = {};
       lots.forEach(l => lotNameById[l.id] = l.name);
