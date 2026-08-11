@@ -288,6 +288,17 @@
   .receipt-note { margin-top: var(--space-4); font-size: 12px; color: #6b7280; white-space: pre-wrap; }
   .receipt-foot { margin-top: var(--space-6); font-size: 11px; color: #9aa3b4; text-align: center; }
 
+  /* หน้าจอเข้าสู่ระบบ */
+  #authScreen { position: fixed; inset: 0; z-index: 200; background: var(--bg); display: flex; align-items: center; justify-content: center; padding: var(--space-4); }
+  .auth-box { width: 100%; max-width: 380px; background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: var(--space-6) var(--space-5); box-shadow: 0 10px 40px rgba(0,0,0,.08); }
+  .auth-brand { font-size: 22px; font-weight: 700; }
+  .auth-sub { font-size: 13px; color: var(--sub); margin-bottom: var(--space-5); }
+  .auth-box .field { margin-bottom: var(--space-3); }
+  .auth-links { display: flex; justify-content: space-between; margin-top: var(--space-4); }
+  .linklike { background: none; border: none; color: var(--accent); font-family: inherit; font-size: 13px; cursor: pointer; padding: 6px 2px; }
+  .auth-note { margin-top: var(--space-3); font-size: 12px; color: var(--sub); line-height: 1.6; }
+  .logout-btn { width: 100%; margin-top: var(--space-3); }
+
   /* สต็อกวัตถุดิบ */
   .stock-bar { height: 12px; background: var(--accent-soft); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
   .stock-bar > div { height: 100%; border-radius: 8px 0 0 8px; transition: width .3s ease; }
@@ -580,11 +591,35 @@
           <span class="switch-track"></span><span class="switch-knob"></span>
         </button>
       </div>
+      <div id="whoami" class="hint" style="margin-top:8px"></div>
+      <button class="btn secondary btn-sm logout-btn" id="logoutBtn" hidden>ออกจากระบบ</button>
     </div>
   </nav>
 
   <div class="container" id="app">
     <div class="loading">กำลังโหลดข้อมูล...</div>
+  </div>
+
+  <!-- หน้าจอเข้าสู่ระบบ -->
+  <div id="authScreen" hidden>
+    <div class="auth-box">
+      <div class="auth-brand">Haifa Design</div>
+      <div class="auth-sub">ระบบจัดการออเดอร์</div>
+      <div class="field"><label for="auEmail">อีเมล</label>
+        <input id="auEmail" type="email" autocomplete="username" placeholder="you@example.com"></div>
+      <div class="field"><label for="auPass">รหัสผ่าน</label>
+        <input id="auPass" type="password" autocomplete="current-password" placeholder="รหัสผ่าน"></div>
+      <button class="btn block" id="auLogin">เข้าสู่ระบบ</button>
+      <div class="msg" id="auMsg"></div>
+      <div class="auth-links">
+        <button class="linklike" id="auSignupToggle">สมัครใช้งานครั้งแรก</button>
+        <button class="linklike" id="auReset">ลืมรหัสผ่าน</button>
+      </div>
+      <div class="auth-note" id="auNote" hidden>
+        โหมดสมัครครั้งแรก — ใส่อีเมลกับรหัสผ่านที่จะใช้ แล้วกด "สมัครใช้งาน"<br>
+        ระบบจะส่งอีเมลยืนยันไปให้ กดลิงก์ในอีเมลก่อนถึงจะเข้าใช้งานได้
+      </div>
+    </div>
   </div>
 
   <nav class="bottom-nav" id="bottomNav" aria-label="เมนูหลัก (มือถือ)"></nav>
@@ -863,10 +898,12 @@
       { sep: true },
       { key: 'customers', label: 'ลูกค้า',     icon: 'user' },
       { key: 'receipts',  label: 'ใบเสร็จ',    icon: 'receipt' },
+      { sep: true },
+      { key: 'health',    label: 'ตรวจสุขภาพระบบ', icon: 'check' },
     ];
     // แถบล่างมือถือ: 4 หน้าหลัก + ปุ่มเพิ่มเติมสำหรับที่เหลือ
     const MOBILE_NAV = ['dashboard', 'orders', 'calendar', 'fabric'];
-    const MOBILE_MORE = ['products', 'stock', 'customers', 'receipts'];
+    const MOBILE_MORE = ['products', 'stock', 'customers', 'receipts', 'health'];
     const PAY_METHODS = ['เงินสด', 'โอนธนาคาร', 'พร้อมเพย์', 'เก็บปลายทาง', 'บัตรเครดิต', 'อื่นๆ'];
 
     // ช่องทางรับออเดอร์ (แก้เพิ่ม/ลดได้ที่นี่)
@@ -891,6 +928,7 @@
       if (key === 'products') return { label: 'สินค้า & ราคา', icon: 'price' };
       if (key === 'fabric') return { label: 'ต้นทุนผลิต', icon: 'factory' };
       if (key === 'stock') return { label: 'สต็อกของ', icon: 'box' };
+      if (key === 'health') return { label: 'ตรวจสุขภาพระบบ', icon: 'check' };
       return PRODUCT_CATEGORIES[key] || { label: 'ระบบจัดการร้าน', icon: '' };
     }
 
@@ -898,7 +936,7 @@
     let orderFilter = 'all';
 
     // ===== URL routing (ทำให้กดค้าง/คลิกขวา → เปิดในแท็บใหม่ได้ และปุ่ม back ใช้งานได้) =====
-    const VALID_VIEWS = ['dashboard', 'calendar', 'orders', 'products', 'fabric', 'stock', 'customers', 'receipts'];
+    const VALID_VIEWS = ['dashboard', 'calendar', 'orders', 'products', 'fabric', 'stock', 'customers', 'receipts', 'health'];
 
     function routeFor(view, id) {
       if (view === 'orderView') return '#/order/' + id;
@@ -1062,6 +1100,8 @@
           await loadProductCatalog();
         } else if (currentView === 'stock') {
           await loadStock();
+        } else if (currentView === 'health') {
+          await loadHealth();
         } else {
           await loadProducts(currentView);
         }
@@ -1261,6 +1301,151 @@
       app.appendChild(buildBackupPanel());
 
       drawCharts(all);
+    }
+
+    // ===== ตรวจสุขภาพระบบ (self-check) =====
+    // ใช้แทนชุดทดสอบอัตโนมัติ: กดปุ่มเดียวรู้เลยว่าส่วนไหนเพี้ยน
+    async function runHealthChecks() {
+      const out = [];
+      const add = (name, ok, detail) => out.push({ name, ok, detail: detail || '' });
+      const approx = (a, b, tol) => Math.abs(a - b) <= (tol || 0.01);
+
+      // --- 1. สูตรคำนวณ (ตรวจกับค่าที่คำนวณมือไว้แล้ว) ---
+      try {
+        const st = SETTINGS || await loadSettings();
+        const c = calcPiece(50, 200, st);
+        add('สูตรผ้า: 50x200 ซม. = 1.32 หลา', approx(c.yardPerPiece, 1.3155, 0.005), c.yardPerPiece.toFixed(4) + ' หลา');
+        add('สูตรราคา: 50x200 = 80 บาท', c.price === 80, c.price + ' บาท');
+        add('ราคาต้องเป็นเลขเต็มเสมอ', Number.isInteger(calcPiece(65, 85, st).price), calcPiece(65, 85, st).price + '');
+        add('ค่าเผื่อหด 10% / เผื่อซื้อ 5%', Number(st.shrink_rate) === 1.1 && Number(st.buffer_rate) === 1.05,
+          'shrink ' + st.shrink_rate + ' · buffer ' + st.buffer_rate);
+      } catch (e) { add('สูตรคำนวณ', false, e.message); }
+
+      // --- 2. ราคาขั้นบันไดของการ์ด ---
+      try {
+        const list = PRODUCTS.length ? PRODUCTS : await fetchProducts();
+        const card = list.find(p => p.pricing_mode === 'tier');
+        if (card) {
+          const t = tierList(card);
+          const lowQty = tierPrice(card, 50), midQty = tierPrice(card, 700), hiQty = tierPrice(card, 5000);
+          add('ราคาตามจำนวน: ต่ำกว่าขั้นแรกใช้ราคาขั้นแรก', lowQty === Number(t[0].price), lowQty + ' บาท');
+          add('ราคาตามจำนวน: ถึงขั้นกลางลดราคา', midQty < Number(t[0].price), midQty + ' บาท');
+          add('ราคาตามจำนวน: เกินขั้นสูงสุดใช้ราคาถูกสุด', hiQty === Number(t[t.length - 1].price), hiQty + ' บาท');
+        } else add('ราคาตามจำนวน (การ์ด)', false, 'ไม่พบสินค้าแบบขั้นบันได');
+      } catch (e) { add('ราคาขั้นบันได', false, e.message); }
+
+      // --- 3. ชื่อล็อตเขียนคนละแบบต้องจับคู่กันได้ ---
+      const n = normalizeLotName;
+      add('จับคู่ชื่อล็อตต่างรูปแบบ', n('30-7-69') === n('30/7/69') && n('10 / 7/ 69') === n('10/7/69') && n('02/07/69') === n('2/7/69'),
+        '30-7-69 → ' + n('30-7-69'));
+
+      // --- 4. ต่อฐานข้อมูลได้ + ตัวเลขสมเหตุผล ---
+      try {
+        const [{ count: nPieces }, { count: nOrders }] = await Promise.all([
+          sb.from('pieces').select('id', { count: 'exact', head: true }),
+          sb.from('orders').select('id', { count: 'exact', head: true }),
+        ]);
+        add('เชื่อมต่อฐานข้อมูล', true, 'ชิ้นงาน ' + nPieces + ' · ออเดอร์ ' + nOrders);
+      } catch (e) { add('เชื่อมต่อฐานข้อมูล', false, e.message); }
+
+      // --- 5. ยอดออเดอร์ต้องเท่ากับผลรวมรายการในออเดอร์ ---
+      try {
+        const [ordRes, itRes] = await Promise.all([
+          sb.from('orders').select('id,order_no,total'),
+          sb.from('order_items').select('order_id,line_total'),
+        ]);
+        const sumBy = {};
+        (itRes.data || []).forEach(i => { sumBy[i.order_id] = (sumBy[i.order_id] || 0) + Number(i.line_total); });
+        const bad = (ordRes.data || []).filter(o => !approx(Number(o.total), sumBy[o.id] || 0, 1));
+        add('ยอดออเดอร์ตรงกับรายการย่อย', bad.length === 0,
+          bad.length ? 'ไม่ตรง: ' + bad.map(b => b.order_no).join(', ') : 'ตรวจแล้ว ' + (ordRes.data || []).length + ' ใบ');
+      } catch (e) { add('ยอดออเดอร์ตรงกับรายการย่อย', false, e.message); }
+
+      // --- 6. เงินที่รับต้องไม่เกินยอดรวม ---
+      try {
+        const { data } = await sb.from('orders').select('order_no,total,paid_amount');
+        const over = (data || []).filter(o => Number(o.paid_amount || 0) > Number(o.total) + 1);
+        add('เงินที่รับไม่เกินยอดออเดอร์', over.length === 0, over.length ? over.map(o => o.order_no).join(', ') : 'ปกติ');
+      } catch (e) { add('เงินที่รับไม่เกินยอดออเดอร์', false, e.message); }
+
+      // --- 7. สต็อกเบิกเกินของที่มีไม่ได้ ---
+      try {
+        const { data } = await sb.from('stock_items').select('name,total_qty,used_qty').eq('active', true);
+        const over = (data || []).filter(i => Number(i.used_qty) > Number(i.total_qty));
+        add('สต็อกไม่ติดลบ', over.length === 0, over.length ? over.map(i => i.name).join(', ') : (data || []).length + ' รายการ');
+      } catch (e) { add('สต็อกไม่ติดลบ', false, e.message); }
+
+      // --- 8. เลขเอกสารห้ามซ้ำ ---
+      try {
+        const [o, r] = await Promise.all([
+          sb.from('orders').select('order_no'),
+          sb.from('receipts').select('receipt_no'),
+        ]);
+        const dup = (arr, k) => { const s = new Set(), d = []; arr.forEach(x => { if (s.has(x[k])) d.push(x[k]); s.add(x[k]); }); return d; };
+        const d1 = dup(o.data || [], 'order_no'), d2 = dup(r.data || [], 'receipt_no');
+        add('เลขออเดอร์/ใบเสร็จไม่ซ้ำ', d1.length === 0 && d2.length === 0, [...d1, ...d2].join(', ') || 'ไม่ซ้ำ');
+      } catch (e) { add('เลขเอกสารไม่ซ้ำ', false, e.message); }
+
+      // --- 9. ตัวกลางรูปบนไดรฟ์ ---
+      try {
+        if (!DRIVE_API_URL) add('เชื่อมต่อ Google Drive', false, 'ยังไม่ได้ตั้งค่า');
+        else {
+          const res = await fetch(DRIVE_API_URL + '?action=counts&root=fabric');
+          const j = await res.json();
+          add('เชื่อมต่อ Google Drive', !!j.ok, j.ok ? Object.keys(j.counts || {}).length + ' โฟลเดอร์' : (j.error || 'ตอบผิดรูปแบบ'));
+        }
+      } catch (e) { add('เชื่อมต่อ Google Drive', false, e.message); }
+
+      // --- 10. เตือนเรื่องการสำรองข้อมูล ---
+      const dbk = daysSinceBackup();
+      add('สำรองข้อมูลไม่เกิน 30 วัน', dbk !== null && dbk <= 30,
+        dbk === null ? 'ยังไม่เคยสำรอง' : dbk + ' วันที่แล้ว');
+
+      return out;
+    }
+
+    async function loadHealth() {
+      const app = document.getElementById('app');
+      app.innerHTML = '';
+      app.appendChild(buildPageHead('ตรวจสุขภาพระบบ', 'กดตรวจครั้งเดียว รู้ว่าสูตรคำนวณ ข้อมูล และการเชื่อมต่อยังปกติดีไหม'));
+      document.getElementById('statusMsg').textContent = 'พร้อมตรวจ';
+
+      const bar = document.createElement('div');
+      bar.className = 'field-row';
+      bar.style.marginBottom = 'var(--space-3)';
+      bar.innerHTML = `<button class="btn" id="hRun">${icon('check', 15)}เริ่มตรวจ</button>`;
+      app.appendChild(bar);
+
+      const card = document.createElement('div');
+      card.className = 'lot-card';
+      card.innerHTML = '<div class="empty-cell" style="padding:20px">ยังไม่ได้ตรวจ — กด "เริ่มตรวจ"</div>';
+      app.appendChild(card);
+
+      bar.querySelector('#hRun').addEventListener('click', async () => {
+        const b = bar.querySelector('#hRun');
+        b.disabled = true; b.textContent = 'กำลังตรวจ...';
+        card.innerHTML = '<div class="loading">กำลังตรวจ...</div>';
+        try {
+          const res = await runHealthChecks();
+          const pass = res.filter(r => r.ok).length;
+          card.innerHTML = `
+            <div class="lot-head">
+              <span>ผลการตรวจ</span>
+              <span class="lot-head-right"><span class="st ${pass === res.length ? 'st-paid' : 'st-cancel'}">
+                ผ่าน ${pass}/${res.length}</span></span>
+            </div>
+            <div class="table-wrap"><table>
+              <thead><tr><th>รายการตรวจ</th><th>ผล</th><th>รายละเอียด</th></tr></thead>
+              <tbody>${res.map(r => `<tr>
+                <td data-label="รายการตรวจ">${esc(r.name)}</td>
+                <td data-label="ผล"><span class="st ${r.ok ? 'st-paid' : 'st-cancel'}">${r.ok ? 'ผ่าน' : 'ไม่ผ่าน'}</span></td>
+                <td data-label="รายละเอียด" style="color:var(--sub)">${esc(r.detail)}</td>
+              </tr>`).join('')}</tbody>
+            </table></div>`;
+        } catch (e) {
+          card.innerHTML = '<div class="msg error" style="padding:16px">ตรวจไม่สำเร็จ: ' + esc(e.message) + '</div>';
+        } finally { b.disabled = false; b.innerHTML = icon('check', 15) + 'ตรวจอีกครั้ง'; }
+      });
     }
 
     // ===== สำรองข้อมูลลงเครื่อง =====
@@ -2312,12 +2497,9 @@
             orderId = editOrder.id;
             orderNo = editOrder.order_no;
           } else {
-            orderNo = await nextOrderNo();
-            const { data: ord, error: e1 } = await sb.from('orders')
-              .insert({ order_no: orderNo, ...headFields })
-              .select('id').single();
-            if (e1) throw new Error(e1.message);
-            orderId = ord.id;
+            const res = await insertWithDocNo('orders', nextOrderNo,
+              (no) => ({ order_no: no, ...headFields }));
+            orderNo = res.no; orderId = res.id;
           }
 
           const { error: e2 } = await sb.from('order_items')
@@ -2608,16 +2790,15 @@
 
     // ออกใบเสร็จจากออเดอร์ (ใช้ราคาขายจริงที่ลูกค้าจ่าย)
     async function createReceiptFromOrder(o, items) {
-      const receipt_no = await nextReceiptNo();
-      const { data: rc, error: e1 } = await sb.from('receipts').insert({
-        receipt_no,
+      const { no: receipt_no, id: receiptId } = await insertWithDocNo('receipts', nextReceiptNo, (no) => ({
+        receipt_no: no,
         recipient: o.customer || null,
         note: 'ออกจากออเดอร์ ' + o.order_no + (o.note ? ' · ' + o.note : ''),
         total: Number(o.total),
         item_count: items.length,
         order_id: o.id,
-      }).select('id').single();
-      if (e1) throw new Error(e1.message);
+      }));
+      const rc = { id: receiptId };
 
       const rows = items.map(i => ({
         receipt_id: rc.id, piece_id: null, lot_name: null,
@@ -2771,12 +2952,11 @@
     }
 
     async function createReceipt(items, recipient, note, total) {
-      const receipt_no = await nextReceiptNo();
-      const { data: rc, error: e1 } = await sb.from('receipts').insert({
-        receipt_no, recipient: recipient || null, note: note || null,
+      const { no: receipt_no, id: receiptId } = await insertWithDocNo('receipts', nextReceiptNo, (no) => ({
+        receipt_no: no, recipient: recipient || null, note: note || null,
         total, item_count: items.length,
-      }).select('id').single();
-      if (e1) throw new Error('บันทึกใบเสร็จไม่สำเร็จ: ' + e1.message);
+      }));
+      const rc = { id: receiptId };
 
       const rows = items.map(p => ({
         receipt_id: rc.id, piece_id: p.id, lot_name: p.lotName,
@@ -4270,6 +4450,110 @@
       return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
     }
 
+    /**
+     * แทรกแถวที่มี "เลขเอกสาร" ซึ่งห้ามซ้ำ (ออเดอร์/ใบเสร็จ)
+     * ถ้าชนกับเลขที่มีอยู่แล้ว (เปิด 2 เครื่องพร้อมกัน หรือเพิ่งลบเอกสารเก่า)
+     * จะขอเลขใหม่แล้วลองใหม่อัตโนมัติ ไม่เด้ง error ใส่หน้าผู้ใช้
+     */
+    async function insertWithDocNo(table, nextNoFn, buildRow) {
+      for (let attempt = 0; attempt < 5; attempt++) {
+        const no = await nextNoFn();
+        const { data, error } = await sb.from(table).insert(buildRow(no)).select('id').single();
+        if (!error) return { no, id: data.id };
+        const dup = error.code === '23505' || /duplicate key|already exists/i.test(error.message || '');
+        if (!dup) throw new Error(error.message);
+        await new Promise(r => setTimeout(r, 150 + Math.random() * 250));
+      }
+      throw new Error('ออกเลขเอกสารไม่สำเร็จ (เลขชนกันหลายครั้ง) — ลองกดใหม่อีกครั้ง');
+    }
+
+    // ===== เข้าสู่ระบบ =====
+    let signupMode = false;
+
+    function showAuthScreen(show) {
+      document.getElementById('authScreen').hidden = !show;
+      document.querySelector('.sidebar').style.display = show ? 'none' : '';
+      document.querySelector('header').style.display = show ? 'none' : '';
+      document.getElementById('app').style.display = show ? 'none' : '';
+      const bottom = document.querySelector('.bottom-nav');
+      if (bottom) bottom.style.display = show ? 'none' : '';
+    }
+
+    function bindAuthUI() {
+      const email = document.getElementById('auEmail');
+      const pass = document.getElementById('auPass');
+      const msg = document.getElementById('auMsg');
+      const btn = document.getElementById('auLogin');
+      const toggle = document.getElementById('auSignupToggle');
+      const note = document.getElementById('auNote');
+
+      const say = (t, cls) => { msg.textContent = t; msg.className = 'msg' + (cls ? ' ' + cls : ''); };
+
+      toggle.addEventListener('click', () => {
+        signupMode = !signupMode;
+        btn.textContent = signupMode ? 'สมัครใช้งาน' : 'เข้าสู่ระบบ';
+        toggle.textContent = signupMode ? 'กลับไปหน้าเข้าสู่ระบบ' : 'สมัครใช้งานครั้งแรก';
+        note.hidden = !signupMode;
+        pass.autocomplete = signupMode ? 'new-password' : 'current-password';
+        say('');
+      });
+
+      async function submit() {
+        const e = email.value.trim(), p = pass.value;
+        if (!e || !p) { say('กรอกอีเมลและรหัสผ่านให้ครบ', 'error'); return; }
+        if (signupMode && p.length < 8) { say('รหัสผ่านต้องยาวอย่างน้อย 8 ตัวอักษร', 'error'); return; }
+        btn.disabled = true; say(signupMode ? 'กำลังสมัคร...' : 'กำลังเข้าสู่ระบบ...');
+        try {
+          if (signupMode) {
+            const { error } = await sb.auth.signUp({ email: e, password: p });
+            if (error) throw error;
+            say('สมัครแล้ว — เช็คอีเมล ' + e + ' แล้วกดลิงก์ยืนยัน จากนั้นกลับมาเข้าสู่ระบบ', 'ok');
+          } else {
+            const { error } = await sb.auth.signInWithPassword({ email: e, password: p });
+            if (error) throw error;
+            pass.value = '';
+            await enterApp();
+          }
+        } catch (err) {
+          const m = String(err.message || err);
+          say(/Invalid login/i.test(m) ? 'อีเมลหรือรหัสผ่านไม่ถูกต้อง'
+            : /not confirmed/i.test(m) ? 'ยังไม่ได้ยืนยันอีเมล — กดลิงก์ในอีเมลก่อน'
+            : /already registered/i.test(m) ? 'อีเมลนี้สมัครไว้แล้ว กลับไปหน้าเข้าสู่ระบบได้เลย'
+            : m, 'error');
+        } finally { btn.disabled = false; }
+      }
+
+      btn.addEventListener('click', submit);
+      pass.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') submit(); });
+      email.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') pass.focus(); });
+
+      document.getElementById('auReset').addEventListener('click', async () => {
+        const e = email.value.trim();
+        if (!e) { say('ใส่อีเมลก่อน แล้วกดลืมรหัสผ่านอีกครั้ง', 'error'); return; }
+        const { error } = await sb.auth.resetPasswordForEmail(e, { redirectTo: location.href.split('#')[0] });
+        say(error ? error.message : 'ส่งลิงก์ตั้งรหัสใหม่ไปที่ ' + e + ' แล้ว', error ? 'error' : 'ok');
+      });
+
+      document.getElementById('logoutBtn').addEventListener('click', async () => {
+        if (!confirm('ออกจากระบบ?')) return;
+        await sb.auth.signOut();
+        location.reload();
+      });
+    }
+
+    async function enterApp() {
+      const { data } = await sb.auth.getUser();
+      const who = document.getElementById('whoami');
+      const out = document.getElementById('logoutBtn');
+      if (data && data.user) {
+        who.textContent = data.user.email;
+        out.hidden = false;
+      }
+      showAuthScreen(false);
+      applyHash();
+      await boot();
+    }
+
     // ---- จุดเริ่มระบบ: รอไลบรารีให้พร้อมก่อน ----
     (async function startApp() {
       initTheme();
@@ -4282,8 +4566,10 @@
         return;
       }
       sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-      applyHash();
-      boot();
+      bindAuthUI();
+      const { data: { session } } = await sb.auth.getSession();
+      if (session) { await enterApp(); }
+      else { showAuthScreen(true); document.getElementById('auEmail').focus(); }
     })();
   </script>
 </body>
