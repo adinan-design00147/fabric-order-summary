@@ -9,6 +9,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@400;500;600;700&display=swap" rel="stylesheet">
 <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <style>
   :root {
     --bg: #f7f5f2; --card: #ffffff; --text: #1f2430; --sub: #586273;
@@ -1062,7 +1063,9 @@
       bar.style.cssText = 'display:flex;gap:var(--space-2);margin-bottom:var(--space-4);flex-wrap:wrap';
       bar.innerHTML = `
         <button class="btn secondary btn-sm" id="rcBack">← ประวัติใบเสร็จ</button>
-        <button class="btn btn-sm" id="rcPrint">🖨️ พิมพ์ / บันทึกเป็น PDF</button>
+        <button class="btn btn-sm" id="rcImage">📷 บันทึก/ส่งเป็นรูป</button>
+        <button class="btn secondary btn-sm" id="rcPrint">🖨️ พิมพ์ / PDF</button>
+        <span class="gallery-msg" id="rcMsg"></span>
       `;
       app.appendChild(bar);
       bar.querySelector('#rcBack').addEventListener('click', () => { currentView = 'receipts'; boot(); });
@@ -1100,6 +1103,51 @@
         <div class="receipt-foot">ออกโดยระบบจัดการออเดอร์ Haifa Design</div>
       `;
       app.appendChild(paper);
+
+      // บันทึกใบเสร็จเป็นรูป PNG — บนมือถือจะเด้งเมนูแชร์ให้ส่งเข้า LINE/แชตได้เลย
+      const imgBtn = bar.querySelector('#rcImage');
+      const rcMsg = bar.querySelector('#rcMsg');
+      imgBtn.addEventListener('click', async () => {
+        if (typeof html2canvas === 'undefined') {
+          rcMsg.textContent = 'โหลดตัวสร้างรูปไม่สำเร็จ ลองรีเฟรชหน้า';
+          rcMsg.className = 'gallery-msg error';
+          return;
+        }
+        imgBtn.disabled = true;
+        const label = imgBtn.textContent;
+        imgBtn.textContent = 'กำลังสร้างรูป...';
+        rcMsg.textContent = ''; rcMsg.className = 'gallery-msg';
+        try {
+          const canvas = await html2canvas(paper, { scale: 2, backgroundColor: '#ffffff', logging: false });
+          const blob = await new Promise(res => canvas.toBlob(res, 'image/png'));
+          const filename = rc.receipt_no + '.png';
+          const file = new File([blob], filename, { type: 'image/png' });
+
+          if (navigator.canShare && navigator.canShare({ files: [file] })) {
+            try {
+              await navigator.share({ files: [file], title: 'ใบเสร็จ ' + rc.receipt_no });
+              rcMsg.textContent = 'ส่งรูปแล้ว';
+              return;
+            } catch (shareErr) {
+              if (shareErr && shareErr.name === 'AbortError') { rcMsg.textContent = ''; return; }
+              // แชร์ไม่ได้ก็ตกไปโหลดไฟล์แทน
+            }
+          }
+
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url; a.download = filename;
+          document.body.appendChild(a); a.click(); a.remove();
+          setTimeout(() => URL.revokeObjectURL(url), 1000);
+          rcMsg.textContent = 'บันทึกรูปแล้ว: ' + filename;
+        } catch (e) {
+          rcMsg.textContent = 'สร้างรูปไม่สำเร็จ: ' + e.message;
+          rcMsg.className = 'gallery-msg error';
+        } finally {
+          imgBtn.disabled = false;
+          imgBtn.textContent = label;
+        }
+      });
     }
 
     // ===== ปฏิทิน =====
