@@ -2318,7 +2318,7 @@
     async function loadReceiptDetail(id) {
       document.getElementById('statusMsg').textContent = 'กำลังโหลด...';
       const [rcRes, itRes] = await Promise.all([
-        sb.from('receipts').select('id,receipt_no,recipient,note,total,item_count,created_at').eq('id', id).single(),
+        sb.from('receipts').select('id,receipt_no,recipient,note,total,item_count,created_at,order_id').eq('id', id).single(),
         sb.from('receipt_items').select('lot_name,label,width_cm,length_cm,price').eq('receipt_id', id),
       ]);
       if (rcRes.error) throw rcRes.error;
@@ -2373,7 +2373,7 @@
         </table>
         <div class="receipt-total"><span>รวมทั้งสิ้น</span><span>${fmtBaht(round2(rc.total))} บาท</span></div>
         ${rc.note ? `<div class="receipt-note">หมายเหตุ: ${esc(rc.note)}</div>` : ''}
-        ${bankBlockHTML()}
+        ${rc.order_id ? bankBlockHTML() : ''}
         <div class="receipt-foot">ออกโดยระบบจัดการออเดอร์ Haifa Design</div>
       `;
       app.appendChild(paper);
