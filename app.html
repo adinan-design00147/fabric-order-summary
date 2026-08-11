@@ -266,6 +266,18 @@
   .receipt-note { margin-top: var(--space-4); font-size: 12px; color: #6b7280; white-space: pre-wrap; }
   .receipt-foot { margin-top: var(--space-6); font-size: 11px; color: #9aa3b4; text-align: center; }
 
+  /* สต็อกวัตถุดิบ */
+  .stock-bar { height: 12px; background: var(--accent-soft); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  .stock-bar > div { height: 100%; border-radius: 8px 0 0 8px; transition: width .3s ease; }
+  .threshold-row { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--sub); margin-top: 10px; }
+  .threshold-row input { width: 70px; }
+  .stock-log { margin-top: 12px; font-size: 12.5px; }
+  .stock-log summary { cursor: pointer; color: var(--sub); font-weight: 600; padding: 4px 0; }
+  .log-line { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 6px 0; border-top: 1px solid var(--border); }
+  .log-ord { color: var(--accent); font-weight: 600; }
+  .log-note { color: var(--sub); }
+  .log-date { margin-left: auto; color: var(--sub); font-size: 11.5px; }
+
   /* หัวข้อหมวดในตารางสินค้า */
   .cat-row td { background: var(--accent-soft); font-weight: 700; font-size: 13px; letter-spacing: .2px; padding: 10px 12px !important; }
   .cat-count { display: inline-block; margin-left: 6px; font-size: 11px; font-weight: 600; color: var(--sub); }
@@ -817,13 +829,14 @@
       { key: 'products',  label: 'สินค้า & ราคา', icon: 'price' },
       { sep: true },
       { key: 'fabric',    label: 'ต้นทุนผลิต',  icon: 'factory' },
+      { key: 'stock',     label: 'สต็อกของ',   icon: 'box' },
       { sep: true },
       { key: 'customers', label: 'ลูกค้า',     icon: 'user' },
       { key: 'receipts',  label: 'ใบเสร็จ',    icon: 'receipt' },
     ];
     // แถบล่างมือถือ: 4 หน้าหลัก + ปุ่มเพิ่มเติมสำหรับที่เหลือ
     const MOBILE_NAV = ['dashboard', 'orders', 'calendar', 'fabric'];
-    const MOBILE_MORE = ['products', 'customers', 'receipts'];
+    const MOBILE_MORE = ['products', 'stock', 'customers', 'receipts'];
     const PAY_METHODS = ['เงินสด', 'โอนธนาคาร', 'พร้อมเพย์', 'เก็บปลายทาง', 'บัตรเครดิต', 'อื่นๆ'];
 
     // ช่องทางรับออเดอร์ (แก้เพิ่ม/ลดได้ที่นี่)
@@ -847,6 +860,7 @@
       if (key === 'orderView') return { label: 'ออเดอร์', icon: 'clipboard' };
       if (key === 'products') return { label: 'สินค้า & ราคา', icon: 'price' };
       if (key === 'fabric') return { label: 'ต้นทุนผลิต (ป้ายผ้า)', icon: 'factory' };
+      if (key === 'stock') return { label: 'สต็อกของ', icon: 'box' };
       return PRODUCT_CATEGORIES[key] || { label: 'ระบบจัดการร้าน', icon: '' };
     }
 
@@ -854,7 +868,7 @@
     let orderFilter = 'all';
 
     // ===== URL routing (ทำให้กดค้าง/คลิกขวา → เปิดในแท็บใหม่ได้ และปุ่ม back ใช้งานได้) =====
-    const VALID_VIEWS = ['dashboard', 'calendar', 'orders', 'products', 'fabric', 'customers', 'receipts'];
+    const VALID_VIEWS = ['dashboard', 'calendar', 'orders', 'products', 'fabric', 'stock', 'customers', 'receipts'];
 
     function routeFor(view, id) {
       if (view === 'orderView') return '#/order/' + id;
@@ -1016,6 +1030,8 @@
           await loadOrderDetail(viewingOrderId);
         } else if (currentView === 'products') {
           await loadProductCatalog();
+        } else if (currentView === 'stock') {
+          await loadStock();
         } else {
           await loadProducts(currentView);
         }
@@ -1497,6 +1513,281 @@
       }));
     }
 
+    // ===== สต็อกวัตถุดิบ =====
+    const STOCK_CATS = ['กระดาษการ์ด', 'กระดาษ A4', 'หมึกเครื่องพิมพ์', 'ผ้าดิบ', 'ดาย', 'อื่นๆ'];
+    const STOCK_UNITS = ['แผ่น', 'รีม', 'มล.', 'ขวด', 'ตลับ', 'หลา', 'เมตร', 'ชิ้น', 'อัน'];
+    let stockCat = 'ทั้งหมด';
+    let STOCK = [];
+
+    function stockRemain(it) { return Number(it.total_qty) - Number(it.used_qty); }
+    function stockPctLeft(it) {
+      const t = Number(it.total_qty);
+      return t > 0 ? (stockRemain(it) / t) * 100 : 0;
+    }
+    /** สถานะ: เหลือต่ำกว่าจุดเตือน = ต้องสั่งเพิ่ม · ต่ำกว่า 1.8 เท่าของจุดเตือน = ใกล้จุดสั่ง */
+    function stockStatus(it) {
+      const left = stockPctLeft(it);
+      const th = Number(it.threshold_pct) || 0;
+      if (left <= th) return { key: 'danger', label: 'ต้องสั่งเพิ่ม', cls: 'st-cancel', color: 'var(--danger, #b42318)' };
+      if (left <= th * 1.8) return { key: 'warn', label: 'ใกล้จุดสั่ง', cls: 'st-prod', color: '#b8862b' };
+      return { key: 'ok', label: 'ปกติ', cls: 'st-paid', color: '#067647' };
+    }
+    function fmtQty(n) {
+      const v = Number(n) || 0;
+      return Number.isInteger(v) ? v.toLocaleString('th-TH') : v.toLocaleString('th-TH', { maximumFractionDigits: 2 });
+    }
+
+    async function fetchStock() {
+      const { data, error } = await sb.from('stock_items')
+        .select('id,name,category,unit,total_qty,used_qty,threshold_pct,note,created_at')
+        .eq('active', true).order('category').order('created_at');
+      if (error) throw error;
+      STOCK = data;
+      return data;
+    }
+
+    /** บันทึกการเคลื่อนไหวสต็อก แล้วอัปเดตยอดในตารางหลัก */
+    async function stockMove(item, kind, qty, note, order) {
+      const amount = Number(qty);
+      if (!(amount > 0)) throw new Error('ใส่จำนวนก่อน');
+      const patch = kind === 'in'
+        ? { total_qty: Number(item.total_qty) + amount }
+        : { used_qty: Math.min(Number(item.total_qty), Number(item.used_qty) + amount) };
+      const { error } = await sb.from('stock_items').update(patch).eq('id', item.id);
+      if (error) throw new Error(error.message);
+      await sb.from('stock_moves').insert({
+        item_id: item.id, kind, qty: amount, note: note || null,
+        order_id: order ? order.id : null, order_no: order ? order.order_no : null,
+      });
+    }
+
+    async function loadStock() {
+      document.getElementById('statusMsg').textContent = 'กำลังโหลด...';
+      const [items, movesRes] = await Promise.all([
+        fetchStock(),
+        sb.from('stock_moves').select('id,item_id,kind,qty,note,order_no,created_at')
+          .order('created_at', { ascending: false }).limit(60),
+      ]);
+      renderStock(items, movesRes.data || []);
+      document.getElementById('statusMsg').textContent = 'อัปเดตล่าสุด: ' + new Date().toLocaleString('th-TH');
+    }
+
+    function renderStock(list, moves) {
+      const app = document.getElementById('app');
+      app.innerHTML = '';
+      app.appendChild(buildPageHead('สต็อกของ', 'วัตถุดิบคงเหลือ เบิกใช้ รับเข้า และจุดเตือนสั่งซื้อ'));
+
+      const low = list.filter(i => stockStatus(i).key === 'danger');
+      const warn = list.filter(i => stockStatus(i).key === 'warn');
+      const stats = document.createElement('div');
+      stats.className = 'summary-grid no-print';
+      stats.style.gridTemplateColumns = 'repeat(3, 1fr)';
+      stats.innerHTML = `
+        <div class="stat"><div class="num">${list.length}</div><div class="lbl">รายการทั้งหมด</div></div>
+        <div class="stat"><div class="num" style="color:#b8862b">${warn.length}</div><div class="lbl">ใกล้จุดสั่ง</div></div>
+        <div class="stat"><div class="num" style="color:#b42318">${low.length}</div><div class="lbl">ต้องสั่งเพิ่ม</div></div>
+      `;
+      app.appendChild(stats);
+
+      // ---- ฟอร์มเพิ่มวัตถุดิบ ----
+      const panel = document.createElement('div');
+      panel.className = 'panel no-print';
+      panel.innerHTML = `
+        <h2>${icon('plus', 17)}เพิ่มวัตถุดิบ</h2>
+        <div class="form-grid">
+          <div class="field"><label for="stName">ชื่อวัตถุดิบ</label><input id="stName" placeholder="เช่น หมึกสีฟ้า C, กระดาษการ์ด 250 แกรม"></div>
+          <div class="field"><label for="stCat">หมวดหมู่</label><select id="stCat">${STOCK_CATS.map(c => `<option>${esc(c)}</option>`).join('')}</select></div>
+          <div class="field"><label for="stUnit">หน่วยนับ</label><select id="stUnit">${STOCK_UNITS.map(u => `<option>${esc(u)}</option>`).join('')}</select></div>
+          <div class="field"><label for="stQty">รับเข้า (จำนวน)</label><input id="stQty" type="number" min="0" step="any" placeholder="100" inputmode="decimal"></div>
+          <div class="field"><label for="stTh">จุดเตือนสั่งซื้อ (%)</label><input id="stTh" type="number" min="0" max="100" step="1" placeholder="20" inputmode="numeric"></div>
+        </div>
+        <button id="stAdd" class="btn secondary block">${icon('plus', 15)}เพิ่มวัตถุดิบ</button>
+        <div class="msg" id="stMsg"></div>
+      `;
+      app.appendChild(panel);
+
+      panel.querySelector('#stAdd').addEventListener('click', async () => {
+        const msg = panel.querySelector('#stMsg');
+        const name = panel.querySelector('#stName').value.trim();
+        const qty = parseFloat(panel.querySelector('#stQty').value);
+        msg.textContent = ''; msg.className = 'msg';
+        if (!name) { msg.textContent = 'กรอกชื่อวัตถุดิบก่อน'; msg.className = 'msg error'; return; }
+        if (!(qty > 0)) { msg.textContent = 'กรอกจำนวนที่รับเข้าก่อน'; msg.className = 'msg error'; return; }
+        const btn = panel.querySelector('#stAdd');
+        btn.disabled = true;
+        const { data, error } = await sb.from('stock_items').insert({
+          name,
+          category: panel.querySelector('#stCat').value,
+          unit: panel.querySelector('#stUnit').value,
+          total_qty: qty,
+          threshold_pct: parseFloat(panel.querySelector('#stTh').value) || 20,
+        }).select('id').single();
+        if (error) { msg.textContent = 'เพิ่มไม่สำเร็จ: ' + error.message; msg.className = 'msg error'; btn.disabled = false; return; }
+        await sb.from('stock_moves').insert({ item_id: data.id, kind: 'in', qty, note: 'รับเข้าครั้งแรก' });
+        await loadStock();
+      });
+
+      // ---- ตัวกรองหมวด ----
+      const chips = document.createElement('div');
+      chips.className = 'chips no-print';
+      const cats = ['ทั้งหมด', ...STOCK_CATS];
+      chips.innerHTML = cats.map(c => {
+        const n = c === 'ทั้งหมด' ? list.length : list.filter(i => i.category === c).length;
+        return `<button class="chip ${stockCat === c ? 'active' : ''}" data-c="${esc(c)}">${esc(c)} (${n})</button>`;
+      }).join('');
+      app.appendChild(chips);
+      chips.querySelectorAll('.chip').forEach(b => b.addEventListener('click', () => {
+        stockCat = b.dataset.c; renderStock(list, moves);
+      }));
+
+      // ---- การ์ดวัตถุดิบ ----
+      const shown = stockCat === 'ทั้งหมด' ? list : list.filter(i => i.category === stockCat);
+      if (!shown.length) {
+        const empty = document.createElement('div');
+        empty.className = 'lot-card no-print';
+        empty.innerHTML = `<div class="empty-cell" style="padding:24px">${list.length ? 'ไม่มีรายการในหมวดนี้' : 'ยังไม่มีวัตถุดิบในสต็อก — เพิ่มรายการแรกด้านบนได้เลย'}</div>`;
+        app.appendChild(empty);
+      }
+      shown.forEach(it => {
+        const st = stockStatus(it);
+        const left = stockPctLeft(it);
+        const usedPct = 100 - left;
+        const itemMoves = moves.filter(m => m.item_id === it.id).slice(0, 8);
+        const card = document.createElement('div');
+        card.className = 'lot-card no-print';
+        card.innerHTML = `
+          <div class="lot-head">
+            <div>
+              <span style="font-size:15px">${esc(it.name)}</span>
+              <span class="st ${st.cls}" style="margin-left:8px">${esc(st.label)}</span>
+              <div style="font-size:11.5px;color:var(--sub);font-weight:400;margin-top:2px">
+                ${esc(it.category)} · รับเข้ารวม ${fmtQty(it.total_qty)} ${esc(it.unit)} · ใช้ไป ${fmtQty(it.used_qty)} ${esc(it.unit)}
+              </div>
+            </div>
+            <div style="text-align:right">
+              <div style="font-size:18px;font-weight:700;color:${st.color}">${fmtQty(stockRemain(it))} <span style="font-size:12px;font-weight:500">${esc(it.unit)}</span></div>
+              <div style="font-size:11.5px;color:var(--sub);font-weight:400">คงเหลือ ${left.toFixed(1)}%</div>
+            </div>
+          </div>
+          <div style="padding:var(--space-4)">
+            <div class="stock-bar"><div style="width:${Math.max(0, Math.min(100, left))}%;background:${st.color}"></div></div>
+            <div class="field-row" style="margin-top:12px">
+              <input class="s-qty" type="number" min="0" step="any" placeholder="จำนวน (${esc(it.unit)})" aria-label="จำนวน" inputmode="decimal">
+              <button class="btn secondary btn-sm s-out">${icon('back', 15)}เบิกใช้</button>
+              <button class="btn btn-sm s-in">${icon('plus', 15)}รับเข้าเพิ่ม</button>
+              <button class="icon-btn icon-btn-delete s-del" aria-label="ลบวัตถุดิบ" title="ลบ">${icon('trash', 18)}</button>
+            </div>
+            <div class="msg s-msg"></div>
+            <div class="threshold-row">เตือนเมื่อเหลือต่ำกว่า
+              <input class="s-th" type="number" min="0" max="100" step="1" value="${Number(it.threshold_pct)}" aria-label="จุดเตือน %"> %
+            </div>
+            ${itemMoves.length ? `<details class="stock-log"><summary>ประวัติล่าสุด (${itemMoves.length})</summary>
+              ${itemMoves.map(m => `<div class="log-line">
+                <span class="st ${m.kind === 'in' ? 'st-paid' : 'st-cancel'}">${m.kind === 'in' ? 'รับเข้า' : 'เบิกใช้'}</span>
+                <span>${fmtQty(m.qty)} ${esc(it.unit)}</span>
+                ${m.order_no ? `<span class="log-ord">${esc(m.order_no)}</span>` : ''}
+                ${m.note ? `<span class="log-note">${esc(m.note)}</span>` : ''}
+                <span class="log-date">${new Date(m.created_at).toLocaleString('th-TH', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</span>
+              </div>`).join('')}
+            </details>` : ''}
+          </div>
+        `;
+        app.appendChild(card);
+
+        const qtyInput = card.querySelector('.s-qty');
+        const msg = card.querySelector('.s-msg');
+        const run = async (kind) => {
+          msg.textContent = ''; msg.className = 'msg';
+          try {
+            await stockMove(it, kind, qtyInput.value);
+            await loadStock();
+          } catch (e) { msg.textContent = e.message; msg.className = 'msg error'; }
+        };
+        card.querySelector('.s-out').addEventListener('click', () => run('out'));
+        card.querySelector('.s-in').addEventListener('click', () => run('in'));
+        card.querySelector('.s-th').addEventListener('change', async (e) => {
+          await sb.from('stock_items').update({ threshold_pct: parseFloat(e.target.value) || 0 }).eq('id', it.id);
+          await loadStock();
+        });
+        card.querySelector('.s-del').addEventListener('click', async () => {
+          if (!confirm('ลบ "' + it.name + '" ออกจากสต็อก? (ประวัติเบิก/รับเข้าจะหายไปด้วย)')) return;
+          const { error } = await sb.from('stock_items').delete().eq('id', it.id);
+          if (error) { alert('ลบไม่สำเร็จ: ' + error.message); return; }
+          await loadStock();
+        });
+      });
+
+      // ---- ตารางของคงเหลือ (พิมพ์/บันทึกเป็นรูปได้) ----
+      const tblBar = document.createElement('div');
+      tblBar.className = 'no-print';
+      tblBar.style.cssText = 'display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:18px 0 8px';
+      tblBar.innerHTML = `
+        <button class="btn secondary btn-sm" id="stPrint">${icon('printer', 15)}พิมพ์ตาราง</button>
+        <button class="btn secondary btn-sm" id="stImg">${icon('image', 15)}บันทึกเป็นรูป</button>
+        <span class="gallery-msg" id="stImgMsg"></span>
+      `;
+      app.appendChild(tblBar);
+
+      const paper = document.createElement('div');
+      paper.className = 'receipt-paper';
+      const byCat = new Map();
+      list.forEach(i => {
+        if (!byCat.has(i.category)) byCat.set(i.category, []);
+        byCat.get(i.category).push(i);
+      });
+      const today = new Date();
+      paper.innerHTML = `
+        <div class="receipt-head">
+          <div>
+            <div class="receipt-shop">Haifa Design</div>
+            <div class="receipt-shop-sub">ตารางวัตถุดิบคงเหลือ</div>
+          </div>
+          <div class="receipt-meta">
+            <div>${today.toLocaleDateString('th-TH', { day: 'numeric', month: 'long' })} ${today.getFullYear() + 543}</div>
+            <div>${today.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })} น.</div>
+          </div>
+        </div>
+        <table class="receipt-table">
+          <thead><tr><th>วัตถุดิบ</th><th>รับเข้า</th><th>ใช้ไป</th><th>คงเหลือ</th><th>%</th><th>สถานะ</th></tr></thead>
+          <tbody>${list.length ? [...byCat.entries()].map(([cat, items]) => (
+            `<tr><td colspan="6" style="text-align:left;font-weight:700;background:#f4f2ee">${esc(cat)}</td></tr>` +
+            items.map(i => {
+              const s = stockStatus(i);
+              return `<tr>
+                <td>${esc(i.name)} <span style="color:#6b7280">(${esc(i.unit)})</span></td>
+                <td>${fmtQty(i.total_qty)}</td>
+                <td>${fmtQty(i.used_qty)}</td>
+                <td style="font-weight:700">${fmtQty(stockRemain(i))}</td>
+                <td>${stockPctLeft(i).toFixed(0)}%</td>
+                <td style="color:${s.color};font-weight:600">${esc(s.label)}</td>
+              </tr>`;
+            }).join('')
+          )).join('') : '<tr><td colspan="6" style="text-align:center;color:#6b7280">ยังไม่มีวัตถุดิบในสต็อก</td></tr>'}</tbody>
+        </table>
+        ${low.length ? `<div class="receipt-note"><b>ต้องสั่งเพิ่ม:</b> ${low.map(i => esc(i.name) + ' (เหลือ ' + fmtQty(stockRemain(i)) + ' ' + esc(i.unit) + ')').join(' · ')}</div>` : ''}
+        <div class="receipt-foot">ออกโดยระบบจัดการออเดอร์ Haifa Design</div>
+      `;
+      app.appendChild(paper);
+
+      tblBar.querySelector('#stPrint').addEventListener('click', () => window.print());
+      tblBar.querySelector('#stImg').addEventListener('click', async () => {
+        const m = tblBar.querySelector('#stImgMsg');
+        if (typeof html2canvas === 'undefined') { m.textContent = 'โหลดตัวสร้างรูปไม่สำเร็จ ลองรีเฟรชหน้า'; m.className = 'gallery-msg error'; return; }
+        m.textContent = 'กำลังสร้างรูป...'; m.className = 'gallery-msg';
+        try {
+          const canvas = await html2canvas(paper, { scale: 2, backgroundColor: '#ffffff', logging: false });
+          const blob = await new Promise(res => canvas.toBlob(res, 'image/png'));
+          const filename = 'สต็อกคงเหลือ-' + today.toISOString().slice(0, 10) + '.png';
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url; a.download = filename;
+          document.body.appendChild(a); a.click(); a.remove();
+          setTimeout(() => URL.revokeObjectURL(url), 1000);
+          m.textContent = 'บันทึกรูปแล้ว: ' + filename;
+        } catch (e) { m.textContent = 'สร้างรูปไม่สำเร็จ: ' + e.message; m.className = 'gallery-msg error'; }
+      });
+    }
+
     // ===== ประวัติการแก้ไข =====
     const ACTION_META = {
       created:        { label: 'สร้าง',        cls: 'st-new' },
@@ -1959,6 +2250,49 @@
           (ORDER_STATUS[o.status] || {}).label + ' → ' + (ORDER_STATUS[c.dataset.s] || {}).label);
         await boot();
       }));
+
+      // ---- ตัดสต็อกวัตถุดิบให้ออเดอร์นี้ ----
+      const stPanel = document.createElement('div');
+      stPanel.className = 'panel no-print';
+      stPanel.innerHTML = `<h2>${icon('box', 17)}ตัดสต็อกวัตถุดิบ</h2><div class="hint">กำลังโหลดสต็อก...</div>`;
+      app.appendChild(stPanel);
+      (async () => {
+        const [itemsRes, usedRes] = await Promise.all([
+          sb.from('stock_items').select('id,name,unit,total_qty,used_qty,threshold_pct,category').eq('active', true).order('category').order('name'),
+          sb.from('stock_moves').select('id,qty,kind,note,created_at,item_id').eq('order_id', o.id).order('created_at', { ascending: false }),
+        ]);
+        const stItems = itemsRes.data || [];
+        const used = (usedRes.data || []).filter(m => m.kind === 'out');
+        const nameOf = id => (stItems.find(s => s.id === id) || {}).name || 'วัตถุดิบที่ถูกลบแล้ว';
+        const unitOf = id => (stItems.find(s => s.id === id) || {}).unit || '';
+        stPanel.innerHTML = `
+          <h2>${icon('box', 17)}ตัดสต็อกวัตถุดิบ</h2>
+          ${used.length ? `<div class="stock-log" open>${used.map(m => `<div class="log-line">
+            <span class="st st-cancel">เบิกใช้</span>
+            <span>${esc(nameOf(m.item_id))} · ${fmtQty(m.qty)} ${esc(unitOf(m.item_id))}</span>
+            <span class="log-date">${new Date(m.created_at).toLocaleString('th-TH', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</span>
+          </div>`).join('')}</div>` : '<div class="hint">ยังไม่ได้ตัดสต็อกให้ออเดอร์นี้</div>'}
+          ${stItems.length ? `<div class="field-row" style="margin-top:12px">
+            <select id="oStItem" aria-label="เลือกวัตถุดิบ" style="flex:1;min-width:180px">
+              ${stItems.map(s => `<option value="${s.id}">${esc(s.name)} (เหลือ ${fmtQty(Number(s.total_qty) - Number(s.used_qty))} ${esc(s.unit)})</option>`).join('')}
+            </select>
+            <input id="oStQty" type="number" min="0" step="any" placeholder="จำนวน" aria-label="จำนวน" inputmode="decimal" style="width:110px">
+            <button class="btn btn-sm" id="oStGo">${icon('check', 15)}ตัดสต็อก</button>
+          </div><div class="msg" id="oStMsg"></div>`
+          : '<div class="hint" style="margin-top:10px">ยังไม่มีวัตถุดิบในสต็อก — เพิ่มได้ที่เมนู "สต็อกของ"</div>'}
+        `;
+        const go = stPanel.querySelector('#oStGo');
+        if (!go) return;
+        go.addEventListener('click', async () => {
+          const msg = stPanel.querySelector('#oStMsg');
+          const item = stItems.find(s => s.id === stPanel.querySelector('#oStItem').value);
+          msg.textContent = ''; msg.className = 'msg';
+          try {
+            await stockMove(item, 'out', stPanel.querySelector('#oStQty').value, 'ตัดให้ออเดอร์ ' + o.order_no, o);
+            await boot();
+          } catch (e) { msg.textContent = e.message; msg.className = 'msg error'; }
+        });
+      })();
 
       // ---- รูปงานของออเดอร์ (เก็บบน Google Drive แยกโฟลเดอร์ตามเลขออเดอร์) ----
       const imgPanel = document.createElement('div');
