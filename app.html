@@ -283,6 +283,43 @@
   .mini-amt { font-size: 13px; font-weight: 600; color: var(--accent); font-variant-numeric: tabular-nums; white-space: nowrap; }
   .mini-empty { font-size: 12px; color: var(--sub); text-align: center; padding: var(--space-5) 0; }
 
+  /* ===== ปฏิทิน ===== */
+  .cal-top { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); margin-bottom: var(--space-3); flex-wrap: wrap; }
+  .cal-title { font-size: 17px; font-weight: 700; }
+  .cal-nav { display: flex; gap: var(--space-2); }
+  .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
+  .cal-dow { font-size: 11px; font-weight: 600; color: var(--sub); text-align: center; padding: 4px 0; }
+  .cal-cell {
+    background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+    min-height: 92px; padding: 6px; display: flex; flex-direction: column; gap: 3px;
+    font-family: inherit; text-align: left; cursor: pointer; min-width: 0;
+    transition: border-color .15s ease;
+  }
+  .cal-cell:hover { border-color: var(--accent); }
+  .cal-cell:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .cal-cell.muted { opacity: .38; }
+  .cal-cell.today { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+  .cal-cell.selected { background: var(--accent-soft); border-color: var(--accent); }
+  .cal-daynum { font-size: 12px; font-weight: 600; }
+  .cal-cell.today .cal-daynum { color: var(--accent); }
+  .cal-chip {
+    font-size: 10px; line-height: 1.3; padding: 2px 5px; border-radius: 5px;
+    background: var(--accent-soft); color: var(--accent); font-weight: 600;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .cal-chip.unpaid { background: var(--warn-bg); color: var(--warn-text); }
+  .cal-more { font-size: 10px; color: var(--sub); }
+  .cal-dot-row { display: none; gap: 3px; flex-wrap: wrap; }
+  .cal-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
+  .cal-dot.unpaid { background: var(--warn-border); }
+
+  @media (max-width: 900px) {
+    .cal-grid { gap: 4px; }
+    .cal-cell { min-height: 56px; padding: 4px; align-items: center; justify-content: flex-start; }
+    .cal-chip, .cal-more { display: none; }
+    .cal-dot-row { display: flex; justify-content: center; }
+  }
+
   @media (max-width: 900px) {
     .sidebar { display: none; }
     body { padding-bottom: 88px; }
@@ -395,6 +432,7 @@
 
     const NAV_ITEMS = [
       { key: 'dashboard', label: 'แดชบอร์ด', icon: '📊' },
+      { key: 'calendar',  label: 'ปฏิทิน',   icon: '🗓️' },
       { sep: true },
       { key: 'fabric',    label: 'ป้ายผ้า',    icon: '🏷️' },
       { key: 'favor',     label: 'ของชำร่วย',  icon: '🎁' },
@@ -403,10 +441,11 @@
       { sep: true },
       { key: 'customers', label: 'ลูกค้า',     icon: '👤' },
     ];
-    const MOBILE_NAV = ['dashboard', 'fabric', 'favor', 'card', 'customers'];
+    const MOBILE_NAV = ['dashboard', 'calendar', 'fabric', 'favor', 'customers'];
 
     function viewMeta(key) {
       if (key === 'dashboard') return { label: 'แดชบอร์ด', icon: '📊' };
+      if (key === 'calendar') return { label: 'ปฏิทิน', icon: '🗓️' };
       if (key === 'customers') return { label: 'ข้อมูลลูกค้า', icon: '👤' };
       return PRODUCT_CATEGORIES[key] || { label: 'ระบบจัดการร้าน', icon: '' };
     }
@@ -480,6 +519,8 @@
       try {
         if (currentView === 'dashboard') {
           await loadDashboard();
+        } else if (currentView === 'calendar') {
+          await loadCalendar();
         } else if (currentView === 'fabric') {
           await loadAll();
         } else if (currentView === 'customers') {
@@ -513,30 +554,7 @@
       app.innerHTML = '';
       app.appendChild(buildPageHead('แดชบอร์ด', 'ภาพรวมออเดอร์ทั้งร้าน'));
 
-      const lotById = {};
-      lots.forEach(l => lotById[l.id] = l);
-
-      // รวมทุกออเดอร์เป็นรูปแบบเดียว
-      const all = [];
-      pieces.forEach(p => {
-        const lot = lotById[p.lot_id];
-        const ymd = lot ? parseLotDate(lot.name) : null;
-        all.push({
-          kind: 'fabric', title: p.label || 'ไม่ระบุชื่อ',
-          sub: p.width_cm + ' x ' + p.length_cm + ' ซม.' + (lot ? ' · ' + lot.name : ''),
-          amount: Number(p.price), paid: p.paid, date: ymd,
-          yard: calcPiece(p.width_cm, p.length_cm, SETTINGS).yardPerPiece,
-        });
-      });
-      orders.forEach(o => {
-        const meta = PRODUCT_CATEGORIES[o.category];
-        all.push({
-          kind: o.category, title: o.name,
-          sub: (meta ? meta.label : o.category) + ' · ' + o.quantity + ' ชิ้น' + (o.customer ? ' · ' + o.customer : ''),
-          amount: Number(o.unit_cost) * o.quantity, paid: o.paid,
-          date: o.created_at ? new Date(o.created_at) : null, yard: 0,
-        });
-      });
+      const all = flattenOrders(lots, pieces, orders);
 
       const now = new Date();
       const inMonth = (d, offset) => {
@@ -617,6 +635,150 @@
       app.appendChild(row2);
 
       drawCharts(all);
+    }
+
+    // ===== ปฏิทิน =====
+    let calMonth = new Date().getMonth();
+    let calYear = new Date().getFullYear();
+    let calSelected = null;
+
+    function flattenOrders(lots, pieces, orders) {
+      const lotById = {};
+      lots.forEach(l => lotById[l.id] = l);
+      const all = [];
+      pieces.forEach(p => {
+        const lot = lotById[p.lot_id];
+        all.push({
+          kind: 'fabric', title: p.label || 'ไม่ระบุชื่อ',
+          sub: p.width_cm + ' x ' + p.length_cm + ' ซม.' + (lot ? ' · ' + lot.name : ''),
+          amount: Number(p.price), paid: p.paid,
+          date: lot ? parseLotDate(lot.name) : null,
+          yard: calcPiece(p.width_cm, p.length_cm, SETTINGS).yardPerPiece,
+        });
+      });
+      orders.forEach(o => {
+        const meta = PRODUCT_CATEGORIES[o.category];
+        all.push({
+          kind: o.category, title: o.name,
+          sub: (meta ? meta.label : o.category) + ' · ' + o.quantity + ' ชิ้น' + (o.customer ? ' · ' + o.customer : ''),
+          amount: Number(o.unit_cost) * o.quantity, paid: o.paid,
+          date: o.created_at ? new Date(o.created_at) : null, yard: 0,
+        });
+      });
+      return all;
+    }
+
+    async function loadCalendar() {
+      document.getElementById('statusMsg').textContent = 'กำลังโหลด...';
+      SETTINGS = await loadSettings();
+      const [lotsRes, piecesRes, ordersRes] = await Promise.all([
+        sb.from('lots').select('id,name'),
+        sb.from('pieces').select('id,lot_id,width_cm,length_cm,label,price,paid'),
+        sb.from('product_orders').select('id,category,name,customer,quantity,unit_cost,paid,created_at'),
+      ]);
+      if (lotsRes.error) throw lotsRes.error;
+      if (piecesRes.error) throw piecesRes.error;
+      if (ordersRes.error) throw ordersRes.error;
+      renderCalendar(flattenOrders(lotsRes.data, piecesRes.data, ordersRes.data));
+      document.getElementById('statusMsg').textContent = 'อัปเดตล่าสุด: ' + new Date().toLocaleString('th-TH');
+    }
+
+    function renderCalendar(all) {
+      const app = document.getElementById('app');
+      app.innerHTML = '';
+      app.appendChild(buildPageHead('ปฏิทิน', 'ออเดอร์ทุกสินค้ากระจายตามวัน'));
+
+      // จัดกลุ่มตามวัน
+      const byDay = {};
+      all.forEach(r => {
+        if (!r.date) return;
+        const k = r.date.getFullYear() + '-' + r.date.getMonth() + '-' + r.date.getDate();
+        (byDay[k] = byDay[k] || []).push(r);
+      });
+
+      const monthItems = all.filter(r => r.date && r.date.getFullYear() === calYear && r.date.getMonth() === calMonth);
+      const monthUnpaid = monthItems.filter(r => !r.paid);
+
+      const top = document.createElement('div');
+      top.className = 'cal-top';
+      top.innerHTML = `
+        <div>
+          <div class="cal-title">${THAI_MONTHS[calMonth + 1]} ${calYear + 543}</div>
+          <div class="page-sub">${monthItems.length} รายการ · ค้างชำระ ${monthUnpaid.length} · รวม ${fmtBaht(round2(monthItems.reduce((s, r) => s + r.amount, 0)))} บาท</div>
+        </div>
+        <div class="cal-nav">
+          <button class="btn secondary btn-sm" id="calPrev">‹ ก่อนหน้า</button>
+          <button class="btn secondary btn-sm" id="calToday">วันนี้</button>
+          <button class="btn secondary btn-sm" id="calNext">ถัดไป ›</button>
+        </div>
+      `;
+      app.appendChild(top);
+
+      const grid = document.createElement('div');
+      grid.className = 'cal-grid';
+      ['อา', 'จ', 'อ', 'พ', 'พฤ', 'ศ', 'ส'].forEach(d => {
+        const h = document.createElement('div');
+        h.className = 'cal-dow';
+        h.textContent = d;
+        grid.appendChild(h);
+      });
+
+      const first = new Date(calYear, calMonth, 1);
+      const startOffset = first.getDay();
+      const start = new Date(calYear, calMonth, 1 - startOffset);
+      const todayKeyStr = (() => { const t = new Date(); return t.getFullYear() + '-' + t.getMonth() + '-' + t.getDate(); })();
+
+      for (let i = 0; i < 42; i++) {
+        const d = new Date(start.getFullYear(), start.getMonth(), start.getDate() + i);
+        const key = d.getFullYear() + '-' + d.getMonth() + '-' + d.getDate();
+        const items = byDay[key] || [];
+        const inMonth = d.getMonth() === calMonth;
+        const cell = document.createElement('button');
+        cell.className = 'cal-cell' + (inMonth ? '' : ' muted') + (key === todayKeyStr ? ' today' : '') + (key === calSelected ? ' selected' : '');
+        cell.dataset.key = key;
+        const shown = items.slice(0, 2);
+        cell.innerHTML = `
+          <span class="cal-daynum">${d.getDate()}</span>
+          ${shown.map(r => `<span class="cal-chip ${r.paid ? '' : 'unpaid'}">${esc(r.title)}</span>`).join('')}
+          ${items.length > 2 ? `<span class="cal-more">+${items.length - 2} รายการ</span>` : ''}
+          <span class="cal-dot-row">${items.slice(0, 4).map(r => `<span class="cal-dot ${r.paid ? '' : 'unpaid'}"></span>`).join('')}</span>
+        `;
+        cell.addEventListener('click', () => {
+          calSelected = calSelected === key ? null : key;
+          renderCalendar(all);
+        });
+        grid.appendChild(cell);
+      }
+      app.appendChild(grid);
+
+      // รายละเอียดวันที่เลือก
+      if (calSelected) {
+        const items = byDay[calSelected] || [];
+        const [yy, mm, dd] = calSelected.split('-').map(Number);
+        const detail = document.createElement('div');
+        detail.className = 'panel-card';
+        detail.style.marginTop = 'var(--space-4)';
+        detail.innerHTML = `
+          <h3>${dd} ${THAI_MONTHS[mm + 1]} ${yy + 543}</h3>
+          <div class="panel-sub">${items.length} รายการ · รวม ${fmtBaht(round2(items.reduce((s, r) => s + r.amount, 0)))} บาท</div>
+          <div class="mini-list">${items.length ? items.map(miniRow).join('') : '<div class="mini-empty">ไม่มีออเดอร์วันนี้</div>'}</div>
+        `;
+        app.appendChild(detail);
+      }
+
+      top.querySelector('#calPrev').addEventListener('click', () => {
+        calMonth--; if (calMonth < 0) { calMonth = 11; calYear--; }
+        calSelected = null; renderCalendar(all);
+      });
+      top.querySelector('#calNext').addEventListener('click', () => {
+        calMonth++; if (calMonth > 11) { calMonth = 0; calYear++; }
+        calSelected = null; renderCalendar(all);
+      });
+      top.querySelector('#calToday').addEventListener('click', () => {
+        const t = new Date();
+        calMonth = t.getMonth(); calYear = t.getFullYear();
+        calSelected = null; renderCalendar(all);
+      });
     }
 
     function miniRow(r) {
