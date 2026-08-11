@@ -288,6 +288,13 @@
   .receipt-note { margin-top: var(--space-4); font-size: 12px; color: #6b7280; white-space: pre-wrap; }
   .receipt-foot { margin-top: var(--space-6); font-size: 11px; color: #9aa3b4; text-align: center; }
 
+  /* การ์ดลูกค้าแบบยุบ/กางได้ */
+  .cust-toggle { cursor: pointer; user-select: none; }
+  .cust-toggle:hover { filter: brightness(0.98); }
+  .cust-toggle .ic { transition: transform .18s ease; transform: rotate(-90deg); margin-right: 4px; opacity: .6; }
+  .cust-card.open .cust-toggle .ic { transform: rotate(-180deg); }
+  .cust-card + .cust-card { margin-top: -2px; }
+
   /* โหมดดูอย่างเดียว (viewer) — ซ่อนปุ่มที่แก้ข้อมูล ฐานข้อมูลกันอีกชั้นอยู่แล้ว */
   body.role-viewer .icon-btn-delete,
   body.role-viewer .icon-btn-edit,
@@ -3770,6 +3777,19 @@ end $$;
       app.innerHTML = '';
       app.appendChild(buildPageHead('ข้อมูลลูกค้า', 'ยอดซื้อ ค้างชำระ และประวัติออเดอร์ของลูกค้าแต่ละราย'));
 
+      // ค้นหาได้ทุกอย่างที่เกี่ยวกับลูกค้า: ชื่อ · เลขออเดอร์ · เบอร์ · ที่อยู่ · ช่องทาง · ชื่อล็อต · ขนาดงาน
+      const searchWrap = document.createElement('div');
+      searchWrap.className = 'search-wrap no-print';
+      searchWrap.innerHTML = `<span class="search-ico">${icon('search', 18)}</span>
+        <input id="custSearch" type="text" autocomplete="off"
+          placeholder="ค้นหา: ชื่อลูกค้า · เลขออเดอร์ · เบอร์โทร · ที่อยู่ · ช่องทาง · ล็อต · ขนาด"
+          aria-label="ค้นหาลูกค้า">`;
+      app.appendChild(searchWrap);
+      const searchMsg = document.createElement('div');
+      searchMsg.className = 'hint no-print';
+      searchMsg.style.margin = '-4px 0 10px';
+      app.appendChild(searchMsg);
+
       // ===== ลูกค้าจากระบบออเดอร์ (ฝั่งขาย) =====
       const buyers = {};
       sales.filter(s => s.status !== 'cancelled').forEach(s => {
@@ -3816,16 +3836,19 @@ end $$;
         buyerList.forEach(b => {
           const outstanding = Math.max(0, b.total - b.paid);
           const card = document.createElement('div');
-          card.className = 'lot-card';
+          card.className = 'lot-card cust-card';
+          card.dataset.search = [b.name, b.phone, b.address, Array.from(b.channels).join(' '),
+            b.orders.map(o => o.order_no).join(' ')].join(' ').toLowerCase();
           card.innerHTML = `
-            <div class="lot-head">
-              <span>${esc(b.name)}${outstanding > 0 ? ` <span class="st st-prod">ค้าง ${fmtBaht(round2(outstanding))}</span>` : ' <span class="st st-paid">ชำระครบ</span>'}</span>
+            <div class="lot-head cust-toggle" role="button" tabindex="0" aria-expanded="false">
+              <span>${icon('back', 14)}${esc(b.name)}${outstanding > 0 ? ` <span class="st st-prod">ค้าง ${fmtBaht(round2(outstanding))}</span>` : ' <span class="st st-paid">ชำระครบ</span>'}</span>
               <span class="lot-head-right">
                 <span class="lot-total">${fmtBaht(round2(b.total))} บาท</span>
                 <span class="lot-price">${b.orders.length} ออเดอร์ · ${Array.from(b.channels).map(esc).join(', ') || 'ไม่ระบุช่องทาง'}</span>
                 ${b.phone || b.address ? `<span class="lot-buffer">${b.phone ? 'โทร ' + esc(b.phone) : ''}</span>` : ''}
               </span>
             </div>
+            <div class="cust-body" hidden>
             ${b.address ? `<div style="padding:var(--space-2) var(--space-4);font-size:12px;color:var(--sub);border-top:1px solid var(--border)">${icon('pin2',13)} ${esc(b.address)}</div>` : ''}
             <div class="table-wrap"><table>
               <thead><tr><th>เลขที่</th><th>วันที่</th><th>สถานะ</th><th>ยอด</th><th>ค้าง</th></tr></thead>
@@ -3841,6 +3864,7 @@ end $$;
                 </tr>`;
               }).join('')}</tbody>
             </table></div>
+            </div>
           `;
           app.appendChild(card);
         });
@@ -3899,7 +3923,9 @@ end $$;
         c.items.sort((a, b) => b.sortKey - a.sortKey);
         const anySell = c.items.some(i => i.sell !== null);
         const card = document.createElement('div');
-        card.className = 'lot-card';
+        card.className = 'lot-card cust-card';
+        card.dataset.search = [c.name, Array.from(c.categories).join(' '),
+          c.items.map(i => i.detail + ' ' + i.when).join(' ')].join(' ').toLowerCase();
         const rowsHtml = c.items.map(i => `
           <tr>
             <td data-label="รายการ">${esc(i.detail)}</td>
@@ -3910,18 +3936,72 @@ end $$;
           </tr>
         `).join('');
         card.innerHTML = `
-          <div class="lot-head">
-            <span>${esc(c.name)}</span>
+          <div class="lot-head cust-toggle" role="button" tabindex="0" aria-expanded="false">
+            <span>${icon('back', 14)}${esc(c.name)}</span>
             <span class="lot-head-right"><span class="lot-total">${c.items.length} รายการ</span><span class="lot-price">${Array.from(c.categories).map(esc).join(' · ')}</span></span>
           </div>
-          <div class="table-wrap">
-            <table>
-              <thead><tr><th>รายการ</th><th>ประเภท</th><th>จำนวน</th><th>วันที่/ล็อต</th>${anySell ? '<th>ราคาขาย</th>' : ''}</tr></thead>
-              <tbody>${rowsHtml}</tbody>
-            </table>
+          <div class="cust-body" hidden>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>รายการ</th><th>ประเภท</th><th>จำนวน</th><th>วันที่/ล็อต</th>${anySell ? '<th>ราคาขาย</th>' : ''}</tr></thead>
+                <tbody>${rowsHtml}</tbody>
+              </table>
+            </div>
           </div>
         `;
         app.appendChild(card);
+      });
+
+      wireCustomerCards(app, searchMsg);
+    }
+
+    /** กด/กด Enter ที่หัวการ์ด = กางหรือยุบ · ช่องค้นหา = กรองการ์ด แล้วกางอันที่ตรงให้เลย */
+    function wireCustomerCards(app, searchMsg) {
+      const cards = [...app.querySelectorAll('.cust-card')];
+
+      const toggle = (card, open) => {
+        const head = card.querySelector('.cust-toggle');
+        const body = card.querySelector('.cust-body');
+        const show = (open === undefined) ? body.hidden : open;
+        body.hidden = !show;
+        head.setAttribute('aria-expanded', show ? 'true' : 'false');
+        card.classList.toggle('open', show);
+      };
+
+      cards.forEach(card => {
+        const head = card.querySelector('.cust-toggle');
+        head.addEventListener('click', (e) => {
+          if (e.target.closest('a')) return;    // กดลิงก์เลขออเดอร์ไม่ต้องยุบ
+          toggle(card);
+        });
+        head.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(card); }
+        });
+      });
+
+      const input = app.querySelector('#custSearch');
+      if (!input) return;
+      const sections = [...app.querySelectorAll('.section-title')];
+
+      input.addEventListener('input', () => {
+        const q = input.value.trim().toLowerCase();
+        let found = 0;
+        cards.forEach(card => {
+          const hit = !q || (card.dataset.search || '').includes(q);
+          card.style.display = hit ? '' : 'none';
+          if (hit) found++;
+          if (q) toggle(card, hit && q.length >= 2);   // พิมพ์ค้นหาแล้วกางให้เห็นเลย
+        });
+        // ซ่อนหัวข้อส่วนที่ไม่มีการ์ดเหลือ
+        sections.forEach(h => {
+          let sib = h.nextElementSibling, any = false;
+          while (sib && !sib.classList.contains('section-title')) {
+            if (sib.classList.contains('cust-card') && sib.style.display !== 'none') any = true;
+            sib = sib.nextElementSibling;
+          }
+          h.style.display = (!q || any) ? '' : 'none';
+        });
+        searchMsg.textContent = q ? (found ? 'เจอ ' + found + ' ราย' : 'ไม่เจอลูกค้าที่ตรงกับ "' + input.value + '"') : '';
       });
     }
 
