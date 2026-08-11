@@ -1806,11 +1806,15 @@
 
     // ---- ใบปะหน้าพัสดุ ----
     function openShippingLabel(o) {
-      if (!o.address && !o.phone) {
-        if (!confirm('ใบงานนี้ยังไม่มีที่อยู่/เบอร์โทร\nกด "แก้ไขใบงาน" เพื่อเพิ่มก่อน — จะเปิดใบเปล่าไว้ดูรูปแบบไหม?')) return;
-      }
       const app = document.getElementById('app');
       app.innerHTML = '';
+
+      if (!o.address) {
+        const warn = document.createElement('div');
+        warn.className = 'info-note no-print';
+        warn.textContent = 'ใบงานนี้ยังไม่มีที่อยู่จัดส่ง — กด "แก้ไขใบงาน" เพื่อเพิ่มที่อยู่และเบอร์โทรก่อนพิมพ์';
+        app.appendChild(warn);
+      }
 
       const bar = document.createElement('div');
       bar.className = 'no-print';
