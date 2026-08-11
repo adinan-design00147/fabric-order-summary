@@ -263,6 +263,12 @@
   .receipt-note { margin-top: var(--space-4); font-size: 12px; color: #6b7280; white-space: pre-wrap; }
   .receipt-foot { margin-top: var(--space-6); font-size: 11px; color: #9aa3b4; text-align: center; }
 
+  /* กล่องเลขบัญชีท้ายใบออเดอร์/ใบเสร็จ */
+  .pay-block { margin-top: var(--space-5); padding: var(--space-4); border: 1px dashed #c9c3b8; border-radius: 10px; background: #faf8f4; color: #1f2430; }
+  .pay-title { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 700; color: #6b7280; margin-bottom: 6px; }
+  .pay-line { font-size: 13px; }
+  .pay-acc { margin-top: 4px; font-size: 20px; font-weight: 700; letter-spacing: 0.5px; font-variant-numeric: tabular-nums; }
+
   .rc-row { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); padding: var(--space-3) var(--space-4); background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: var(--space-2); cursor: pointer; font-family: inherit; width: 100%; text-align: left; }
   .rc-row:hover { border-color: var(--accent); }
   .rc-main { min-width: 0; }
@@ -972,6 +978,7 @@
     async function boot() {
       syncHash();
       destroyCharts();
+      await fetchShopInfo();
       // การเลือกชิ้นงานใช้ได้เฉพาะหน้าป้ายผ้า ออกจากหน้านี้ให้ล้างทิ้ง
       if (currentView !== 'fabric' && selectedPieces.size) selectedPieces.clear();
       renderSelBar();
@@ -1197,22 +1204,77 @@
       drawCharts(all);
     }
 
+    // ===== ข้อมูลร้าน / ช่องทางชำระเงิน =====
+    let SHOP = {};
+
+    async function fetchShopInfo() {
+      if (Object.keys(SHOP).length) return SHOP;
+      try {
+        const { data } = await sb.from('shop_info').select('key,value');
+        (data || []).forEach(r => { SHOP[r.key] = r.value; });
+      } catch (e) { /* ไม่มีข้อมูลร้านไม่ควรทำให้หน้าเว็บพัง */ }
+      return SHOP;
+    }
+
+    /** กล่องเลขบัญชี ใช้ในใบออเดอร์/ใบเสร็จ (โชว์เฉพาะตอนมีข้อมูล) */
+    function bankBlockHTML() {
+      if (!SHOP.account_no) return '';
+      return `<div class="pay-block">
+        <div class="pay-title">${icon('wallet', 15)}ช่องทางชำระเงิน</div>
+        <div class="pay-line">ธนาคาร ${esc(SHOP.bank_name || '')}</div>
+        <div class="pay-line">ชื่อบัญชี ${esc(SHOP.account_name || '')}</div>
+        <div class="pay-acc">${esc(SHOP.account_no)}</div>
+      </div>`;
+    }
+
     // ===== สินค้า & ราคาขาย =====
     let PRODUCTS = [];
 
     async function fetchProducts() {
       const { data, error } = await sb.from('products')
-        .select('id,name,category,pricing_mode,unit_price,area_rate,unit,note,active,width_cm,length_cm,sort_order')
+        .select('id,name,category,pricing_mode,unit_price,area_rate,tiers,unit,note,active,width_cm,length_cm,sort_order')
+        .eq('active', true)
         .order('sort_order').order('created_at');
       if (error) throw error;
       PRODUCTS = data;
       return data;
     }
 
+    /** ราคาขั้นบันได: เลือกช่วงที่จำนวนถึงเกณฑ์สูงสุด (ต่ำกว่าขั้นแรกใช้ราคาขั้นแรก) */
+    function tierList(p) {
+      const t = Array.isArray(p.tiers) ? p.tiers.slice() : [];
+      return t.sort((a, b) => Number(a.min_qty) - Number(b.min_qty));
+    }
+
+    function tierPrice(p, qty) {
+      const t = tierList(p);
+      if (!t.length) return Number(p.unit_price || 0);
+      let price = Number(t[0].price);
+      t.forEach(x => { if (qty >= Number(x.min_qty)) price = Number(x.price); });
+      return price;
+    }
+
+    /** แปลง "100=4.5, 700=4, 1000=3.5" -> array | null */
+    function parseTierText(txt) {
+      const out = [];
+      String(txt || '').split(/[,\n]/).forEach(part => {
+        const m = part.trim().match(/^(\d+)\s*=\s*([\d.]+)$/);
+        if (m) out.push({ min_qty: parseInt(m[1], 10), price: parseFloat(m[2]) });
+      });
+      return out.length ? out.sort((a, b) => a.min_qty - b.min_qty) : null;
+    }
+
+    function tierText(p) {
+      return tierList(p).map(t => t.min_qty + '=' + t.price).join(', ');
+    }
+
     function productOptionLabel(p) {
-      const price = p.pricing_mode === 'per_area'
-        ? fmtBaht(p.area_rate) + ' บ./ตร.ซม.'
-        : fmtBaht(p.unit_price || 0) + ' บ.';
+      let price;
+      if (p.pricing_mode === 'per_area') price = fmtBaht(p.area_rate) + ' บ./ตร.ซม.';
+      else if (p.pricing_mode === 'tier') {
+        const t = tierList(p);
+        price = t.length ? t[t.length - 1].price + '–' + t[0].price + ' บ./' + p.unit + ' (ตามจำนวน)' : '—';
+      } else price = fmtBaht(p.unit_price || 0) + ' บ.';
       return p.name + ' — ' + price + (p.note === 'ขนาดขายดี' ? ' ★' : '');
     }
 
@@ -1223,9 +1285,14 @@
     }
 
     function priceLabel(p) {
-      return p.pricing_mode === 'per_area'
-        ? fmtBaht(p.area_rate) + ' บาท/ตร.ซม.'
-        : fmtBaht(p.unit_price || 0) + ' บาท/' + p.unit;
+      if (p.pricing_mode === 'per_area') return fmtBaht(p.area_rate) + ' บาท/ตร.ซม.';
+      if (p.pricing_mode === 'tier') {
+        const t = tierList(p);
+        return t.length
+          ? t.map(x => Number(x.min_qty).toLocaleString('th-TH') + '+ = ' + x.price).join(' · ') + ' บาท/' + p.unit
+          : 'ยังไม่ได้ตั้งขั้นราคา';
+      }
+      return fmtBaht(p.unit_price || 0) + ' บาท/' + p.unit;
     }
 
     function renderProductCatalog(list) {
@@ -1247,9 +1314,11 @@
             <select id="pMode">
               <option value="fixed">ตายตัวต่อหน่วย</option>
               <option value="per_area">ตามขนาด (บาท/ตร.ซม.)</option>
+              <option value="tier">ขั้นบันไดตามจำนวน</option>
             </select>
           </div>
           <div class="field"><label for="pPrice">ราคาขาย</label><input id="pPrice" type="number" min="0" step="any" placeholder="0" inputmode="decimal"></div>
+          <div class="field" id="pTierField" style="display:none"><label for="pTiers">ขั้นราคา</label><input id="pTiers" placeholder="100=4.5, 700=4, 1000=3.5"></div>
           <div class="field"><label for="pW">กว้าง (ซม.)</label><input id="pW" type="number" min="0" step="any" placeholder="ไม่บังคับ" inputmode="decimal"></div>
           <div class="field"><label for="pL">ยาว (ซม.)</label><input id="pL" type="number" min="0" step="any" placeholder="ไม่บังคับ" inputmode="decimal"></div>
         </div>
@@ -1260,8 +1329,11 @@
       app.appendChild(panel);
 
       panel.querySelector('#pMode').addEventListener('change', (e) => {
-        panel.querySelector('#pHint').textContent = e.target.value === 'per_area'
-          ? 'ใส่เรตเป็น บาท/ตร.ซม. เช่น 0.02 → ป้าย 50×200 ซม. = 200 บาท'
+        const m = e.target.value;
+        panel.querySelector('#pTierField').style.display = m === 'tier' ? '' : 'none';
+        panel.querySelector('#pHint').textContent =
+          m === 'per_area' ? 'ใส่เรตเป็น บาท/ตร.ซม. เช่น 0.02 → ป้าย 50×200 ซม. = 200 บาท'
+          : m === 'tier' ? 'ใส่ขั้นราคาเป็น จำนวน=ราคา คั่นด้วยจุลภาค เช่น 100=4.5, 700=4, 1000=3.5 · ช่อง "ราคาขาย" ใช้เป็นราคาตั้งต้น'
           : 'ใส่ราคาขายต่อ 1 หน่วย';
       });
 
@@ -1280,8 +1352,9 @@
           category: panel.querySelector('#pCat').value.trim() || null,
           unit: panel.querySelector('#pUnit').value.trim() || 'ชิ้น',
           pricing_mode: mode,
-          unit_price: mode === 'fixed' ? price : null,
+          unit_price: mode === 'per_area' ? null : price,
           area_rate: mode === 'per_area' ? price : null,
+          tiers: mode === 'tier' ? parseTierText(panel.querySelector('#pTiers').value) : null,
           width_cm: parseFloat(panel.querySelector('#pW').value) || null,
           length_cm: parseFloat(panel.querySelector('#pL').value) || null,
           sort_order: 10,
@@ -1295,10 +1368,10 @@
       card.className = 'lot-card';
       const rows = list.map(p => `<tr>
         <td data-label="สินค้า">${esc(p.name)}${p.note === 'ขนาดขายดี' ? ' <span class="st st-paid">ขายดี</span>' : ''}${p.category ? '<br><span style="font-size:11px;color:var(--sub)">' + esc(p.category) + (p.width_cm && p.length_cm ? ' · ' + p.width_cm + ' x ' + p.length_cm + ' ซม.' : '') + '</span>' : ''}</td>
-        <td data-label="คิดราคา">${p.pricing_mode === 'per_area' ? 'ตามขนาด' : 'ตายตัว'}</td>
+        <td data-label="คิดราคา">${p.pricing_mode === 'per_area' ? 'ตามขนาด' : p.pricing_mode === 'tier' ? 'ตามจำนวน' : 'ตายตัว'}</td>
         <td data-label="ราคาขาย">${esc(priceLabel(p))}</td>
         <td data-label="จัดการ" class="row-actions">
-          <button class="icon-btn icon-btn-edit edit-product" data-id="${p.id}" data-name="${esc(p.name)}" data-cat="${esc(p.category || '')}" data-unit="${esc(p.unit)}" data-mode="${p.pricing_mode}" data-price="${p.pricing_mode === 'per_area' ? (p.area_rate ?? '') : (p.unit_price ?? '')}" aria-label="แก้ไขสินค้า" title="แก้ไข">${icon('edit', 18)}</button>
+          <button class="icon-btn icon-btn-edit edit-product" data-id="${p.id}" data-name="${esc(p.name)}" data-cat="${esc(p.category || '')}" data-unit="${esc(p.unit)}" data-mode="${p.pricing_mode}" data-tiers="${esc(tierText(p))}" data-price="${p.pricing_mode === 'per_area' ? (p.area_rate ?? '') : (p.unit_price ?? '')}" aria-label="แก้ไขสินค้า" title="แก้ไข">${icon('edit', 18)}</button>
           <button class="icon-btn icon-btn-delete del-product" data-id="${p.id}" aria-label="ลบสินค้า" title="ลบ">${icon('trash', 18)}</button>
         </td>
       </tr>`).join('');
@@ -1309,6 +1382,35 @@
         </table></div>
       `;
       app.appendChild(card);
+
+      // ---- ข้อมูลร้าน / ช่องทางชำระเงิน (โชว์บนใบออเดอร์และใบเสร็จ) ----
+      const shopPanel = document.createElement('div');
+      shopPanel.className = 'panel';
+      shopPanel.innerHTML = `
+        <h2>${icon('wallet', 17)}ช่องทางชำระเงิน</h2>
+        <div class="form-grid">
+          <div class="field"><label for="sBank">ธนาคาร</label><input id="sBank" value="${esc(SHOP.bank_name || '')}" placeholder="เช่น ไทยพาณิชย์"></div>
+          <div class="field"><label for="sAccName">ชื่อบัญชี</label><input id="sAccName" value="${esc(SHOP.account_name || '')}" placeholder="ชื่อ-นามสกุล"></div>
+          <div class="field"><label for="sAccNo">เลขบัญชี</label><input id="sAccNo" value="${esc(SHOP.account_no || '')}" placeholder="000-0-00000-0"></div>
+        </div>
+        <button id="sSave" class="btn secondary block">${icon('check', 15)}บันทึกข้อมูลร้าน</button>
+        <div class="msg" id="sMsg"></div>
+        <div class="hint">ข้อมูลนี้จะพิมพ์อยู่ท้ายใบออเดอร์และใบเสร็จอัตโนมัติ</div>
+      `;
+      app.appendChild(shopPanel);
+
+      shopPanel.querySelector('#sSave').addEventListener('click', async () => {
+        const msg = shopPanel.querySelector('#sMsg');
+        const rows = [
+          { key: 'bank_name', value: shopPanel.querySelector('#sBank').value.trim(), sort_order: 2 },
+          { key: 'account_name', value: shopPanel.querySelector('#sAccName').value.trim(), sort_order: 3 },
+          { key: 'account_no', value: shopPanel.querySelector('#sAccNo').value.trim(), sort_order: 4 },
+        ];
+        const { error } = await sb.from('shop_info').upsert(rows, { onConflict: 'key' });
+        if (error) { msg.textContent = 'บันทึกไม่สำเร็จ: ' + error.message; msg.className = 'msg error'; return; }
+        rows.forEach(r => { SHOP[r.key] = r.value; });
+        msg.textContent = 'บันทึกแล้ว'; msg.className = 'msg ok';
+      });
 
       app.querySelectorAll('.del-product').forEach(b => b.addEventListener('click', async () => {
         if (!confirm('ลบสินค้านี้? (ออเดอร์เก่ายังเก็บราคาเดิมไว้ ไม่กระทบ)')) return;
@@ -1327,12 +1429,17 @@
           <select class="e-mode" aria-label="วิธีคิดราคา">
             <option value="fixed" ${d.mode === 'fixed' ? 'selected' : ''}>ตายตัว</option>
             <option value="per_area" ${d.mode === 'per_area' ? 'selected' : ''}>ตามขนาด</option>
+            <option value="tier" ${d.mode === 'tier' ? 'selected' : ''}>ตามจำนวน</option>
           </select>
           <input class="e-price" type="number" step="any" min="0" value="${d.price}" placeholder="ราคา" aria-label="ราคา">
+          <input class="e-tiers" value="${esc(d.tiers || '')}" placeholder="100=4.5, 700=4, 1000=3.5" aria-label="ขั้นราคา" style="${d.mode === 'tier' ? '' : 'display:none'}">
           <button class="btn btn-sm e-save">${icon('check', 15)}บันทึก</button>
           <button class="btn secondary btn-sm e-cancel">${icon('close', 15)}ยกเลิก</button>
         </div></td>`;
         tr.querySelector('.e-cancel').addEventListener('click', () => loadProductCatalog());
+        tr.querySelector('.e-mode').addEventListener('change', (e) => {
+          tr.querySelector('.e-tiers').style.display = e.target.value === 'tier' ? '' : 'none';
+        });
         tr.querySelector('.e-save').addEventListener('click', async () => {
           const mode = tr.querySelector('.e-mode').value;
           const price = parseFloat(tr.querySelector('.e-price').value) || 0;
@@ -1341,8 +1448,9 @@
             category: tr.querySelector('.e-cat').value.trim() || null,
             unit: tr.querySelector('.e-unit').value.trim() || 'ชิ้น',
             pricing_mode: mode,
-            unit_price: mode === 'fixed' ? price : null,
+            unit_price: mode === 'per_area' ? null : price,
             area_rate: mode === 'per_area' ? price : null,
+            tiers: mode === 'tier' ? parseTierText(tr.querySelector('.e-tiers').value) : null,
           }).eq('id', d.id);
           if (error) { alert('บันทึกไม่สำเร็จ: ' + error.message); return; }
           await loadProductCatalog();
@@ -1571,6 +1679,11 @@
         if (p && p.pricing_mode === 'per_area') {
           unit = Math.round(w * l * Number(p.area_rate || 0));
           row.querySelector('.i-price').value = unit;
+        } else if (p && p.pricing_mode === 'tier') {
+          unit = tierPrice(p, qty);
+          row.querySelector('.i-price').value = unit;
+          const hint = row.querySelector('.i-tier-hint');
+          if (hint) hint.textContent = priceLabel(p);
         } else {
           unit = parseFloat(row.querySelector('.i-price').value) || 0;
         }
@@ -1592,6 +1705,7 @@
               ${PRODUCTS.map(p => `<option value="${p.id}">${esc(productOptionLabel(p))}</option>`).join('')}
             </select>
             <input class="i-name" placeholder="ชื่อรายการ / ขนาดที่ลูกค้าต้องการ" aria-label="ชื่อรายการ" style="margin-top:6px">
+            <div class="i-tier-hint hint" style="display:none;margin-top:4px"></div>
           </div>
           <div class="field i-size"><label>กว้าง</label><input class="i-w" type="number" min="0" step="any" placeholder="ซม." inputmode="decimal"></div>
           <div class="field i-size"><label>ยาว</label><input class="i-l" type="number" min="0" step="any" placeholder="ซม." inputmode="decimal"></div>
@@ -1607,12 +1721,16 @@
         function syncMode() {
           const p = PRODUCTS.find(x => x.id === sel.value);
           const perArea = p && p.pricing_mode === 'per_area';
+          const tier = p && p.pricing_mode === 'tier';
           // โชว์ช่องขนาดเมื่อ: คิดตามพื้นที่ หรือ ขนาดพิเศษ (พิมพ์เอง)
           const showSize = perArea || !p;
           row.querySelectorAll('.i-size').forEach(el => { el.style.display = showSize ? '' : 'none'; });
           row.classList.toggle('no-size', !showSize);
-          row.querySelector('.i-price').readOnly = !!perArea;
+          row.querySelector('.i-price').readOnly = !!(perArea || tier);
           nameInput.style.display = sel.value ? 'none' : '';
+          const hint = row.querySelector('.i-tier-hint');
+          hint.style.display = tier ? '' : 'none';
+          if (tier) hint.textContent = priceLabel(p);
           if (p && p.pricing_mode === 'fixed') {
             row.querySelector('.i-price').value = p.unit_price || 0;
             // สินค้าที่มีขนาดกำหนดไว้แล้ว ให้ใช้ขนาดนั้น
@@ -1921,6 +2039,7 @@
         </div>` : ''}
         ${o.address ? `<div class="receipt-note">จัดส่ง: ${esc(o.address)}${o.phone ? ' · โทร ' + esc(o.phone) : ''}</div>` : ''}
         ${o.note ? `<div class="receipt-note">หมายเหตุ: ${esc(o.note)}</div>` : ''}
+        ${balance > 0 ? bankBlockHTML() : ''}
       `;
       app.appendChild(paper);
       app.appendChild(buildHistoryPanel(logs));
@@ -2219,6 +2338,7 @@
         </table>
         <div class="receipt-total"><span>รวมทั้งสิ้น</span><span>${fmtBaht(round2(rc.total))} บาท</span></div>
         ${rc.note ? `<div class="receipt-note">หมายเหตุ: ${esc(rc.note)}</div>` : ''}
+        ${bankBlockHTML()}
         <div class="receipt-foot">ออกโดยระบบจัดการออเดอร์ Haifa Design</div>
       `;
       app.appendChild(paper);
