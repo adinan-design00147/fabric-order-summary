@@ -901,7 +901,7 @@
       { key: 'customers', label: 'ลูกค้า',     icon: 'user' },
       { key: 'receipts',  label: 'ใบเสร็จ',    icon: 'receipt' },
       { sep: true },
-      { key: 'health',    label: 'ตรวจสุขภาพระบบ', icon: 'check' },
+      { key: 'health',    label: 'ตรวจระบบ & สำรอง', icon: 'check' },
     ];
     // แถบล่างมือถือ: 4 หน้าหลัก + ปุ่มเพิ่มเติมสำหรับที่เหลือ
     const MOBILE_NAV = ['dashboard', 'orders', 'calendar', 'fabric'];
@@ -930,7 +930,7 @@
       if (key === 'products') return { label: 'สินค้า & ราคา', icon: 'price' };
       if (key === 'fabric') return { label: 'ต้นทุนผลิต', icon: 'factory' };
       if (key === 'stock') return { label: 'สต็อกของ', icon: 'box' };
-      if (key === 'health') return { label: 'ตรวจสุขภาพระบบ', icon: 'check' };
+      if (key === 'health') return { label: 'ตรวจระบบ & สำรองข้อมูล', icon: 'check' };
       return PRODUCT_CATEGORIES[key] || { label: 'ระบบจัดการร้าน', icon: '' };
     }
 
@@ -1300,8 +1300,6 @@
       `;
       app.appendChild(row2);
 
-      app.appendChild(buildBackupPanel());
-
       drawCharts(all);
     }
 
@@ -1409,7 +1407,7 @@
     async function loadHealth() {
       const app = document.getElementById('app');
       app.innerHTML = '';
-      app.appendChild(buildPageHead('ตรวจสุขภาพระบบ', 'กดตรวจครั้งเดียว รู้ว่าสูตรคำนวณ ข้อมูล และการเชื่อมต่อยังปกติดีไหม'));
+      app.appendChild(buildPageHead('ตรวจระบบ & สำรองข้อมูล', 'ตรวจว่าสูตรคำนวณ ข้อมูล และการเชื่อมต่อยังปกติ — และสำรองข้อมูลทั้งระบบลงเครื่อง'));
       document.getElementById('statusMsg').textContent = 'พร้อมตรวจ';
 
       const bar = document.createElement('div');
@@ -1422,6 +1420,8 @@
       card.className = 'lot-card';
       card.innerHTML = '<div class="empty-cell" style="padding:20px">ยังไม่ได้ตรวจ — กด "เริ่มตรวจ"</div>';
       app.appendChild(card);
+
+      app.appendChild(buildBackupPanel());
 
       bar.querySelector('#hRun').addEventListener('click', async () => {
         const b = bar.querySelector('#hRun');
@@ -1499,6 +1499,124 @@
       } catch (e) { return null; }
     }
 
+    // ---- สร้างไฟล์ ZIP เอง (แบบ store ไม่บีบอัด) จะได้ไม่ต้องพึ่งไลบรารีนอก ----
+    const CRC_TABLE = (() => {
+      const t = new Uint32Array(256);
+      for (let i = 0; i < 256; i++) {
+        let c = i;
+        for (let k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+        t[i] = c >>> 0;
+      }
+      return t;
+    })();
+    function crc32(bytes) {
+      let c = 0xFFFFFFFF;
+      for (let i = 0; i < bytes.length; i++) c = CRC_TABLE[(c ^ bytes[i]) & 0xFF] ^ (c >>> 8);
+      return (c ^ 0xFFFFFFFF) >>> 0;
+    }
+    /** files: [{ name, text }] -> Blob (.zip) */
+    function makeZip(files) {
+      const enc = new TextEncoder();
+      const chunks = [], central = [];
+      let offset = 0;
+      const u16 = (n) => [n & 0xFF, (n >>> 8) & 0xFF];
+      const u32 = (n) => [n & 0xFF, (n >>> 8) & 0xFF, (n >>> 16) & 0xFF, (n >>> 24) & 0xFF];
+
+      files.forEach(f => {
+        const name = enc.encode(f.name);
+        const data = enc.encode('\ufeff' + f.text);   // BOM ให้ Excel อ่านภาษาไทยถูก
+        const crc = crc32(data);
+        const local = [].concat(
+          u32(0x04034b50), u16(20), u16(0x0800), u16(0), u16(0), u16(0),
+          u32(crc), u32(data.length), u32(data.length), u16(name.length), u16(0));
+        chunks.push(new Uint8Array(local), name, data);
+        central.push([].concat(
+          u32(0x02014b50), u16(20), u16(20), u16(0x0800), u16(0), u16(0), u16(0),
+          u32(crc), u32(data.length), u32(data.length),
+          u16(name.length), u16(0), u16(0), u16(0), u16(0), u32(0), u32(offset)));
+        central.push(name);
+        offset += local.length + name.length + data.length;
+      });
+
+      const cdChunks = [];
+      let cdSize = 0;
+      for (let i = 0; i < central.length; i += 2) {
+        const head = new Uint8Array(central[i]), nm = central[i + 1];
+        cdChunks.push(head, nm);
+        cdSize += head.length + nm.length;
+      }
+      const end = new Uint8Array([].concat(
+        u32(0x06054b50), u16(0), u16(0), u16(files.length), u16(files.length),
+        u32(cdSize), u32(offset), u16(0)));
+      return new Blob([...chunks, ...cdChunks, end], { type: 'application/zip' });
+    }
+
+    function downloadBlob(filename, blob) {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = filename;
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 2000);
+    }
+
+    /** สคริปต์สร้างตารางใหม่ทั้งหมด — ใช้ตอนต้องย้ายไป Supabase โปรเจกต์ใหม่ */
+    const RESTORE_DDL = `create extension if not exists "pgcrypto";
+
+create table if not exists lots (id uuid primary key default gen_random_uuid(), name text not null, lot_date date, created_at timestamptz default now());
+create table if not exists pieces (id uuid primary key default gen_random_uuid(), lot_id uuid references lots(id) on delete cascade, width_cm numeric, length_cm numeric, label text, price numeric, paid boolean default false, sell_price numeric, item_type text not null default 'ป้ายผ้า', created_at timestamptz default now());
+create table if not exists settings (key text primary key, value numeric);
+create table if not exists shop_info (key text primary key, value text, sort_order int default 0, updated_at timestamptz default now());
+create table if not exists products (id uuid primary key default gen_random_uuid(), name text not null, category text, pricing_mode text check (pricing_mode in ('fixed','per_area','tier')), unit_price numeric, area_rate numeric, tiers jsonb, unit text default 'ชิ้น', note text, active boolean default true, width_cm numeric, length_cm numeric, sort_order int default 10, created_at timestamptz default now());
+create table if not exists orders (id uuid primary key default gen_random_uuid(), order_no text unique, customer text, channel text, status text default 'new', due_date date, note text, total numeric default 0, payment_method text, paid_amount numeric default 0, address text, phone text, created_at timestamptz default now());
+create table if not exists order_items (id uuid primary key default gen_random_uuid(), order_id uuid references orders(id) on delete cascade, product_id uuid, name text, width_cm numeric, length_cm numeric, qty int default 1, unit_price numeric, line_total numeric);
+create table if not exists order_payments (id uuid primary key default gen_random_uuid(), order_id uuid references orders(id) on delete cascade, amount numeric, method text, note text, paid_at timestamptz default now());
+create table if not exists receipts (id uuid primary key default gen_random_uuid(), receipt_no text unique, recipient text, note text, total numeric, item_count int, order_id uuid references orders(id) on delete set null, created_at timestamptz default now());
+create table if not exists receipt_items (id uuid primary key default gen_random_uuid(), receipt_id uuid references receipts(id) on delete cascade, piece_id uuid, lot_name text, label text, width_cm numeric, length_cm numeric, price numeric);
+create table if not exists stock_items (id uuid primary key default gen_random_uuid(), name text not null, category text not null default 'อื่นๆ', unit text not null default 'ชิ้น', total_qty numeric not null default 0, used_qty numeric not null default 0, threshold_pct numeric not null default 20, note text, active boolean not null default true, created_at timestamptz default now());
+create table if not exists stock_moves (id uuid primary key default gen_random_uuid(), item_id uuid references stock_items(id) on delete cascade, kind text not null check (kind in ('in','out')), qty numeric not null, note text, order_id uuid references orders(id) on delete set null, order_no text, created_at timestamptz default now());
+create table if not exists activity_log (id uuid primary key default gen_random_uuid(), entity_type text, entity_id uuid, entity_label text, action text, detail text, created_at timestamptz default now());
+
+-- เปิด RLS: เข้าถึงได้เฉพาะคนที่ล็อกอินแล้ว (ต้องสมัครบัญชีในหน้าเว็บก่อน)
+do $$
+declare t text;
+begin
+  foreach t in array array['lots','pieces','settings','shop_info','products','orders','order_items','order_payments','receipts','receipt_items','stock_items','stock_moves','activity_log']
+  loop
+    execute format('alter table %I enable row level security', t);
+    execute format('drop policy if exists "authenticated full access" on %I', t);
+    execute format('create policy "authenticated full access" on %I for all to authenticated using (true) with check (true)', t);
+  end loop;
+end $$;
+`;
+
+    function sqlLit(v) {
+      if (v === null || v === undefined) return 'null';
+      if (typeof v === 'boolean') return v ? 'true' : 'false';
+      if (typeof v === 'number') return String(v);
+      if (typeof v === 'object') return "'" + JSON.stringify(v).replace(/'/g, "''") + "'::jsonb";
+      return "'" + String(v).replace(/'/g, "''") + "'";
+    }
+
+    function buildRestoreSql(data, stampText) {
+      const out = ['-- Haifa Design — สคริปต์กู้คืนฐานข้อมูลทั้งหมด',
+        '-- สำรองเมื่อ: ' + stampText,
+        '-- วิธีใช้: สร้างโปรเจกต์ Supabase ใหม่ -> SQL Editor -> วางไฟล์นี้ทั้งไฟล์ -> Run',
+        '--        แล้วแก้ SUPABASE_URL / SUPABASE_ANON_KEY ใน app.html ให้ตรงกับโปรเจกต์ใหม่', '',
+        RESTORE_DDL, '', '-- ===== ข้อมูล ====='];
+      BACKUP_TABLES.forEach(t => {
+        const rows = data[t] || [];
+        if (!rows.length) { out.push('-- ' + t + ': ไม่มีข้อมูล'); return; }
+        const cols = Object.keys(rows[0]);
+        out.push('-- ' + t + ' (' + rows.length + ' แถว)');
+        rows.forEach(r => {
+          out.push('insert into ' + t + ' (' + cols.join(', ') + ') values (' +
+            cols.map(c => sqlLit(r[c])).join(', ') + ') on conflict do nothing;');
+        });
+        out.push('');
+      });
+      return out.join('\n');
+    }
+
     function buildBackupPanel() {
       const panel = document.createElement('div');
       panel.className = 'panel no-print';
@@ -1508,50 +1626,68 @@
         : 'สำรองล่าสุด: ' + days + ' วันที่แล้ว';
       const warn = (days === null || days > 30);
       panel.innerHTML = `
-        <h2>${icon('box', 17)}สำรองข้อมูล</h2>
-        <div class="${warn ? 'info-note' : 'hint'}" style="margin-bottom:10px">
-          ${esc(stamp)}${warn ? ' — แนะนำให้สำรองเก็บไว้ในเครื่อง (แพลนฟรีของ Supabase ดาวน์โหลด backup เองไม่ได้)' : ''}
+        <h2>${icon('box', 17)}สำรองข้อมูลทั้งระบบ</h2>
+        <div class="${warn ? 'info-note' : 'hint'}" style="margin-bottom:12px">
+          ${esc(stamp)}${warn ? ' — แพลนฟรีของ Supabase ดาวน์โหลด backup เองไม่ได้ ควรเก็บไฟล์ไว้ในเครื่อง' : ''}
         </div>
-        <div class="field-row">
-          <button class="btn" id="bkJson">${icon('box', 15)}สำรองทั้งหมด (JSON)</button>
-          <button class="btn secondary" id="bkCsv">${icon('clipboard', 15)}สำรองเป็น CSV (เปิด Excel)</button>
-        </div>
+        <button class="btn block" id="bkAll">${icon('box', 16)}สำรองทั้งระบบ (ไฟล์เดียว .zip)</button>
         <div class="msg" id="bkMsg"></div>
-        <div class="hint">ไฟล์จะถูกดาวน์โหลดลงเครื่อง — เก็บไว้ในโฟลเดอร์ปลอดภัยหรืออัปขึ้นไดรฟ์ก็ได้<br>
-          หมายเหตุ: รูปงานไม่ได้อยู่ในไฟล์นี้ (รูปเก็บบน Google Drive อยู่แล้ว)</div>
+        <div class="hint">ในไฟล์ zip มี: ข้อมูลดิบ JSON · ตาราง CSV ทุกตาราง (เปิด Excel ได้) · สคริปต์กู้คืน SQL · คู่มือ<br>
+          หมายเหตุ: รูปงานไม่ได้อยู่ในไฟล์นี้ (เก็บบน Google Drive อยู่แล้ว)</div>
       `;
       const msg = panel.querySelector('#bkMsg');
-      const stampNow = () => new Date().toISOString().slice(0, 10);
 
-      panel.querySelector('#bkJson').addEventListener('click', async () => {
+      panel.querySelector('#bkAll').addEventListener('click', async () => {
+        const btn = panel.querySelector('#bkAll');
+        btn.disabled = true;
         msg.textContent = 'กำลังดึงข้อมูล...'; msg.className = 'msg';
         try {
           const data = await fetchAllTables();
-          downloadFile('haifa-backup-' + stampNow() + '.json',
-            JSON.stringify({ exported_at: new Date().toISOString(), data }, null, 1), 'application/json');
-          markBackedUp();
-          const n = Object.values(data).reduce((s, r) => s + r.length, 0);
-          msg.textContent = 'สำรองแล้ว ' + n + ' รายการ จาก ' + BACKUP_TABLES.length + ' ตาราง';
-          msg.className = 'msg ok';
-        } catch (e) { msg.textContent = 'สำรองไม่สำเร็จ: ' + e.message; msg.className = 'msg error'; }
-      });
+          const now = new Date();
+          const day = now.toISOString().slice(0, 10);
+          const stampText = now.toLocaleString('th-TH');
+          const rows = Object.values(data).reduce((s, r) => s + r.length, 0);
 
-      panel.querySelector('#bkCsv').addEventListener('click', async () => {
-        msg.textContent = 'กำลังดึงข้อมูล...'; msg.className = 'msg';
-        try {
-          const data = await fetchAllTables();
-          const day = stampNow();
-          let n = 0;
-          for (const t of BACKUP_TABLES) {
-            if (!data[t].length) continue;
-            downloadFile('haifa-' + t + '-' + day + '.csv', rowsToCsv(data[t]), 'text/csv');
-            n++;
-            await new Promise(r => setTimeout(r, 350));   // เว้นจังหวะ กันเบราว์เซอร์บล็อกดาวน์โหลดรัว
-          }
+          const readme = [
+            'สำรองข้อมูลระบบ Haifa Design',
+            'สำรองเมื่อ: ' + stampText,
+            '',
+            'ในไฟล์นี้มีอะไรบ้าง',
+            '  backup.json   ข้อมูลดิบทั้งหมดในไฟล์เดียว',
+            '  csv/          ข้อมูลเดียวกัน แยกไฟล์ต่อตาราง เปิดด้วย Excel ได้เลย',
+            '  restore.sql   สคริปต์สร้างฐานข้อมูลใหม่ + ใส่ข้อมูลกลับ',
+            '',
+            'วิธีกู้คืนถ้าโปรเจกต์ Supabase หาย',
+            '  1. สร้างโปรเจกต์ใหม่ที่ supabase.com (ฟรี)',
+            '  2. SQL Editor -> วางไฟล์ restore.sql ทั้งไฟล์ -> Run',
+            '  3. สมัครบัญชีใหม่ในหน้าเว็บ (ปุ่ม "สมัครใช้งานครั้งแรก") แล้วยืนยันอีเมล',
+            '  4. แก้ SUPABASE_URL กับ SUPABASE_ANON_KEY ใน app.html ให้ตรงกับโปรเจกต์ใหม่',
+            '',
+            'รูปงานไม่ได้อยู่ในไฟล์นี้ — เก็บบน Google Drive ของคุณเอง',
+            '  โฟลเดอร์ "งานป้ายผ้า" และ "รูปงานออเดอร์"',
+            '',
+            'จำนวนข้อมูลที่สำรองไว้',
+          ].concat(BACKUP_TABLES.map(t => '  ' + t.padEnd(18) + String((data[t] || []).length).padStart(5) + ' แถว')).join('\n');
+
+          const files = [
+            { name: 'อ่านก่อน.txt', text: readme },
+            { name: 'backup.json', text: JSON.stringify({ exported_at: now.toISOString(), data }, null, 1) },
+            { name: 'restore.sql', text: buildRestoreSql(data, stampText) },
+          ];
+          BACKUP_TABLES.forEach(t => {
+            if ((data[t] || []).length) files.push({ name: 'csv/' + t + '.csv', text: rowsToCsv(data[t]) });
+          });
+
+          msg.textContent = 'กำลังบีบไฟล์...';
+          const zip = makeZip(files);
+          downloadBlob('haifa-backup-' + day + '.zip', zip);
           markBackedUp();
-          msg.textContent = 'ดาวน์โหลดแล้ว ' + n + ' ไฟล์ (ถ้าเบราว์เซอร์ถามว่าจะโหลดหลายไฟล์ไหม ให้กดอนุญาต)';
+          msg.textContent = 'สำรองแล้ว: ' + rows + ' แถว · ' + files.length + ' ไฟล์ · ' +
+            (zip.size / 1024).toFixed(0) + ' KB';
           msg.className = 'msg ok';
-        } catch (e) { msg.textContent = 'สำรองไม่สำเร็จ: ' + e.message; msg.className = 'msg error'; }
+        } catch (e) {
+          msg.textContent = 'สำรองไม่สำเร็จ: ' + e.message; msg.className = 'msg error';
+        } finally { btn.disabled = false; }
       });
       return panel;
     }
