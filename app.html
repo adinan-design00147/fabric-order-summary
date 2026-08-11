@@ -577,9 +577,11 @@
         .join('/');
     }
 
-    async function driveList(lot) {
+    // root: 'fabric' = โฟลเดอร์งานป้ายผ้า (แยกตามล็อต) · 'order' = รูปงานออเดอร์ลูกค้า (แยกตามเลขออเดอร์)
+    async function driveList(lot, root) {
       if (!DRIVE_API_URL) return [];
-      const url = DRIVE_API_URL + '?action=list&lot=' + encodeURIComponent(lot);
+      const url = DRIVE_API_URL + '?action=list&root=' + encodeURIComponent(root || 'fabric')
+        + '&lot=' + encodeURIComponent(lot);
       const res = await fetch(url);
       const data = await res.json();
       if (!data.ok) throw new Error(data.error || 'โหลดรูปไม่สำเร็จ');
@@ -608,10 +610,12 @@
       });
     }
 
-    function buildGallery(lotName) {
+    function buildGallery(lotName, opts) {
+      const root = (opts && opts.root) || 'fabric';
+      const emptyText = (opts && opts.emptyText) || 'ยังไม่มีรูปในล็อตนี้';
       const wrap = document.createElement('div');
       wrap.className = 'gallery';
-      wrap.hidden = true;
+      wrap.hidden = !(opts && opts.open);
       wrap.innerHTML = `
         <div class="gallery-bar">
           <label class="btn secondary btn-sm" style="display:inline-flex;align-items:center;cursor:pointer">
@@ -635,7 +639,7 @@
         if (!files.length) {
           grid.innerHTML = '';
           grid.insertAdjacentHTML('beforebegin', '');
-          grid.innerHTML = `<div class="gallery-empty">ยังไม่มีรูปในล็อตนี้</div>`;
+          grid.innerHTML = `<div class="gallery-empty">${esc(emptyText)}</div>`;
           return;
         }
         grid.innerHTML = files.map(f => `
@@ -678,7 +682,7 @@
         }
         setMsg('กำลังโหลดรูป...');
         try {
-          paint(await driveList(lotName));
+          paint(await driveList(lotName, root));
           setMsg('');
         } catch (e) { setMsg(e.message, true); }
       }
@@ -690,7 +694,7 @@
           setMsg('กำลังอัปโหลด ' + (i + 1) + '/' + files.length + '...');
           try {
             await drivePost({
-              action: 'upload', lot: lotName,
+              action: 'upload', root, lot: lotName,
               filename: files[i].name, mimeType: files[i].type,
               data: await fileToBase64(files[i]),
             });
@@ -1955,6 +1959,19 @@
           (ORDER_STATUS[o.status] || {}).label + ' → ' + (ORDER_STATUS[c.dataset.s] || {}).label);
         await boot();
       }));
+
+      // ---- รูปงานของออเดอร์ (เก็บบน Google Drive แยกโฟลเดอร์ตามเลขออเดอร์) ----
+      const imgPanel = document.createElement('div');
+      imgPanel.className = 'panel no-print';
+      imgPanel.innerHTML = `<h2>${icon('image', 17)}รูปงาน <span class="hint" style="font-weight:400">โฟลเดอร์ ${esc(o.order_no)} บน Google Drive</span></h2>`;
+      const gal = buildGallery(o.order_no, {
+        root: 'order',
+        open: true,
+        emptyText: 'ยังไม่มีรูปในออเดอร์นี้ — กด "เพิ่มรูป" เพื่ออัปโหลดขึ้นไดรฟ์',
+      });
+      imgPanel.appendChild(gal);
+      app.appendChild(imgPanel);
+      gal.__load();
 
       // ---- การชำระเงินจากลูกค้า ----
       const payPanel = document.createElement('div');
