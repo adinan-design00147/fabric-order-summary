@@ -773,6 +773,14 @@
     // ===== logic คำนวณ (ย้ายมาจาก calc.js) =====
     function round2(n) { return Math.round(n * 100) / 100; }
     function round4(n) { return Math.round(n * 10000) / 10000; }
+    // ประเภทงานที่ส่งผลิตกับร้านอื่น — มีแค่ "ป้ายผ้า" ที่คิดผ้าเป็นหลา
+    const PRODUCE_TYPES = ['ป้ายผ้า', 'โฟมบอร์ด', 'สติกเกอร์ A3', 'สติกเกอร์ติดกระจก'];
+    const isFabricPiece = (r) => (r.item_type || 'ป้ายผ้า') === 'ป้ายผ้า';
+    /** ผ้าที่ใช้ต่อชิ้น — งานที่ไม่ใช่ป้ายผ้าไม่นับผ้า */
+    function pieceYard(r, settings) {
+      return isFabricPiece(r) ? calcPiece(r.width_cm, r.length_cm, settings).yardPerPiece : 0;
+    }
+
     function calcPiece(widthCm, lengthCm, settings) {
       const shrinkLength = round2(lengthCm * settings.shrink_rate);
       const yardPerPiece = round4((widthCm * shrinkLength) / settings.yard_area_cm2);
@@ -859,7 +867,7 @@
       if (key === 'orders') return { label: 'ออเดอร์', icon: 'clipboard' };
       if (key === 'orderView') return { label: 'ออเดอร์', icon: 'clipboard' };
       if (key === 'products') return { label: 'สินค้า & ราคา', icon: 'price' };
-      if (key === 'fabric') return { label: 'ต้นทุนผลิต (ป้ายผ้า)', icon: 'factory' };
+      if (key === 'fabric') return { label: 'ต้นทุนผลิต', icon: 'factory' };
       if (key === 'stock') return { label: 'สต็อกของ', icon: 'box' };
       return PRODUCT_CATEGORIES[key] || { label: 'ระบบจัดการร้าน', icon: '' };
     }
@@ -1046,7 +1054,7 @@
       SETTINGS = await loadSettings();
       const [lotsRes, piecesRes, ordersRes, salesRes] = await Promise.all([
         sb.from('lots').select('id,name'),
-        sb.from('pieces').select('id,lot_id,width_cm,length_cm,label,price,paid'),
+        sb.from('pieces').select('id,lot_id,width_cm,length_cm,label,price,paid,item_type'),
         sb.from('product_orders').select('id,category,name,customer,quantity,unit_cost,paid,created_at'),
         sb.from('orders').select('id,order_no,customer,channel,status,total,paid_amount,due_date,created_at'),
       ]);
@@ -2815,7 +2823,7 @@
           sub: p.width_cm + ' x ' + p.length_cm + ' ซม.' + (lot ? ' · ' + lot.name : ''),
           amount: Number(p.price), paid: p.paid,
           date: lot ? parseLotDate(lot.name) : null,
-          yard: calcPiece(p.width_cm, p.length_cm, SETTINGS).yardPerPiece,
+          yard: pieceYard(p, SETTINGS),
         });
       });
       orders.forEach(o => {
@@ -2838,7 +2846,7 @@
       SETTINGS = await loadSettings();
       const [lotsRes, piecesRes, ordersRes, salesRes] = await Promise.all([
         sb.from('lots').select('id,name'),
-        sb.from('pieces').select('id,lot_id,width_cm,length_cm,label,price,paid'),
+        sb.from('pieces').select('id,lot_id,width_cm,length_cm,label,price,paid,item_type'),
         sb.from('product_orders').select('id,category,name,customer,quantity,unit_cost,paid,created_at'),
         sb.from('orders').select('id,order_no,customer,channel,status,total,paid_amount,due_date,created_at'),
       ]);
@@ -3519,7 +3527,7 @@
 
       const { data: lots, error: e1 } = await sb.from('lots').select('id,name,lot_date,created_at');
       if (e1) throw e1;
-      const { data: pieces, error: e2 } = await sb.from('pieces').select('id,lot_id,width_cm,length_cm,label,price,paid');
+      const { data: pieces, error: e2 } = await sb.from('pieces').select('id,lot_id,width_cm,length_cm,label,price,paid,item_type');
       if (e2) throw e2;
 
       lots.sort((a, b) => lotSortKey(b.name) - lotSortKey(a.name));
@@ -3531,14 +3539,14 @@
       if (activeTab === 'customer') activeTab = 'daily';
       const app = document.getElementById('app');
       app.innerHTML = '';
-      app.appendChild(buildPageHead('ต้นทุนผลิต (ป้ายผ้า)', 'งานที่ส่งผลิตกับร้านอื่น — ล็อตงาน คำนวณผ้า และยอดที่ต้องจ่ายร้านผลิต'));
+      app.appendChild(buildPageHead('ต้นทุนผลิต', 'งานที่ส่งผลิตกับร้านอื่น — ป้ายผ้า โฟมบอร์ด สติกเกอร์ และยอดที่ต้องจ่ายร้านผลิต'));
 
       let totalPieces = 0, grandTotalYard = 0, grandTotalPrice = 0;
       const lotBlocks = lots.map(lot => {
         const rows = pieces.filter(p => p.lot_id === lot.id);
         let lotYard = 0, lotPrice = 0;
         rows.forEach(r => {
-          lotYard += calcPiece(r.width_cm, r.length_cm, SETTINGS).yardPerPiece;
+          lotYard += pieceYard(r, SETTINGS);
           lotPrice += Number(r.price);
         });
         totalPieces += rows.length; grandTotalYard += lotYard; grandTotalPrice += lotPrice;
@@ -3611,7 +3619,7 @@
         card.className = 'lot-card';
         card.dataset.search = (lot.name + ' ' + rows.map(r => r.label || '').join(' ')).toLowerCase();
         const rowsHtml = rows.map(r => {
-          const { yardPerPiece } = calcPiece(r.width_cm, r.length_cm, SETTINGS);
+          const yardPerPiece = pieceYard(r, SETTINGS);
           return `<tr>
             <td class="pick-cell" data-label="เลือก">
               <input type="checkbox" class="pick" data-id="${r.id}" data-lot="${esc(lot.name)}"
@@ -3619,9 +3627,9 @@
                 data-price="${r.price}" aria-label="เลือกชิ้นงานนี้" ${selectedPieces.has(r.id) ? 'checked' : ''}>
             </td>
             <td class="piece-name" data-label="รายการ">
-              <span class="piece-name-text">${esc(r.label || '-')}</span>
+              <span class="piece-name-text">${esc(r.label || '-')}${isFabricPiece(r) ? '' : ' <span class="st st-prod">' + esc(r.item_type) + '</span>'}</span>
               <span class="piece-name-actions">
-                <button class="icon-btn icon-btn-edit edit-piece" data-id="${r.id}" data-label="${esc(r.label || '')}" data-width="${r.width_cm}" data-length="${r.length_cm}" aria-label="แก้ไขชิ้นงาน" title="แก้ไข">
+                <button class="icon-btn icon-btn-edit edit-piece" data-id="${r.id}" data-label="${esc(r.label || '')}" data-width="${r.width_cm}" data-length="${r.length_cm}" data-type="${esc(r.item_type || 'ป้ายผ้า')}" data-price="${r.price}" aria-label="แก้ไขชิ้นงาน" title="แก้ไข">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
                 </button>
                 <button class="icon-btn icon-btn-delete delete-piece" data-id="${r.id}" aria-label="ลบชิ้นงาน" title="ลบ">
@@ -3629,9 +3637,9 @@
                 </button>
               </span>
             </td>
-            <td data-label="ขนาด (ซม.)">${r.width_cm} x ${r.length_cm}</td>
+            <td data-label="ขนาด (ซม.)">${r.width_cm && r.length_cm ? r.width_cm + ' x ' + r.length_cm : '—'}</td>
             <td data-label="ราคา">${fmtBaht(r.price)}</td>
-            <td data-label="ผ้า (หลา)">${yardPerPiece.toFixed(2)}</td>
+            <td data-label="ผ้า (หลา)">${isFabricPiece(r) ? yardPerPiece.toFixed(2) : '—'}</td>
             <td data-label="สถานะ"><span class="paid-badge ${r.paid ? 'paid' : 'unpaid'}" data-id="${r.id}" data-paid="${r.paid}">${r.paid ? 'จ่ายแล้ว' : 'ยังไม่จ่าย'}</span></td>
           </tr>`;
         }).join('');
@@ -3853,12 +3861,12 @@
         histCard.innerHTML = `<div class="loading">ยังไม่มีรายการที่จ่ายแล้ว</div>`;
       } else {
         const histRowsHtml = paidRows.map(({ lot, r }) => {
-          const { yardPerPiece } = calcPiece(r.width_cm, r.length_cm, SETTINGS);
+          const yardPerPiece = pieceYard(r, SETTINGS);
           return `<tr>
             <td data-label="ล็อต / รายการ">${esc(lot.name)}${r.label ? ' — ' + esc(r.label) : ''}</td>
-            <td data-label="ขนาด (ซม.)">${r.width_cm} x ${r.length_cm}</td>
+            <td data-label="ขนาด (ซม.)">${r.width_cm && r.length_cm ? r.width_cm + ' x ' + r.length_cm : '—'}</td>
             <td data-label="ราคา">${fmtBaht(r.price)}</td>
-            <td data-label="ผ้า (หลา)">${yardPerPiece.toFixed(2)}</td>
+            <td data-label="ผ้า (หลา)">${isFabricPiece(r) ? yardPerPiece.toFixed(2) : '—'}</td>
             <td data-label="สถานะ"><span class="paid-badge paid" data-id="${r.id}" data-paid="true">จ่ายแล้ว</span></td>
           </tr>`;
         }).join('');
@@ -3908,12 +3916,15 @@
           const label = btn.dataset.label;
           const width = btn.dataset.width;
           const length = btn.dataset.length;
+          const itemType = btn.dataset.type || 'ป้ายผ้า';
+          const isFabric = itemType === 'ป้ายผ้า';
           tr.innerHTML = `
             <td colspan="6">
               <div class="edit-row">
                 <input class="edit-label" placeholder="ชื่อ/รายละเอียด" aria-label="ชื่อ/รายละเอียด" value="${esc(label)}">
                 <input class="edit-width" type="number" min="0" step="any" value="${width}" placeholder="กว้าง" aria-label="กว้าง (ซม.)">
                 <input class="edit-length" type="number" min="0" step="any" value="${length}" placeholder="ยาว" aria-label="ยาว (ซม.)">
+                ${isFabric ? '' : `<input class="edit-cost" type="number" min="0" step="1" value="${btn.dataset.price}" placeholder="ต้นทุน/ชิ้น" aria-label="ต้นทุนต่อชิ้น (บาท)">`}
                 <button class="btn btn-sm save-piece">${icon('check', 15)}บันทึก</button>
                 <button class="btn secondary btn-sm cancel-edit">${icon('close', 15)}ยกเลิก</button>
               </div>
@@ -3924,9 +3935,11 @@
             const newLabel = tr.querySelector('.edit-label').value.trim();
             const newWidth = parseFloat(tr.querySelector('.edit-width').value);
             const newLength = parseFloat(tr.querySelector('.edit-length').value);
-            if (!newWidth || !newLength) { alert('กรอกกว้างและยาวให้ครบ'); return; }
-            const newPrice = Math.round(newWidth * newLength * SETTINGS.price_rate);
-            const { error } = await sb.from('pieces').update({ label: newLabel || null, width_cm: newWidth, length_cm: newLength, price: newPrice }).eq('id', id);
+            if (isFabric && (!newWidth || !newLength)) { alert('กรอกกว้างและยาวให้ครบ'); return; }
+            const newPrice = isFabric
+              ? Math.round(newWidth * newLength * SETTINGS.price_rate)
+              : Math.round(parseFloat(tr.querySelector('.edit-cost').value) || 0);
+            const { error } = await sb.from('pieces').update({ label: newLabel || null, width_cm: newWidth || 0, length_cm: newLength || 0, price: newPrice }).eq('id', id);
             if (error) { alert('บันทึกไม่สำเร็จ: ' + error.message); return; }
             await loadAll();
           });
@@ -4037,9 +4050,15 @@
       const lotOptions = lots.map(l => `<option value="${l.id}" ${l.id === lastSelectedLotId ? 'selected' : ''}>${esc(l.name)}</option>`).join('');
       piecePanel.innerHTML = `
         <h2>${icon('thread', 17)}เพิ่มชิ้นงาน</h2>
-        <div class="field" style="margin-bottom:var(--space-3)">
-          <label for="pieceLot">เลือกล็อต</label>
-          <select id="pieceLot">${lotOptions || '<option value="">-- ยังไม่มีล็อต --</option>'}</select>
+        <div class="form-grid" style="margin-bottom:var(--space-3)">
+          <div class="field">
+            <label for="pieceLot">เลือกล็อต</label>
+            <select id="pieceLot">${lotOptions || '<option value="">-- ยังไม่มีล็อต --</option>'}</select>
+          </div>
+          <div class="field">
+            <label for="pieceType">ประเภทงาน</label>
+            <select id="pieceType">${PRODUCE_TYPES.map(t => `<option>${esc(t)}</option>`).join('')}</select>
+          </div>
         </div>
         <div class="form-grid">
           <div class="field">
@@ -4054,6 +4073,10 @@
             <label for="pieceLength">ยาว (ซม.)</label>
             <input id="pieceLength" type="number" min="0" placeholder="0" inputmode="decimal">
           </div>
+          <div class="field" id="pieceCostField" style="display:none">
+            <label for="pieceCost">ต้นทุน/ชิ้น (บาท)</label>
+            <input id="pieceCost" type="number" min="0" step="1" placeholder="0" inputmode="numeric">
+          </div>
           <div class="field">
             <label for="pieceQty">จำนวน</label>
             <input id="pieceQty" type="number" min="1" value="1" inputmode="numeric">
@@ -4061,11 +4084,22 @@
         </div>
         <button id="addPieceBtn" class="btn secondary block">+ เพิ่มชิ้นงาน</button>
         <div class="msg" id="pieceMsg"></div>
-        <div class="hint">ราคาต่อชิ้นคำนวณอัตโนมัติ = กว้าง x ยาว x ${SETTINGS.price_rate} บาท/ตร.ซม.</div>
+        <div class="hint" id="pieceHint">ราคาต่อชิ้นคำนวณอัตโนมัติ = กว้าง x ยาว x ${SETTINGS.price_rate} บาท/ตร.ซม.</div>
       `;
       piecePanel.querySelector('#pieceLot').addEventListener('change', (e) => {
         lastSelectedLotId = e.target.value;
       });
+      // ป้ายผ้า = คิดราคาจากขนาดอัตโนมัติ · งานอื่น = กรอกต้นทุนที่ร้านผลิตคิดมาเอง
+      const typeSel = piecePanel.querySelector('#pieceType');
+      function syncPieceType() {
+        const fabric = typeSel.value === 'ป้ายผ้า';
+        piecePanel.querySelector('#pieceCostField').style.display = fabric ? 'none' : '';
+        piecePanel.querySelector('#pieceHint').textContent = fabric
+          ? 'ราคาต่อชิ้นคำนวณอัตโนมัติ = กว้าง x ยาว x ' + SETTINGS.price_rate + ' บาท/ตร.ซม.'
+          : 'งาน' + typeSel.value + ' ไม่คิดผ้า — กรอกต้นทุนที่ร้านผลิตคิดมาเอง (ขนาดใส่หรือไม่ใส่ก็ได้)';
+      }
+      typeSel.addEventListener('change', syncPieceType);
+      syncPieceType();
       piecePanel.querySelector('#addPieceBtn').addEventListener('click', async () => {
         const lotId = piecePanel.querySelector('#pieceLot').value;
         const label = piecePanel.querySelector('#pieceLabel').value.trim();
@@ -4075,13 +4109,18 @@
         const msg = piecePanel.querySelector('#pieceMsg');
         const btn = piecePanel.querySelector('#addPieceBtn');
         msg.textContent = ''; msg.className = 'msg';
+        const itemType = piecePanel.querySelector('#pieceType').value;
+        const isFabric = itemType === 'ป้ายผ้า';
+        const cost = parseFloat(piecePanel.querySelector('#pieceCost').value);
         if (!lotId) { msg.textContent = 'ยังไม่มีล็อต กรุณาเพิ่มล็อตก่อน'; msg.className = 'msg error'; return; }
-        if (!width || !length) { msg.textContent = 'กรอกกว้างและยาวให้ครบ'; msg.className = 'msg error'; return; }
+        if (isFabric && (!width || !length)) { msg.textContent = 'กรอกกว้างและยาวให้ครบ'; msg.className = 'msg error'; return; }
+        if (!isFabric && !(cost > 0)) { msg.textContent = 'กรอกต้นทุน/ชิ้นก่อน'; msg.className = 'msg error'; return; }
         btn.disabled = true; btn.textContent = 'กำลังเพิ่ม...';
         lastSelectedLotId = lotId;
-        const price = Math.round(width * length * SETTINGS.price_rate);
+        const price = isFabric ? Math.round(width * length * SETTINGS.price_rate) : Math.round(cost);
         const rowsToInsert = Array.from({ length: qty }, () => ({
-          lot_id: lotId, width_cm: width, length_cm: length, label: label || null, price, paid: false
+          lot_id: lotId, width_cm: width || 0, length_cm: length || 0,
+          label: label || null, price, paid: false, item_type: itemType,
         }));
         const { error } = await sb.from('pieces').insert(rowsToInsert);
         if (error) {
