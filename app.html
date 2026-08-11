@@ -7,9 +7,31 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@400;500;600;700&display=swap" rel="stylesheet">
-<script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+<!-- ล็อกเวอร์ชันไว้ชัดเจน กันวันหน้าไลบรารีออกเวอร์ชันใหม่แล้วโค้ดพัง -->
+<script src="https://unpkg.com/@supabase/supabase-js@2.112.2/dist/umd/supabase.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script>
+  // ถ้า CDN หลักล่ม ให้ลองโหลดจาก CDN สำรอง (jsdelivr) ก่อนเริ่มระบบ
+  window.__libsReady = (function () {
+    function load(src) {
+      return new Promise(function (ok, no) {
+        var s = document.createElement('script');
+        s.src = src; s.onload = ok; s.onerror = no;
+        document.head.appendChild(s);
+      });
+    }
+    async function tryLoad(check, src) {
+      if (window[check]) return;
+      try { await load(src); } catch (e) { /* สำรองก็ล่ม -> ปล่อยให้ระบบจัดการต่อ */ }
+    }
+    return (async function () {
+      await tryLoad('supabase',   'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.112.2/dist/umd/supabase.js');
+      await tryLoad('Chart',      'https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js');
+      await tryLoad('html2canvas','https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js');
+    })();
+  })();
+</script>
 <style>
   :root {
     --bg: #f7f5f2; --card: #ffffff; --text: #1f2430; --sub: #586273;
@@ -571,7 +593,7 @@
     // ===== ตั้งค่า Supabase =====
     const SUPABASE_URL = 'https://pmcnamlesodpuynakkuk.supabase.co';
     const SUPABASE_ANON_KEY = 'sb_publishable_qkWioinGX5ybtENThpRjLw_9R3OL_Gw';
-    const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    let sb;   // สร้างจริงใน startApp() หลังไลบรารีโหลดเสร็จ
 
     // ===== ตัวกลางรูปงานบน Google Drive (Apps Script Web App) =====
     // วาง URL ที่ได้จากการ deploy drive-images.gs ตรงนี้ (ลงท้ายด้วย /exec)
@@ -1236,7 +1258,115 @@
       `;
       app.appendChild(row2);
 
+      app.appendChild(buildBackupPanel());
+
       drawCharts(all);
+    }
+
+    // ===== สำรองข้อมูลลงเครื่อง =====
+    // แพลนฟรีของ Supabase โหลด backup เองไม่ได้ -> ต้องดึงข้อมูลออกมาเก็บไว้เอง
+    const BACKUP_TABLES = ['lots', 'pieces', 'settings', 'shop_info', 'products', 'orders',
+      'order_items', 'order_payments', 'receipts', 'receipt_items',
+      'stock_items', 'stock_moves', 'activity_log'];
+    const BACKUP_KEY = 'haifa_last_backup';
+
+    async function fetchAllTables() {
+      const out = {};
+      for (const t of BACKUP_TABLES) {
+        const { data, error } = await sb.from(t).select('*');
+        if (error) throw new Error(t + ': ' + error.message);
+        out[t] = data || [];
+      }
+      return out;
+    }
+
+    function downloadFile(filename, text, mime) {
+      const blob = new Blob(['﻿' + text], { type: (mime || 'text/plain') + ';charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = filename;
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1500);
+    }
+
+    function rowsToCsv(rows) {
+      if (!rows.length) return '';
+      const cols = Object.keys(rows[0]);
+      const cell = (v) => {
+        if (v === null || v === undefined) return '';
+        const s = (typeof v === 'object') ? JSON.stringify(v) : String(v);
+        return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+      };
+      return [cols.join(','), ...rows.map(r => cols.map(c => cell(r[c])).join(','))].join('\n');
+    }
+
+    function markBackedUp() {
+      try { localStorage.setItem(BACKUP_KEY, new Date().toISOString()); } catch (e) {}
+    }
+
+    function daysSinceBackup() {
+      try {
+        const t = localStorage.getItem(BACKUP_KEY);
+        if (!t) return null;
+        return Math.floor((Date.now() - new Date(t).getTime()) / 86400000);
+      } catch (e) { return null; }
+    }
+
+    function buildBackupPanel() {
+      const panel = document.createElement('div');
+      panel.className = 'panel no-print';
+      const days = daysSinceBackup();
+      const stamp = days === null ? 'ยังไม่เคยสำรอง'
+        : days === 0 ? 'สำรองล่าสุด: วันนี้'
+        : 'สำรองล่าสุด: ' + days + ' วันที่แล้ว';
+      const warn = (days === null || days > 30);
+      panel.innerHTML = `
+        <h2>${icon('box', 17)}สำรองข้อมูล</h2>
+        <div class="${warn ? 'info-note' : 'hint'}" style="margin-bottom:10px">
+          ${esc(stamp)}${warn ? ' — แนะนำให้สำรองเก็บไว้ในเครื่อง (แพลนฟรีของ Supabase ดาวน์โหลด backup เองไม่ได้)' : ''}
+        </div>
+        <div class="field-row">
+          <button class="btn" id="bkJson">${icon('box', 15)}สำรองทั้งหมด (JSON)</button>
+          <button class="btn secondary" id="bkCsv">${icon('clipboard', 15)}สำรองเป็น CSV (เปิด Excel)</button>
+        </div>
+        <div class="msg" id="bkMsg"></div>
+        <div class="hint">ไฟล์จะถูกดาวน์โหลดลงเครื่อง — เก็บไว้ในโฟลเดอร์ปลอดภัยหรืออัปขึ้นไดรฟ์ก็ได้<br>
+          หมายเหตุ: รูปงานไม่ได้อยู่ในไฟล์นี้ (รูปเก็บบน Google Drive อยู่แล้ว)</div>
+      `;
+      const msg = panel.querySelector('#bkMsg');
+      const stampNow = () => new Date().toISOString().slice(0, 10);
+
+      panel.querySelector('#bkJson').addEventListener('click', async () => {
+        msg.textContent = 'กำลังดึงข้อมูล...'; msg.className = 'msg';
+        try {
+          const data = await fetchAllTables();
+          downloadFile('haifa-backup-' + stampNow() + '.json',
+            JSON.stringify({ exported_at: new Date().toISOString(), data }, null, 1), 'application/json');
+          markBackedUp();
+          const n = Object.values(data).reduce((s, r) => s + r.length, 0);
+          msg.textContent = 'สำรองแล้ว ' + n + ' รายการ จาก ' + BACKUP_TABLES.length + ' ตาราง';
+          msg.className = 'msg ok';
+        } catch (e) { msg.textContent = 'สำรองไม่สำเร็จ: ' + e.message; msg.className = 'msg error'; }
+      });
+
+      panel.querySelector('#bkCsv').addEventListener('click', async () => {
+        msg.textContent = 'กำลังดึงข้อมูล...'; msg.className = 'msg';
+        try {
+          const data = await fetchAllTables();
+          const day = stampNow();
+          let n = 0;
+          for (const t of BACKUP_TABLES) {
+            if (!data[t].length) continue;
+            downloadFile('haifa-' + t + '-' + day + '.csv', rowsToCsv(data[t]), 'text/csv');
+            n++;
+            await new Promise(r => setTimeout(r, 350));   // เว้นจังหวะ กันเบราว์เซอร์บล็อกดาวน์โหลดรัว
+          }
+          markBackedUp();
+          msg.textContent = 'ดาวน์โหลดแล้ว ' + n + ' ไฟล์ (ถ้าเบราว์เซอร์ถามว่าจะโหลดหลายไฟล์ไหม ให้กดอนุญาต)';
+          msg.className = 'msg ok';
+        } catch (e) { msg.textContent = 'สำรองไม่สำเร็จ: ' + e.message; msg.className = 'msg error'; }
+      });
+      return panel;
     }
 
     // ===== ข้อมูลร้าน / ช่องทางชำระเงิน =====
@@ -4140,9 +4270,21 @@
       return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
     }
 
-    initTheme();
-    applyHash();
-    boot();
+    // ---- จุดเริ่มระบบ: รอไลบรารีให้พร้อมก่อน ----
+    (async function startApp() {
+      initTheme();
+      try { await window.__libsReady; } catch (e) { /* ไม่เป็นไร เช็คซ้ำข้างล่าง */ }
+      if (typeof supabase === 'undefined') {
+        document.getElementById('app').innerHTML =
+          '<div class="info-note">โหลดตัวเชื่อมฐานข้อมูลไม่สำเร็จ (เน็ตมีปัญหา หรือ CDN ล่มทั้ง 2 ที่)<br>' +
+          'ลองรีเฟรชหน้าอีกครั้ง ข้อมูลทั้งหมดยังอยู่ครบ ไม่ได้หายไปไหน</div>';
+        document.getElementById('statusMsg').textContent = 'เชื่อมต่อไม่ได้';
+        return;
+      }
+      sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+      applyHash();
+      boot();
+    })();
   </script>
 </body>
 </html>
