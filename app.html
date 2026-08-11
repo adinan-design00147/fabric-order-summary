@@ -1236,29 +1236,37 @@
     }
 
     // ---- ฟอร์มสร้างใบงาน ----
-    function openOrderForm() {
+    function openOrderForm(editOrder, editItems) {
+      const isEdit = !!editOrder;
       const app = document.getElementById('app');
       app.innerHTML = '';
-      app.appendChild(buildPageHead('สร้างใบงานใหม่', 'เลือกสินค้าจากรายการราคา หรือพิมพ์รายการเองก็ได้'));
+      app.appendChild(buildPageHead(
+        isEdit ? 'แก้ไขใบงาน ' + editOrder.order_no : 'สร้างใบงานใหม่',
+        isEdit ? 'เพิ่ม/ลบรายการได้ ยอดรวมคำนวณใหม่อัตโนมัติ' : 'เลือกสินค้าจากรายการราคา หรือพิมพ์รายการเองก็ได้'
+      ));
 
       const back = document.createElement('button');
       back.className = 'btn secondary btn-sm';
       back.style.marginBottom = 'var(--space-3)';
-      back.innerHTML = icon('back', 15) + 'กลับไปรายการใบงาน';
-      back.addEventListener('click', () => { currentView = 'orders'; boot(); });
+      back.innerHTML = icon('back', 15) + (isEdit ? 'ยกเลิกการแก้ไข' : 'กลับไปรายการใบงาน');
+      back.addEventListener('click', () => {
+        if (isEdit) { currentView = 'orderView'; }
+        else { currentView = 'orders'; }
+        boot();
+      });
       app.appendChild(back);
 
       const head = document.createElement('div');
       head.className = 'panel';
       head.innerHTML = `
         <div class="form-grid">
-          <div class="field"><label for="oCust">ชื่อลูกค้า</label><input id="oCust" placeholder="ไม่บังคับ"></div>
+          <div class="field"><label for="oCust">ชื่อลูกค้า</label><input id="oCust" placeholder="ไม่บังคับ" value="${isEdit ? esc(editOrder.customer || '') : ''}"></div>
           <div class="field">
             <label for="oChan">ช่องทาง</label>
-            <select id="oChan">${CHANNELS.map(c => `<option>${esc(c)}</option>`).join('')}</select>
+            <select id="oChan">${CHANNELS.map(c => `<option ${isEdit && editOrder.channel === c ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select>
           </div>
-          <div class="field"><label for="oDue">กำหนดส่ง</label><input id="oDue" type="date"></div>
-          <div class="field"><label for="oNote">หมายเหตุ</label><input id="oNote" placeholder="ไม่บังคับ"></div>
+          <div class="field"><label for="oDue">กำหนดส่ง</label><input id="oDue" type="date" value="${isEdit ? (editOrder.due_date || '') : ''}"></div>
+          <div class="field"><label for="oNote">หมายเหตุ</label><input id="oNote" placeholder="ไม่บังคับ" value="${isEdit ? esc(editOrder.note || '') : ''}"></div>
         </div>
       `;
       app.appendChild(head);
@@ -1275,7 +1283,7 @@
 
       const foot = document.createElement('div');
       foot.style.cssText = 'display:flex;gap:var(--space-2);margin-top:var(--space-4)';
-      foot.innerHTML = `<button class="btn block" id="saveOrder">${icon('check', 16)}บันทึกใบงาน</button>`;
+      foot.innerHTML = `<button class="btn block" id="saveOrder">${icon('check', 16)}${isEdit ? 'บันทึกการแก้ไข' : 'บันทึกใบงาน'}</button>`;
       app.appendChild(foot);
       const msg = document.createElement('div');
       msg.className = 'msg';
@@ -1311,7 +1319,7 @@
         return line;
       }
 
-      function addRow() {
+      function addRow(init) {
         const row = document.createElement('div');
         row.className = 'item-row';
         row.innerHTML = `
@@ -1354,11 +1362,26 @@
         sel.addEventListener('change', syncMode);
         row.querySelectorAll('input').forEach(i => i.addEventListener('input', recalcAll));
         row.querySelector('.i-del').addEventListener('click', () => { row.remove(); recalcAll(); });
-        syncMode();
+
+        if (init) {
+          // สินค้าที่เคยเลือกไว้อาจถูกลบไปแล้ว -> ตกเป็นรายการพิมพ์เอง ราคาเดิมยังอยู่
+          const stillExists = init.product_id && PRODUCTS.some(p => p.id === init.product_id);
+          sel.value = stillExists ? init.product_id : '';
+          syncMode();
+          if (!stillExists) nameInput.value = init.name || '';
+          row.querySelector('.i-w').value = init.width_cm ?? '';
+          row.querySelector('.i-l').value = init.length_cm ?? '';
+          row.querySelector('.i-qty').value = init.qty ?? 1;
+          if (!row.querySelector('.i-price').readOnly) row.querySelector('.i-price').value = init.unit_price ?? 0;
+          recalcAll();
+        } else {
+          syncMode();
+        }
       }
 
-      itemsPanel.querySelector('#addItem').addEventListener('click', addRow);
-      addRow();
+      itemsPanel.querySelector('#addItem').addEventListener('click', () => addRow());
+      if (isEdit && editItems && editItems.length) editItems.forEach(it => addRow(it));
+      else addRow();
 
       foot.querySelector('#saveOrder').addEventListener('click', async () => {
         const rows = [...list.querySelectorAll('.item-row')];
@@ -1383,25 +1406,41 @@
         btn.disabled = true; btn.textContent = 'กำลังบันทึก...';
         try {
           const total = items.reduce((s, i) => s + i.line_total, 0);
-          const order_no = await nextOrderNo();
-          const { data: ord, error: e1 } = await sb.from('orders').insert({
-            order_no,
+          const headFields = {
             customer: head.querySelector('#oCust').value.trim() || null,
             channel: head.querySelector('#oChan').value,
             due_date: head.querySelector('#oDue').value || null,
             note: head.querySelector('#oNote').value.trim() || null,
             total,
-          }).select('id').single();
-          if (e1) throw new Error(e1.message);
+          };
+
+          let orderId;
+          if (isEdit) {
+            const { error: e1 } = await sb.from('orders').update(headFields).eq('id', editOrder.id);
+            if (e1) throw new Error(e1.message);
+            // เขียนรายการใหม่ทั้งชุด (ง่ายและกันข้อมูลค้าง)
+            const { error: eDel } = await sb.from('order_items').delete().eq('order_id', editOrder.id);
+            if (eDel) throw new Error(eDel.message);
+            orderId = editOrder.id;
+          } else {
+            const { data: ord, error: e1 } = await sb.from('orders')
+              .insert({ order_no: await nextOrderNo(), ...headFields })
+              .select('id').single();
+            if (e1) throw new Error(e1.message);
+            orderId = ord.id;
+          }
+
           const { error: e2 } = await sb.from('order_items')
-            .insert(items.map(i => ({ ...i, order_id: ord.id })));
+            .insert(items.map(i => ({ ...i, order_id: orderId })));
           if (e2) throw new Error(e2.message);
-          viewingOrderId = ord.id;
+
+          viewingOrderId = orderId;
           currentView = 'orderView';
           await boot();
         } catch (err) {
           msg.textContent = 'บันทึกไม่สำเร็จ: ' + err.message; msg.className = 'msg error';
-          btn.disabled = false; btn.innerHTML = icon('check', 16) + 'บันทึกใบงาน';
+          btn.disabled = false;
+          btn.innerHTML = icon('check', 16) + (isEdit ? 'บันทึกการแก้ไข' : 'บันทึกใบงาน');
         }
       });
     }
@@ -1411,8 +1450,9 @@
       document.getElementById('statusMsg').textContent = 'กำลังโหลด...';
       const [oRes, iRes] = await Promise.all([
         sb.from('orders').select('id,order_no,customer,channel,status,due_date,note,total,created_at').eq('id', id).single(),
-        sb.from('order_items').select('name,width_cm,length_cm,qty,unit_price,line_total').eq('order_id', id),
+        sb.from('order_items').select('id,product_id,name,width_cm,length_cm,qty,unit_price,line_total').eq('order_id', id),
       ]);
+      await fetchProducts();
       if (oRes.error) throw oRes.error;
       if (iRes.error) throw iRes.error;
       renderOrderDetail(oRes.data, iRes.data);
@@ -1428,11 +1468,13 @@
       bar.style.cssText = 'display:flex;gap:var(--space-2);margin-bottom:var(--space-4);flex-wrap:wrap';
       bar.innerHTML = `
         <button class="btn secondary btn-sm" id="oBack">${icon('back', 15)}รายการใบงาน</button>
+        <button class="btn btn-sm" id="oEdit">${icon('edit', 15)}แก้ไขใบงาน</button>
         <button class="btn secondary btn-sm" id="oPrint">${icon('printer', 15)}พิมพ์ใบงาน</button>
         <button class="btn secondary btn-sm icon-btn-delete" id="oDel" style="width:auto;height:auto;padding:0 14px;min-height:44px">${icon('trash', 15)}ลบใบงาน</button>
       `;
       app.appendChild(bar);
       bar.querySelector('#oBack').addEventListener('click', () => { currentView = 'orders'; boot(); });
+      bar.querySelector('#oEdit').addEventListener('click', () => openOrderForm(o, items));
       bar.querySelector('#oPrint').addEventListener('click', () => window.print());
       bar.querySelector('#oDel').addEventListener('click', async () => {
         if (!confirm('ลบใบงาน ' + o.order_no + ' ?')) return;
