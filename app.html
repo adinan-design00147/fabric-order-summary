@@ -270,7 +270,7 @@
   .rc-sub { font-size: 11px; color: var(--sub); margin-top: 2px; }
   .rc-amt { font-size: 14px; font-weight: 700; color: var(--accent); white-space: nowrap; font-variant-numeric: tabular-nums; }
 
-  /* ===== ใบงาน / สินค้า ===== */
+  /* ===== ออเดอร์ / สินค้า ===== */
   .chips { display: flex; gap: var(--space-2); flex-wrap: wrap; margin-bottom: var(--space-3); }
   .chip {
     font-family: inherit; font-size: 13px; font-weight: 600; padding: 8px 14px; min-height: 40px;
@@ -793,7 +793,7 @@
       { key: 'dashboard', label: 'แดชบอร์ด', icon: 'dashboard' },
       { key: 'calendar',  label: 'ปฏิทิน',   icon: 'calendar' },
       { sep: true },
-      { key: 'orders',    label: 'ใบงาน',       icon: 'clipboard' },
+      { key: 'orders',    label: 'ออเดอร์',      icon: 'clipboard' },
       { key: 'products',  label: 'สินค้า & ราคา', icon: 'price' },
       { sep: true },
       { key: 'fabric',    label: 'ต้นทุนผลิต',  icon: 'factory' },
@@ -823,8 +823,8 @@
       if (key === 'customers') return { label: 'ข้อมูลลูกค้า', icon: 'user' };
       if (key === 'receipts') return { label: 'ใบเสร็จ', icon: 'receipt' };
       if (key === 'receiptView') return { label: 'ใบเสร็จ', icon: 'receipt' };
-      if (key === 'orders') return { label: 'ใบงาน', icon: 'clipboard' };
-      if (key === 'orderView') return { label: 'ใบงาน', icon: 'clipboard' };
+      if (key === 'orders') return { label: 'ออเดอร์', icon: 'clipboard' };
+      if (key === 'orderView') return { label: 'ออเดอร์', icon: 'clipboard' };
       if (key === 'products') return { label: 'สินค้า & ราคา', icon: 'price' };
       if (key === 'fabric') return { label: 'ต้นทุนผลิต (ป้ายผ้า)', icon: 'factory' };
       return PRODUCT_CATEGORIES[key] || { label: 'ระบบจัดการร้าน', icon: '' };
@@ -992,7 +992,7 @@
       app.innerHTML = '';
       app.appendChild(buildPageHead('แดชบอร์ด', 'ภาพรวมทั้งร้าน — ฝั่งขายและฝั่งต้นทุนผลิต'));
 
-      // ===== ฝั่งขาย (ใบงาน) =====
+      // ===== ฝั่งขาย (ออเดอร์) =====
       const now2 = new Date();
       const salesThisMonth = sales.filter(s => {
         const d = new Date(s.created_at);
@@ -1012,7 +1012,7 @@
       const salesHead = document.createElement('h2');
       salesHead.className = 'section-title';
       salesHead.style.marginTop = '0';
-      salesHead.innerHTML = icon('clipboard', 17) + 'ฝั่งขาย (ใบงาน)';
+      salesHead.innerHTML = icon('clipboard', 17) + 'ฝั่งขาย (ออเดอร์)';
       app.appendChild(salesHead);
 
       const salesKpi = document.createElement('div');
@@ -1028,7 +1028,7 @@
         </div>
         <div class="kpi">
           <div class="kpi-top"><span class="kpi-ico">${icon('clipboard', 17)}</span><span class="kpi-trend flat">ยังไม่ปิด</span></div>
-          <div><div class="kpi-num">${activeOrders.length}</div><div class="kpi-lbl">ใบงานที่ค้างอยู่</div></div>
+          <div><div class="kpi-num">${activeOrders.length}</div><div class="kpi-lbl">ออเดอร์ที่ค้างอยู่</div></div>
         </div>
         <div class="kpi">
           <div class="kpi-top"><span class="kpi-ico">${icon('truck', 17)}</span><span class="kpi-trend ${dueSoon.length ? 'down' : 'flat'}">7 วัน</span></div>
@@ -1048,11 +1048,11 @@
         chRow.innerHTML = `
           <div class="panel-card">
             <h3>ยอดขายตามช่องทาง</h3>
-            <div class="panel-sub">รวมทุกใบงานที่ไม่ถูกยกเลิก</div>
+            <div class="panel-sub">รวมทุกออเดอร์ที่ไม่ถูกยกเลิก</div>
             <div class="chart-box donut"><canvas id="chartChannel"></canvas></div>
           </div>
           <div class="panel-card">
-            <h3>ใบงานล่าสุด</h3>
+            <h3>ออเดอร์ล่าสุด</h3>
             <div class="panel-sub">${sales.length} ใบทั้งหมด</div>
             <div class="mini-list">${sales.slice(0, 8).map(s => {
               const st = ORDER_STATUS[s.status] || ORDER_STATUS.new;
@@ -1193,7 +1193,7 @@
     function renderProductCatalog(list) {
       const app = document.getElementById('app');
       app.innerHTML = '';
-      app.appendChild(buildPageHead('สินค้า & ราคา', 'ราคาขายของร้าน (รวมกำไรแล้ว) ใช้ตอนคีย์ใบงาน'));
+      app.appendChild(buildPageHead('สินค้า & ราคา', 'ราคาขายของร้าน (รวมกำไรแล้ว) ใช้ตอนคีย์ออเดอร์'));
 
       // ฟอร์มเพิ่มสินค้า
       const panel = document.createElement('div');
@@ -1217,7 +1217,7 @@
         </div>
         <button id="pAdd" class="btn secondary block">${icon('plus', 15)}เพิ่มสินค้า</button>
         <div class="msg" id="pMsg"></div>
-        <div class="hint" id="pHint">คิดตายตัว = ราคาต่อ 1 หน่วย · คิดตามขนาด = ระบบจะคูณ กว้าง × ยาว × เรตนี้ ให้ตอนคีย์ใบงาน</div>
+        <div class="hint" id="pHint">คิดตายตัว = ราคาต่อ 1 หน่วย · คิดตามขนาด = ระบบจะคูณ กว้าง × ยาว × เรตนี้ ให้ตอนคีย์ออเดอร์</div>
       `;
       app.appendChild(panel);
 
@@ -1273,7 +1273,7 @@
       app.appendChild(card);
 
       app.querySelectorAll('.del-product').forEach(b => b.addEventListener('click', async () => {
-        if (!confirm('ลบสินค้านี้? (ใบงานเก่ายังเก็บราคาเดิมไว้ ไม่กระทบ)')) return;
+        if (!confirm('ลบสินค้านี้? (ออเดอร์เก่ายังเก็บราคาเดิมไว้ ไม่กระทบ)')) return;
         const { error } = await sb.from('products').delete().eq('id', b.dataset.id);
         if (error) { alert('ลบไม่สำเร็จ: ' + error.message); return; }
         await loadProductCatalog();
@@ -1312,7 +1312,7 @@
       }));
     }
 
-    // ===== ใบงาน (รับออเดอร์) =====
+    // ===== ออเดอร์ (รับออเดอร์ลูกค้า) =====
     async function nextOrderNo() {
       const now = new Date();
       const prefix = 'OD' + String((now.getFullYear() + 543) % 100) + String(now.getMonth() + 1).padStart(2, '0');
@@ -1341,12 +1341,12 @@
     function renderOrders(list) {
       const app = document.getElementById('app');
       app.innerHTML = '';
-      app.appendChild(buildPageHead('ใบงาน', 'รับออเดอร์ลูกค้าจากทุกช่องทาง'));
+      app.appendChild(buildPageHead('ออเดอร์', 'รับออเดอร์ลูกค้าจากทุกช่องทาง'));
 
       const bar = document.createElement('div');
       bar.style.cssText = 'display:flex;gap:var(--space-2);flex-wrap:wrap;margin-bottom:var(--space-4)';
       bar.innerHTML = `
-        <button class="btn" id="newOrder">${icon('plus', 16)}สร้างใบงานใหม่</button>
+        <button class="btn" id="newOrder">${icon('plus', 16)}สร้างออเดอร์ใหม่</button>
         <button class="btn secondary" id="goProducts">${icon('price', 16)}จัดการสินค้า & ราคา</button>
       `;
       app.appendChild(bar);
@@ -1358,7 +1358,7 @@
       const sum = document.createElement('div');
       sum.className = 'summary-grid';
       sum.innerHTML = `
-        <div class="stat"><div class="num">${open.length}</div><div class="lbl">ใบงานที่ยังไม่ปิด</div></div>
+        <div class="stat"><div class="num">${open.length}</div><div class="lbl">ออเดอร์ที่ยังไม่ปิด</div></div>
         <div class="stat"><div class="num">${fmtBaht(round2(unpaidTotal))}</div><div class="lbl">ยอดรอเก็บ (บาท)</div></div>
       `;
       app.appendChild(sum);
@@ -1380,7 +1380,7 @@
       if (!shown.length) {
         const e = document.createElement('div');
         e.className = 'loading';
-        e.textContent = list.length ? 'ไม่มีใบงานในสถานะนี้' : 'ยังไม่มีใบงาน — กด "สร้างใบงานใหม่" เพื่อเริ่ม';
+        e.textContent = list.length ? 'ไม่มีออเดอร์ในสถานะนี้' : 'ยังไม่มีออเดอร์ — กด "สร้างออเดอร์ใหม่" เพื่อเริ่ม';
         app.appendChild(e);
         return;
       }
@@ -1405,20 +1405,20 @@
       });
     }
 
-    // ---- ฟอร์มสร้างใบงาน ----
+    // ---- ฟอร์มสร้างออเดอร์ ----
     function openOrderForm(editOrder, editItems) {
       const isEdit = !!editOrder;
       const app = document.getElementById('app');
       app.innerHTML = '';
       app.appendChild(buildPageHead(
-        isEdit ? 'แก้ไขใบงาน ' + editOrder.order_no : 'สร้างใบงานใหม่',
+        isEdit ? 'แก้ไขออเดอร์ ' + editOrder.order_no : 'สร้างออเดอร์ใหม่',
         isEdit ? 'เพิ่ม/ลบรายการได้ ยอดรวมคำนวณใหม่อัตโนมัติ' : 'เลือกสินค้าจากรายการราคา หรือพิมพ์รายการเองก็ได้'
       ));
 
       const back = document.createElement('button');
       back.className = 'btn secondary btn-sm';
       back.style.marginBottom = 'var(--space-3)';
-      back.innerHTML = icon('back', 15) + (isEdit ? 'ยกเลิกการแก้ไข' : 'กลับไปรายการใบงาน');
+      back.innerHTML = icon('back', 15) + (isEdit ? 'ยกเลิกการแก้ไข' : 'กลับไปรายการออเดอร์');
       back.addEventListener('click', () => {
         if (isEdit) { currentView = 'orderView'; }
         else { currentView = 'orders'; }
@@ -1456,7 +1456,7 @@
       const itemsPanel = document.createElement('div');
       itemsPanel.className = 'panel';
       itemsPanel.innerHTML = `
-        <h2>${icon('clipboard', 17)}รายการในใบงาน</h2>
+        <h2>${icon('clipboard', 17)}รายการในออเดอร์</h2>
         <div id="itemList"></div>
         <button class="btn secondary btn-sm" id="addItem">${icon('plus', 15)}เพิ่มรายการ</button>
         <div class="order-total"><span>ยอดรวม</span><span class="ot-num" id="ordTotal">0 บาท</span></div>
@@ -1465,7 +1465,7 @@
 
       const foot = document.createElement('div');
       foot.style.cssText = 'display:flex;gap:var(--space-2);margin-top:var(--space-4)';
-      foot.innerHTML = `<button class="btn block" id="saveOrder">${icon('check', 16)}${isEdit ? 'บันทึกการแก้ไข' : 'บันทึกใบงาน'}</button>`;
+      foot.innerHTML = `<button class="btn block" id="saveOrder">${icon('check', 16)}${isEdit ? 'บันทึกการแก้ไข' : 'บันทึกออเดอร์'}</button>`;
       app.appendChild(foot);
       const msg = document.createElement('div');
       msg.className = 'msg';
@@ -1625,12 +1625,12 @@
         } catch (err) {
           msg.textContent = 'บันทึกไม่สำเร็จ: ' + err.message; msg.className = 'msg error';
           btn.disabled = false;
-          btn.innerHTML = icon('check', 16) + (isEdit ? 'บันทึกการแก้ไข' : 'บันทึกใบงาน');
+          btn.innerHTML = icon('check', 16) + (isEdit ? 'บันทึกการแก้ไข' : 'บันทึกออเดอร์');
         }
       });
     }
 
-    // ---- รายละเอียดใบงาน ----
+    // ---- รายละเอียดออเดอร์ ----
     async function loadOrderDetail(id) {
       document.getElementById('statusMsg').textContent = 'กำลังโหลด...';
       const [oRes, iRes] = await Promise.all([
@@ -1658,11 +1658,11 @@
       bar.className = 'no-print';
       bar.style.cssText = 'display:flex;gap:var(--space-2);margin-bottom:var(--space-4);flex-wrap:wrap';
       bar.innerHTML = `
-        <button class="btn secondary btn-sm" id="oBack">${icon('back', 15)}รายการใบงาน</button>
-        <button class="btn btn-sm" id="oEdit">${icon('edit', 15)}แก้ไขใบงาน</button>
-        <button class="btn secondary btn-sm" id="oPrint">${icon('printer', 15)}พิมพ์ใบงาน</button>
+        <button class="btn secondary btn-sm" id="oBack">${icon('back', 15)}รายการออเดอร์</button>
+        <button class="btn btn-sm" id="oEdit">${icon('edit', 15)}แก้ไขออเดอร์</button>
+        <button class="btn secondary btn-sm" id="oPrint">${icon('printer', 15)}พิมพ์ออเดอร์</button>
         <button class="btn secondary btn-sm" id="oShip">${icon('truck', 15)}ใบปะหน้าพัสดุ</button>
-        <button class="btn secondary btn-sm icon-btn-delete" id="oDel" style="width:auto;height:auto;padding:0 14px;min-height:44px">${icon('trash', 15)}ลบใบงาน</button>
+        <button class="btn secondary btn-sm icon-btn-delete" id="oDel" style="width:auto;height:auto;padding:0 14px;min-height:44px">${icon('trash', 15)}ลบออเดอร์</button>
       `;
       app.appendChild(bar);
       bar.querySelector('#oBack').addEventListener('click', () => { currentView = 'orders'; boot(); });
@@ -1670,7 +1670,7 @@
       bar.querySelector('#oPrint').addEventListener('click', () => window.print());
       bar.querySelector('#oShip').addEventListener('click', () => openShippingLabel(o));
       bar.querySelector('#oDel').addEventListener('click', async () => {
-        if (!confirm('ลบใบงาน ' + o.order_no + ' ?')) return;
+        if (!confirm('ลบออเดอร์ ' + o.order_no + ' ?')) return;
         const { error } = await sb.from('orders').delete().eq('id', o.id);
         if (error) { alert('ลบไม่สำเร็จ: ' + error.message); return; }
         currentView = 'orders'; boot();
@@ -1767,7 +1767,7 @@
         <div class="receipt-head">
           <div>
             <div class="receipt-shop">Haifa Design</div>
-            <div class="receipt-shop-sub">ใบงาน</div>
+            <div class="receipt-shop-sub">ใบออเดอร์</div>
           </div>
           <div class="receipt-meta">
             <div class="r-no">${esc(o.order_no)}</div>
@@ -1812,7 +1812,7 @@
       if (!o.address) {
         const warn = document.createElement('div');
         warn.className = 'info-note no-print';
-        warn.textContent = 'ใบงานนี้ยังไม่มีที่อยู่จัดส่ง — กด "แก้ไขใบงาน" เพื่อเพิ่มที่อยู่และเบอร์โทรก่อนพิมพ์';
+        warn.textContent = 'ออเดอร์นี้ยังไม่มีที่อยู่จัดส่ง — กด "แก้ไขออเดอร์" เพื่อเพิ่มที่อยู่และเบอร์โทรก่อนพิมพ์';
         app.appendChild(warn);
       }
 
@@ -1820,7 +1820,7 @@
       bar.className = 'no-print';
       bar.style.cssText = 'display:flex;gap:var(--space-2);margin-bottom:var(--space-4);flex-wrap:wrap';
       bar.innerHTML = `
-        <button class="btn secondary btn-sm" id="sBack">${icon('back', 15)}กลับไปใบงาน</button>
+        <button class="btn secondary btn-sm" id="sBack">${icon('back', 15)}กลับไปออเดอร์</button>
         <button class="btn btn-sm" id="sPrint">${icon('printer', 15)}พิมพ์ใบปะหน้า</button>
       `;
       app.appendChild(bar);
@@ -2161,7 +2161,7 @@
 
       const events = [];
 
-      // ชั้น 1: วันรับงาน (ใบงานถูกสร้าง)
+      // ชั้น 1: วันรับงาน (ออเดอร์ถูกสร้าง)
       salesRes.data.forEach(o => {
         if (o.status === 'cancelled') return;
         events.push({
