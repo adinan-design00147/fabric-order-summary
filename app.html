@@ -1589,65 +1589,59 @@
       `;
       app.appendChild(stats);
 
-      // ---- ฟอร์มเพิ่มวัตถุดิบ ----
+      // ---- ฟอร์มเพิ่มของใหม่ (ซ่อนไว้ กดเปิดเมื่อต้องใช้) ----
+      const addBar = document.createElement('div');
+      addBar.className = 'no-print';
+      addBar.style.marginBottom = 'var(--space-3)';
+      addBar.innerHTML = `<button class="btn" id="stOpen">${icon('plus', 15)}เพิ่มของใหม่</button>`;
+      app.appendChild(addBar);
+
       const panel = document.createElement('div');
       panel.className = 'panel no-print';
+      panel.hidden = true;
       panel.innerHTML = `
-        <h2>${icon('plus', 17)}เพิ่ม / รับเข้าวัตถุดิบ</h2>
-        <div class="field" style="margin-bottom:var(--space-3)">
-          <label for="stPick">รับเข้าของเดิม</label>
-          <select id="stPick">
-            <option value="">— เพิ่มรายการใหม่ —</option>
-            ${list.map(i => `<option value="${i.id}">${esc(i.name)} · เหลือ ${fmtQty(stockRemain(i))} ${esc(i.unit)}</option>`).join('')}
-          </select>
-        </div>
+        <h2>${icon('plus', 17)}ของใหม่</h2>
         <div class="form-grid">
-          <div class="field"><label for="stName">ชื่อวัตถุดิบ</label><input id="stName" placeholder="เช่น หมึกสีฟ้า C, กระดาษการ์ด 250 แกรม"></div>
-          <div class="field"><label for="stCat">หมวดหมู่</label><select id="stCat">${STOCK_CATS.map(c => `<option>${esc(c)}</option>`).join('')}</select></div>
-          <div class="field"><label for="stUnit">หน่วยนับ</label><select id="stUnit">${STOCK_UNITS.map(u => `<option>${esc(u)}</option>`).join('')}</select></div>
-          <div class="field"><label for="stQty">รับเข้า (จำนวน)</label><input id="stQty" type="number" min="0" step="any" placeholder="100" inputmode="decimal"></div>
-          <div class="field"><label for="stTh">จุดเตือนสั่งซื้อ (%)</label><input id="stTh" type="number" min="0" max="100" step="1" placeholder="20" inputmode="numeric"></div>
+          <div class="field"><label for="stName">ชื่อของ</label><input id="stName" placeholder="เช่น หมึกสีฟ้า C"></div>
+          <div class="field"><label for="stQty">มีอยู่กี่ชิ้น</label><input id="stQty" type="number" min="0" step="any" placeholder="100" inputmode="decimal"></div>
+          <div class="field"><label for="stUnit">หน่วย</label><select id="stUnit">${STOCK_UNITS.map(u => `<option>${esc(u)}</option>`).join('')}</select></div>
+          <div class="field"><label for="stCat">หมวด</label><select id="stCat">${STOCK_CATS.map(c => `<option>${esc(c)}</option>`).join('')}</select></div>
         </div>
-        <button id="stAdd" class="btn secondary block">${icon('plus', 15)}เพิ่มวัตถุดิบ</button>
+        <details style="margin:4px 0 10px">
+          <summary class="hint" style="cursor:pointer">ตั้งจุดเตือนสั่งซื้อ (ปกติ 20%)</summary>
+          <div class="field" style="max-width:180px;margin-top:8px">
+            <input id="stTh" type="number" min="0" max="100" step="1" placeholder="20" inputmode="numeric" aria-label="จุดเตือนสั่งซื้อ %">
+          </div>
+        </details>
+        <div class="field-row">
+          <button id="stAdd" class="btn">${icon('check', 15)}บันทึก</button>
+          <button id="stCancel" class="btn secondary">${icon('close', 15)}ยกเลิก</button>
+        </div>
         <div class="msg" id="stMsg"></div>
-        <div class="hint" id="stHint">เลือก "รับเข้าของเดิม" ถ้าของมีอยู่แล้ว ระบบจะบวกเข้ายอดเดิม ไม่สร้างรายการซ้ำ</div>
       `;
       app.appendChild(panel);
 
-      // เลือกของเดิม -> ล็อกชื่อ/หมวด/หน่วย แล้วเปลี่ยนปุ่มเป็น "รับเข้าเพิ่ม"
-      const pick = panel.querySelector('#stPick');
-      const nameF = panel.querySelector('#stName');
-      const catF = panel.querySelector('#stCat');
-      const unitF = panel.querySelector('#stUnit');
-      const thF = panel.querySelector('#stTh');
-      const addBtn = panel.querySelector('#stAdd');
-      function syncPick() {
-        const it = list.find(i => i.id === pick.value);
-        [nameF, catF, unitF, thF].forEach(f => { f.disabled = !!it; });
-        if (it) {
-          nameF.value = it.name; catF.value = it.category; unitF.value = it.unit; thF.value = Number(it.threshold_pct);
-          addBtn.innerHTML = icon('plus', 15) + 'รับเข้าเพิ่ม';
-          panel.querySelector('#stHint').textContent = 'จะบวกจำนวนเข้ายอดเดิมของ "' + it.name + '" (ตอนนี้เหลือ ' + fmtQty(stockRemain(it)) + ' ' + it.unit + ')';
-        } else {
-          nameF.value = ''; thF.value = '';
-          addBtn.innerHTML = icon('plus', 15) + 'เพิ่มวัตถุดิบ';
-          panel.querySelector('#stHint').textContent = 'เลือก "รับเข้าของเดิม" ถ้าของมีอยู่แล้ว ระบบจะบวกเข้ายอดเดิม ไม่สร้างรายการซ้ำ';
-        }
-      }
-      pick.addEventListener('change', syncPick);
+      const openBtn = addBar.querySelector('#stOpen');
+      openBtn.addEventListener('click', () => {
+        panel.hidden = false;
+        addBar.hidden = true;
+        panel.querySelector('#stName').focus();
+      });
+      panel.querySelector('#stCancel').addEventListener('click', () => {
+        panel.hidden = true; addBar.hidden = false;
+      });
 
-      addBtn.addEventListener('click', async () => {
+      panel.querySelector('#stAdd').addEventListener('click', async () => {
         const msg = panel.querySelector('#stMsg');
-        const name = nameF.value.trim();
+        const name = panel.querySelector('#stName').value.trim();
         const qty = parseFloat(panel.querySelector('#stQty').value);
         msg.textContent = ''; msg.className = 'msg';
-        if (!name) { msg.textContent = 'กรอกชื่อวัตถุดิบก่อน'; msg.className = 'msg error'; return; }
-        if (!(qty > 0)) { msg.textContent = 'กรอกจำนวนที่รับเข้าก่อน'; msg.className = 'msg error'; return; }
-        const btn = addBtn;
+        if (!name) { msg.textContent = 'กรอกชื่อของก่อน'; msg.className = 'msg error'; return; }
+        if (!(qty > 0)) { msg.textContent = 'กรอกจำนวนก่อน'; msg.className = 'msg error'; return; }
+        const btn = panel.querySelector('#stAdd');
 
-        // ของเดิม (เลือกจากลิสต์ หรือพิมพ์ชื่อซ้ำกับที่มีอยู่) -> รับเข้าเพิ่ม ไม่สร้างรายการใหม่
-        const existing = list.find(i => i.id === pick.value)
-          || list.find(i => i.name.trim().toLowerCase() === name.toLowerCase());
+        // พิมพ์ชื่อซ้ำกับของที่มีอยู่ -> บวกเข้ายอดเดิม ไม่สร้างรายการซ้ำ
+        const existing = list.find(i => i.name.trim().toLowerCase() === name.toLowerCase());
         if (existing) {
           btn.disabled = true;
           try {
