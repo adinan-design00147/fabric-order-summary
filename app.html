@@ -270,6 +270,49 @@
   .rc-sub { font-size: 11px; color: var(--sub); margin-top: 2px; }
   .rc-amt { font-size: 14px; font-weight: 700; color: var(--accent); white-space: nowrap; font-variant-numeric: tabular-nums; }
 
+  /* ===== ใบงาน / สินค้า ===== */
+  .chips { display: flex; gap: var(--space-2); flex-wrap: wrap; margin-bottom: var(--space-3); }
+  .chip {
+    font-family: inherit; font-size: 13px; font-weight: 600; padding: 8px 14px; min-height: 40px;
+    border: 1px solid var(--border); border-radius: 999px; background: var(--card); color: var(--sub); cursor: pointer;
+  }
+  .chip.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  .st { font-size: 11px; font-weight: 700; padding: 5px 11px; border-radius: 999px; white-space: nowrap; }
+  .st-new    { background: var(--accent-soft); color: var(--accent); }
+  .st-prod   { background: var(--warn-bg);     color: var(--warn-text); }
+  .st-deliv  { background: #e8f1fe;            color: #1f5fbf; }
+  .st-paid   { background: var(--ok-bg);       color: var(--ok-text); }
+  .st-cancel { background: var(--bg);          color: var(--sub); }
+  html[data-theme="dark"] .st-deliv { background: #1b2a44; color: #8ab4f8; }
+
+  .ord-row {
+    display: flex; align-items: center; justify-content: space-between; gap: var(--space-3);
+    padding: var(--space-3) var(--space-4); background: var(--card); border: 1px solid var(--border);
+    border-radius: var(--radius); margin-bottom: var(--space-2); cursor: pointer;
+    font-family: inherit; width: 100%; text-align: left;
+  }
+  .ord-row:hover { border-color: var(--accent); }
+  .ord-main { min-width: 0; flex: 1; }
+  .ord-top { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; }
+  .ord-no { font-size: 14px; font-weight: 700; }
+  .ord-cust { font-size: 13px; font-weight: 600; }
+  .ord-sub { font-size: 11px; color: var(--sub); margin-top: 3px; }
+  .ord-amt { font-size: 15px; font-weight: 700; color: var(--accent); white-space: nowrap; font-variant-numeric: tabular-nums; }
+
+  .item-row { display: grid; grid-template-columns: 1fr 78px 78px 96px 44px; gap: var(--space-2); align-items: end; margin-bottom: var(--space-2); }
+  .item-row .field { min-width: 0; }
+  .item-row.no-size { grid-template-columns: 1fr 78px 96px 44px; }
+  .line-sum { text-align: right; font-size: 13px; font-weight: 600; padding-bottom: 12px; font-variant-numeric: tabular-nums; }
+  .order-total { display: flex; justify-content: flex-end; gap: var(--space-4); align-items: baseline; margin-top: var(--space-3); padding-top: var(--space-3); border-top: 2px solid var(--border); font-size: 18px; font-weight: 700; }
+  .order-total .ot-num { color: var(--accent); font-variant-numeric: tabular-nums; }
+
+  @media (max-width: 640px) {
+    .item-row, .item-row.no-size { grid-template-columns: 1fr 1fr; }
+    .item-row .line-sum { grid-column: 1 / -1; text-align: left; padding-bottom: 0; }
+  }
+
   @media (max-width: 900px) {
     .selbar { left: 0; bottom: 76px; padding: var(--space-3) var(--space-4); }
     .receipt-paper { padding: var(--space-4); }
@@ -635,6 +678,10 @@
       trash:     '<path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/>',
       thread:    '<circle cx="12" cy="12" r="9"/><path d="M12 3c-2.5 3-2.5 15 0 18M12 3c2.5 3 2.5 15 0 18M3.5 9h17M3.5 15h17"/>',
       chart:     '<path d="M3 21h18"/><rect x="5" y="11" width="3.4" height="7" rx="1"/><rect x="10.3" y="6" width="3.4" height="12" rx="1"/><rect x="15.6" y="14" width="3.4" height="4" rx="1"/>',
+      clipboard: '<rect x="5" y="4" width="14" height="17" rx="2.5"/><path d="M9 4V3a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v1"/><path d="M9 11h6M9 15h4"/>',
+      price:     '<path d="M3.6 11.2 11 3.8a2 2 0 0 1 1.4-.6h5a2.4 2.4 0 0 1 2.4 2.4v5a2 2 0 0 1-.6 1.4l-7.4 7.4a2 2 0 0 1-2.8 0l-5.4-5.4a2 2 0 0 1 0-2.8Z"/><path d="M9.6 12.8a1.8 1.8 0 1 1 2.6 2.5"/><circle cx="16" cy="8" r="1.2"/>',
+      factory:   '<path d="M3 21V10l5.5 3.5V10L14 13.5V7l7 4.5V21Z"/><path d="M3 21h18"/><path d="M9 17h1.5M14 17h1.5"/>',
+      truck:     '<rect x="2" y="7" width="12" height="10" rx="2"/><path d="M14 10h3.5l3 3.2V17H14z"/><circle cx="7" cy="18.5" r="1.8"/><circle cx="17.5" cy="18.5" r="1.8"/>',
     };
 
     function icon(name, size) {
@@ -699,15 +746,26 @@
       { key: 'dashboard', label: 'แดชบอร์ด', icon: 'dashboard' },
       { key: 'calendar',  label: 'ปฏิทิน',   icon: 'calendar' },
       { sep: true },
-      { key: 'fabric',    label: 'ป้ายผ้า',    icon: 'tag' },
-      { key: 'favor',     label: 'ของชำร่วย',  icon: 'gift' },
-      { key: 'notebook',  label: 'สมุดเล็ก',   icon: 'book' },
-      { key: 'card',      label: 'การ์ด',      icon: 'card' },
+      { key: 'orders',    label: 'ใบงาน',       icon: 'clipboard' },
+      { key: 'products',  label: 'สินค้า & ราคา', icon: 'price' },
+      { sep: true },
+      { key: 'fabric',    label: 'ต้นทุนผลิต',  icon: 'factory' },
       { sep: true },
       { key: 'customers', label: 'ลูกค้า',     icon: 'user' },
       { key: 'receipts',  label: 'ใบเสร็จ',    icon: 'receipt' },
     ];
-    const MOBILE_NAV = ['dashboard', 'calendar', 'fabric', 'receipts', 'customers'];
+    const MOBILE_NAV = ['dashboard', 'orders', 'calendar', 'fabric', 'receipts'];
+
+    // ช่องทางรับออเดอร์ (แก้เพิ่ม/ลดได้ที่นี่)
+    const CHANNELS = ['LINE', 'Facebook', 'Instagram', 'TikTok', 'Shopee', 'หน้าร้าน', 'โทรศัพท์', 'อื่นๆ'];
+
+    const ORDER_STATUS = {
+      new:       { label: 'รับออเดอร์',   cls: 'st-new' },
+      producing: { label: 'กำลังผลิต',   cls: 'st-prod' },
+      delivered: { label: 'ส่งแล้ว',     cls: 'st-deliv' },
+      paid:      { label: 'เก็บเงินแล้ว', cls: 'st-paid' },
+      cancelled: { label: 'ยกเลิก',      cls: 'st-cancel' },
+    };
 
     function viewMeta(key) {
       if (key === 'dashboard') return { label: 'แดชบอร์ด', icon: 'dashboard' };
@@ -715,8 +773,15 @@
       if (key === 'customers') return { label: 'ข้อมูลลูกค้า', icon: 'user' };
       if (key === 'receipts') return { label: 'ใบเสร็จ', icon: 'receipt' };
       if (key === 'receiptView') return { label: 'ใบเสร็จ', icon: 'receipt' };
+      if (key === 'orders') return { label: 'ใบงาน', icon: 'clipboard' };
+      if (key === 'orderView') return { label: 'ใบงาน', icon: 'clipboard' };
+      if (key === 'products') return { label: 'สินค้า & ราคา', icon: 'price' };
+      if (key === 'fabric') return { label: 'ต้นทุนผลิต (ป้ายผ้า)', icon: 'factory' };
       return PRODUCT_CATEGORIES[key] || { label: 'ระบบจัดการร้าน', icon: '' };
     }
+
+    let viewingOrderId = null;
+    let orderFilter = 'all';
 
     // ===== สถานะการเลือกชิ้นงาน =====
     let selectedPieces = new Map();   // id -> ข้อมูลชิ้นงาน
@@ -806,6 +871,12 @@
           await loadReceipts();
         } else if (currentView === 'receiptView') {
           await loadReceiptDetail(viewingReceiptId);
+        } else if (currentView === 'orders') {
+          await loadOrders();
+        } else if (currentView === 'orderView') {
+          await loadOrderDetail(viewingOrderId);
+        } else if (currentView === 'products') {
+          await loadProductCatalog();
         } else {
           await loadProducts(currentView);
         }
@@ -916,6 +987,489 @@
       app.appendChild(row2);
 
       drawCharts(all);
+    }
+
+    // ===== สินค้า & ราคาขาย =====
+    let PRODUCTS = [];
+
+    async function fetchProducts() {
+      const { data, error } = await sb.from('products')
+        .select('id,name,category,pricing_mode,unit_price,area_rate,unit,note,active')
+        .order('created_at');
+      if (error) throw error;
+      PRODUCTS = data;
+      return data;
+    }
+
+    async function loadProductCatalog() {
+      document.getElementById('statusMsg').textContent = 'กำลังโหลด...';
+      renderProductCatalog(await fetchProducts());
+      document.getElementById('statusMsg').textContent = 'อัปเดตล่าสุด: ' + new Date().toLocaleString('th-TH');
+    }
+
+    function priceLabel(p) {
+      return p.pricing_mode === 'per_area'
+        ? fmtBaht(p.area_rate) + ' บาท/ตร.ซม.'
+        : fmtBaht(p.unit_price || 0) + ' บาท/' + p.unit;
+    }
+
+    function renderProductCatalog(list) {
+      const app = document.getElementById('app');
+      app.innerHTML = '';
+      app.appendChild(buildPageHead('สินค้า & ราคา', 'ราคาขายของร้าน (รวมกำไรแล้ว) ใช้ตอนคีย์ใบงาน'));
+
+      // ฟอร์มเพิ่มสินค้า
+      const panel = document.createElement('div');
+      panel.className = 'panel';
+      panel.innerHTML = `
+        <h2>${icon('plus', 17)}เพิ่มสินค้า</h2>
+        <div class="form-grid">
+          <div class="field"><label for="pName">ชื่อสินค้า</label><input id="pName" placeholder="เช่น การ์ดแต่งงาน"></div>
+          <div class="field"><label for="pCat">หมวด</label><input id="pCat" placeholder="เช่น การ์ด"></div>
+          <div class="field"><label for="pUnit">หน่วย</label><input id="pUnit" placeholder="ชิ้น" value="ชิ้น"></div>
+          <div class="field">
+            <label for="pMode">คิดราคาแบบ</label>
+            <select id="pMode">
+              <option value="fixed">ตายตัวต่อหน่วย</option>
+              <option value="per_area">ตามขนาด (บาท/ตร.ซม.)</option>
+            </select>
+          </div>
+          <div class="field"><label for="pPrice">ราคาขาย</label><input id="pPrice" type="number" min="0" step="any" placeholder="0" inputmode="decimal"></div>
+        </div>
+        <button id="pAdd" class="btn secondary block">${icon('plus', 15)}เพิ่มสินค้า</button>
+        <div class="msg" id="pMsg"></div>
+        <div class="hint" id="pHint">คิดตายตัว = ราคาต่อ 1 หน่วย · คิดตามขนาด = ระบบจะคูณ กว้าง × ยาว × เรตนี้ ให้ตอนคีย์ใบงาน</div>
+      `;
+      app.appendChild(panel);
+
+      panel.querySelector('#pMode').addEventListener('change', (e) => {
+        panel.querySelector('#pHint').textContent = e.target.value === 'per_area'
+          ? 'ใส่เรตเป็น บาท/ตร.ซม. เช่น 0.02 → ป้าย 50×200 ซม. = 200 บาท'
+          : 'ใส่ราคาขายต่อ 1 หน่วย';
+      });
+
+      panel.querySelector('#pAdd').addEventListener('click', async () => {
+        const name = panel.querySelector('#pName').value.trim();
+        const mode = panel.querySelector('#pMode').value;
+        const price = parseFloat(panel.querySelector('#pPrice').value);
+        const msg = panel.querySelector('#pMsg');
+        msg.textContent = ''; msg.className = 'msg';
+        if (!name) { msg.textContent = 'กรอกชื่อสินค้าก่อน'; msg.className = 'msg error'; return; }
+        if (isNaN(price)) { msg.textContent = 'กรอกราคาก่อน'; msg.className = 'msg error'; return; }
+        const btn = panel.querySelector('#pAdd');
+        btn.disabled = true;
+        const { error } = await sb.from('products').insert({
+          name,
+          category: panel.querySelector('#pCat').value.trim() || null,
+          unit: panel.querySelector('#pUnit').value.trim() || 'ชิ้น',
+          pricing_mode: mode,
+          unit_price: mode === 'fixed' ? price : null,
+          area_rate: mode === 'per_area' ? price : null,
+        });
+        if (error) { msg.textContent = 'เพิ่มไม่สำเร็จ: ' + error.message; msg.className = 'msg error'; btn.disabled = false; return; }
+        await loadProductCatalog();
+      });
+
+      // รายการสินค้า
+      const card = document.createElement('div');
+      card.className = 'lot-card';
+      const rows = list.map(p => `<tr>
+        <td data-label="สินค้า">${esc(p.name)}${p.category ? '<br><span style="font-size:11px;color:var(--sub)">' + esc(p.category) + '</span>' : ''}</td>
+        <td data-label="คิดราคา">${p.pricing_mode === 'per_area' ? 'ตามขนาด' : 'ตายตัว'}</td>
+        <td data-label="ราคาขาย">${esc(priceLabel(p))}</td>
+        <td data-label="จัดการ" class="row-actions">
+          <button class="icon-btn icon-btn-edit edit-product" data-id="${p.id}" data-name="${esc(p.name)}" data-cat="${esc(p.category || '')}" data-unit="${esc(p.unit)}" data-mode="${p.pricing_mode}" data-price="${p.pricing_mode === 'per_area' ? (p.area_rate ?? '') : (p.unit_price ?? '')}" aria-label="แก้ไขสินค้า" title="แก้ไข">${icon('edit', 18)}</button>
+          <button class="icon-btn icon-btn-delete del-product" data-id="${p.id}" aria-label="ลบสินค้า" title="ลบ">${icon('trash', 18)}</button>
+        </td>
+      </tr>`).join('');
+      card.innerHTML = `
+        <div class="table-wrap"><table>
+          <thead><tr><th>สินค้า</th><th>คิดราคา</th><th>ราคาขาย</th><th>จัดการ</th></tr></thead>
+          <tbody>${rows || '<tr><td colspan="4" class="empty-cell">ยังไม่มีสินค้า</td></tr>'}</tbody>
+        </table></div>
+      `;
+      app.appendChild(card);
+
+      app.querySelectorAll('.del-product').forEach(b => b.addEventListener('click', async () => {
+        if (!confirm('ลบสินค้านี้? (ใบงานเก่ายังเก็บราคาเดิมไว้ ไม่กระทบ)')) return;
+        const { error } = await sb.from('products').delete().eq('id', b.dataset.id);
+        if (error) { alert('ลบไม่สำเร็จ: ' + error.message); return; }
+        await loadProductCatalog();
+      }));
+
+      app.querySelectorAll('.edit-product').forEach(b => b.addEventListener('click', () => {
+        const tr = b.closest('tr');
+        const d = b.dataset;
+        tr.innerHTML = `<td colspan="4"><div class="edit-row">
+          <input class="e-name" value="${esc(d.name)}" placeholder="ชื่อสินค้า" aria-label="ชื่อสินค้า">
+          <input class="e-cat" value="${esc(d.cat)}" placeholder="หมวด" aria-label="หมวด">
+          <input class="e-unit" value="${esc(d.unit)}" placeholder="หน่วย" aria-label="หน่วย">
+          <select class="e-mode" aria-label="วิธีคิดราคา">
+            <option value="fixed" ${d.mode === 'fixed' ? 'selected' : ''}>ตายตัว</option>
+            <option value="per_area" ${d.mode === 'per_area' ? 'selected' : ''}>ตามขนาด</option>
+          </select>
+          <input class="e-price" type="number" step="any" min="0" value="${d.price}" placeholder="ราคา" aria-label="ราคา">
+          <button class="btn btn-sm e-save">${icon('check', 15)}บันทึก</button>
+          <button class="btn secondary btn-sm e-cancel">${icon('close', 15)}ยกเลิก</button>
+        </div></td>`;
+        tr.querySelector('.e-cancel').addEventListener('click', () => loadProductCatalog());
+        tr.querySelector('.e-save').addEventListener('click', async () => {
+          const mode = tr.querySelector('.e-mode').value;
+          const price = parseFloat(tr.querySelector('.e-price').value) || 0;
+          const { error } = await sb.from('products').update({
+            name: tr.querySelector('.e-name').value.trim(),
+            category: tr.querySelector('.e-cat').value.trim() || null,
+            unit: tr.querySelector('.e-unit').value.trim() || 'ชิ้น',
+            pricing_mode: mode,
+            unit_price: mode === 'fixed' ? price : null,
+            area_rate: mode === 'per_area' ? price : null,
+          }).eq('id', d.id);
+          if (error) { alert('บันทึกไม่สำเร็จ: ' + error.message); return; }
+          await loadProductCatalog();
+        });
+      }));
+    }
+
+    // ===== ใบงาน (รับออเดอร์) =====
+    async function nextOrderNo() {
+      const now = new Date();
+      const prefix = 'OD' + String((now.getFullYear() + 543) % 100) + String(now.getMonth() + 1).padStart(2, '0');
+      const { data } = await sb.from('orders').select('order_no').like('order_no', prefix + '%')
+        .order('order_no', { ascending: false }).limit(1);
+      let run = 1;
+      if (data && data.length) {
+        const m = String(data[0].order_no).match(/-(\d+)$/);
+        if (m) run = parseInt(m[1]) + 1;
+      }
+      return prefix + '-' + String(run).padStart(3, '0');
+    }
+
+    async function loadOrders() {
+      document.getElementById('statusMsg').textContent = 'กำลังโหลด...';
+      const [ordRes] = await Promise.all([
+        sb.from('orders').select('id,order_no,customer,channel,status,due_date,total,created_at')
+          .order('created_at', { ascending: false }),
+        fetchProducts(),
+      ]);
+      if (ordRes.error) throw ordRes.error;
+      renderOrders(ordRes.data);
+      document.getElementById('statusMsg').textContent = 'อัปเดตล่าสุด: ' + new Date().toLocaleString('th-TH');
+    }
+
+    function renderOrders(list) {
+      const app = document.getElementById('app');
+      app.innerHTML = '';
+      app.appendChild(buildPageHead('ใบงาน', 'รับออเดอร์ลูกค้าจากทุกช่องทาง'));
+
+      const bar = document.createElement('div');
+      bar.style.cssText = 'display:flex;gap:var(--space-2);flex-wrap:wrap;margin-bottom:var(--space-4)';
+      bar.innerHTML = `
+        <button class="btn" id="newOrder">${icon('plus', 16)}สร้างใบงานใหม่</button>
+        <button class="btn secondary" id="goProducts">${icon('price', 16)}จัดการสินค้า & ราคา</button>
+      `;
+      app.appendChild(bar);
+      bar.querySelector('#newOrder').addEventListener('click', openOrderForm);
+      bar.querySelector('#goProducts').addEventListener('click', () => { currentView = 'products'; boot(); });
+
+      const open = list.filter(o => o.status !== 'paid' && o.status !== 'cancelled');
+      const unpaidTotal = open.reduce((s, o) => s + Number(o.total), 0);
+      const sum = document.createElement('div');
+      sum.className = 'summary-grid';
+      sum.innerHTML = `
+        <div class="stat"><div class="num">${open.length}</div><div class="lbl">ใบงานที่ยังไม่ปิด</div></div>
+        <div class="stat"><div class="num">${fmtBaht(round2(unpaidTotal))}</div><div class="lbl">ยอดรอเก็บ (บาท)</div></div>
+      `;
+      app.appendChild(sum);
+
+      const chips = document.createElement('div');
+      chips.className = 'chips';
+      const filters = [['all', 'ทั้งหมด']].concat(Object.entries(ORDER_STATUS).map(([k, v]) => [k, v.label]));
+      chips.innerHTML = filters.map(([k, label]) => {
+        const n = k === 'all' ? list.length : list.filter(o => o.status === k).length;
+        return `<button class="chip ${orderFilter === k ? 'active' : ''}" data-f="${k}">${esc(label)} (${n})</button>`;
+      }).join('');
+      app.appendChild(chips);
+      chips.querySelectorAll('.chip').forEach(c => c.addEventListener('click', () => {
+        orderFilter = c.dataset.f;
+        renderOrders(list);
+      }));
+
+      const shown = orderFilter === 'all' ? list : list.filter(o => o.status === orderFilter);
+      if (!shown.length) {
+        const e = document.createElement('div');
+        e.className = 'loading';
+        e.textContent = list.length ? 'ไม่มีใบงานในสถานะนี้' : 'ยังไม่มีใบงาน — กด "สร้างใบงานใหม่" เพื่อเริ่ม';
+        app.appendChild(e);
+        return;
+      }
+
+      shown.forEach(o => {
+        const st = ORDER_STATUS[o.status] || ORDER_STATUS.new;
+        const btn = document.createElement('button');
+        btn.className = 'ord-row';
+        btn.innerHTML = `
+          <span class="ord-main">
+            <span class="ord-top">
+              <span class="ord-no">${esc(o.order_no)}</span>
+              <span class="st ${st.cls}">${esc(st.label)}</span>
+              ${o.channel ? `<span class="st st-cancel">${esc(o.channel)}</span>` : ''}
+            </span>
+            <span class="ord-sub">${o.customer ? esc(o.customer) + ' · ' : ''}${new Date(o.created_at).toLocaleDateString('th-TH')}${o.due_date ? ' · ส่ง ' + new Date(o.due_date).toLocaleDateString('th-TH') : ''}</span>
+          </span>
+          <span class="ord-amt">${fmtBaht(round2(o.total))} บาท</span>
+        `;
+        btn.addEventListener('click', () => { viewingOrderId = o.id; currentView = 'orderView'; boot(); });
+        app.appendChild(btn);
+      });
+    }
+
+    // ---- ฟอร์มสร้างใบงาน ----
+    function openOrderForm() {
+      const app = document.getElementById('app');
+      app.innerHTML = '';
+      app.appendChild(buildPageHead('สร้างใบงานใหม่', 'เลือกสินค้าจากรายการราคา หรือพิมพ์รายการเองก็ได้'));
+
+      const back = document.createElement('button');
+      back.className = 'btn secondary btn-sm';
+      back.style.marginBottom = 'var(--space-3)';
+      back.innerHTML = icon('back', 15) + 'กลับไปรายการใบงาน';
+      back.addEventListener('click', () => { currentView = 'orders'; boot(); });
+      app.appendChild(back);
+
+      const head = document.createElement('div');
+      head.className = 'panel';
+      head.innerHTML = `
+        <div class="form-grid">
+          <div class="field"><label for="oCust">ชื่อลูกค้า</label><input id="oCust" placeholder="ไม่บังคับ"></div>
+          <div class="field">
+            <label for="oChan">ช่องทาง</label>
+            <select id="oChan">${CHANNELS.map(c => `<option>${esc(c)}</option>`).join('')}</select>
+          </div>
+          <div class="field"><label for="oDue">กำหนดส่ง</label><input id="oDue" type="date"></div>
+          <div class="field"><label for="oNote">หมายเหตุ</label><input id="oNote" placeholder="ไม่บังคับ"></div>
+        </div>
+      `;
+      app.appendChild(head);
+
+      const itemsPanel = document.createElement('div');
+      itemsPanel.className = 'panel';
+      itemsPanel.innerHTML = `
+        <h2>${icon('clipboard', 17)}รายการในใบงาน</h2>
+        <div id="itemList"></div>
+        <button class="btn secondary btn-sm" id="addItem">${icon('plus', 15)}เพิ่มรายการ</button>
+        <div class="order-total"><span>ยอดรวม</span><span class="ot-num" id="ordTotal">0 บาท</span></div>
+      `;
+      app.appendChild(itemsPanel);
+
+      const foot = document.createElement('div');
+      foot.style.cssText = 'display:flex;gap:var(--space-2);margin-top:var(--space-4)';
+      foot.innerHTML = `<button class="btn block" id="saveOrder">${icon('check', 16)}บันทึกใบงาน</button>`;
+      app.appendChild(foot);
+      const msg = document.createElement('div');
+      msg.className = 'msg';
+      app.appendChild(msg);
+
+      const list = itemsPanel.querySelector('#itemList');
+      const totalEl = itemsPanel.querySelector('#ordTotal');
+
+      function recalcAll() {
+        let total = 0;
+        list.querySelectorAll('.item-row').forEach(row => { total += calcRow(row); });
+        totalEl.textContent = fmtBaht(round2(total)) + ' บาท';
+        return total;
+      }
+
+      function calcRow(row) {
+        const sel = row.querySelector('.i-prod');
+        const p = PRODUCTS.find(x => x.id === sel.value);
+        const qty = parseInt(row.querySelector('.i-qty').value) || 0;
+        const w = parseFloat(row.querySelector('.i-w')?.value) || 0;
+        const l = parseFloat(row.querySelector('.i-l')?.value) || 0;
+        let unit;
+        if (p && p.pricing_mode === 'per_area') {
+          unit = Math.round(w * l * Number(p.area_rate || 0));
+          row.querySelector('.i-price').value = unit;
+        } else {
+          unit = parseFloat(row.querySelector('.i-price').value) || 0;
+        }
+        const line = Math.round(unit * qty);
+        row.querySelector('.line-sum').textContent = fmtBaht(line) + ' บาท';
+        row.dataset.line = line;
+        row.dataset.unit = unit;
+        return line;
+      }
+
+      function addRow() {
+        const row = document.createElement('div');
+        row.className = 'item-row';
+        row.innerHTML = `
+          <div class="field">
+            <label>สินค้า</label>
+            <select class="i-prod">
+              <option value="">— พิมพ์ชื่อเอง —</option>
+              ${PRODUCTS.map(p => `<option value="${p.id}">${esc(p.name)}</option>`).join('')}
+            </select>
+            <input class="i-name" placeholder="ชื่อรายการ" aria-label="ชื่อรายการ" style="margin-top:6px">
+          </div>
+          <div class="field i-size"><label>กว้าง</label><input class="i-w" type="number" min="0" step="any" placeholder="ซม." inputmode="decimal"></div>
+          <div class="field i-size"><label>ยาว</label><input class="i-l" type="number" min="0" step="any" placeholder="ซม." inputmode="decimal"></div>
+          <div class="field"><label>จำนวน</label><input class="i-qty" type="number" min="1" value="1" inputmode="numeric"></div>
+          <div class="field"><label>ราคา/หน่วย</label><input class="i-price" type="number" min="0" step="any" value="0" inputmode="decimal"></div>
+          <div class="line-sum">0 บาท</div>
+          <button class="icon-btn icon-btn-delete i-del" aria-label="ลบรายการ" title="ลบรายการ">${icon('trash', 18)}</button>
+        `;
+        list.appendChild(row);
+
+        const sel = row.querySelector('.i-prod');
+        const nameInput = row.querySelector('.i-name');
+        function syncMode() {
+          const p = PRODUCTS.find(x => x.id === sel.value);
+          const perArea = p && p.pricing_mode === 'per_area';
+          row.querySelectorAll('.i-size').forEach(el => { el.style.display = perArea ? '' : 'none'; });
+          row.classList.toggle('no-size', !perArea);
+          row.querySelector('.i-price').readOnly = !!perArea;
+          nameInput.style.display = sel.value ? 'none' : '';
+          if (p && p.pricing_mode === 'fixed') row.querySelector('.i-price').value = p.unit_price || 0;
+          recalcAll();
+        }
+        sel.addEventListener('change', syncMode);
+        row.querySelectorAll('input').forEach(i => i.addEventListener('input', recalcAll));
+        row.querySelector('.i-del').addEventListener('click', () => { row.remove(); recalcAll(); });
+        syncMode();
+      }
+
+      itemsPanel.querySelector('#addItem').addEventListener('click', addRow);
+      addRow();
+
+      foot.querySelector('#saveOrder').addEventListener('click', async () => {
+        const rows = [...list.querySelectorAll('.item-row')];
+        const items = rows.map(r => {
+          const sel = r.querySelector('.i-prod');
+          const p = PRODUCTS.find(x => x.id === sel.value);
+          return {
+            product_id: p ? p.id : null,
+            name: p ? p.name : (r.querySelector('.i-name').value.trim() || 'ไม่ระบุ'),
+            width_cm: parseFloat(r.querySelector('.i-w').value) || null,
+            length_cm: parseFloat(r.querySelector('.i-l').value) || null,
+            qty: parseInt(r.querySelector('.i-qty').value) || 1,
+            unit_price: Number(r.dataset.unit || 0),
+            line_total: Number(r.dataset.line || 0),
+          };
+        }).filter(i => i.line_total > 0 || i.name !== 'ไม่ระบุ');
+
+        msg.textContent = ''; msg.className = 'msg';
+        if (!items.length) { msg.textContent = 'ใส่รายการอย่างน้อย 1 อย่าง'; msg.className = 'msg error'; return; }
+
+        const btn = foot.querySelector('#saveOrder');
+        btn.disabled = true; btn.textContent = 'กำลังบันทึก...';
+        try {
+          const total = items.reduce((s, i) => s + i.line_total, 0);
+          const order_no = await nextOrderNo();
+          const { data: ord, error: e1 } = await sb.from('orders').insert({
+            order_no,
+            customer: head.querySelector('#oCust').value.trim() || null,
+            channel: head.querySelector('#oChan').value,
+            due_date: head.querySelector('#oDue').value || null,
+            note: head.querySelector('#oNote').value.trim() || null,
+            total,
+          }).select('id').single();
+          if (e1) throw new Error(e1.message);
+          const { error: e2 } = await sb.from('order_items')
+            .insert(items.map(i => ({ ...i, order_id: ord.id })));
+          if (e2) throw new Error(e2.message);
+          viewingOrderId = ord.id;
+          currentView = 'orderView';
+          await boot();
+        } catch (err) {
+          msg.textContent = 'บันทึกไม่สำเร็จ: ' + err.message; msg.className = 'msg error';
+          btn.disabled = false; btn.innerHTML = icon('check', 16) + 'บันทึกใบงาน';
+        }
+      });
+    }
+
+    // ---- รายละเอียดใบงาน ----
+    async function loadOrderDetail(id) {
+      document.getElementById('statusMsg').textContent = 'กำลังโหลด...';
+      const [oRes, iRes] = await Promise.all([
+        sb.from('orders').select('id,order_no,customer,channel,status,due_date,note,total,created_at').eq('id', id).single(),
+        sb.from('order_items').select('name,width_cm,length_cm,qty,unit_price,line_total').eq('order_id', id),
+      ]);
+      if (oRes.error) throw oRes.error;
+      if (iRes.error) throw iRes.error;
+      renderOrderDetail(oRes.data, iRes.data);
+      document.getElementById('statusMsg').textContent = 'อัปเดตล่าสุด: ' + new Date().toLocaleString('th-TH');
+    }
+
+    function renderOrderDetail(o, items) {
+      const app = document.getElementById('app');
+      app.innerHTML = '';
+
+      const bar = document.createElement('div');
+      bar.className = 'no-print';
+      bar.style.cssText = 'display:flex;gap:var(--space-2);margin-bottom:var(--space-4);flex-wrap:wrap';
+      bar.innerHTML = `
+        <button class="btn secondary btn-sm" id="oBack">${icon('back', 15)}รายการใบงาน</button>
+        <button class="btn secondary btn-sm" id="oPrint">${icon('printer', 15)}พิมพ์ใบงาน</button>
+        <button class="btn secondary btn-sm icon-btn-delete" id="oDel" style="width:auto;height:auto;padding:0 14px;min-height:44px">${icon('trash', 15)}ลบใบงาน</button>
+      `;
+      app.appendChild(bar);
+      bar.querySelector('#oBack').addEventListener('click', () => { currentView = 'orders'; boot(); });
+      bar.querySelector('#oPrint').addEventListener('click', () => window.print());
+      bar.querySelector('#oDel').addEventListener('click', async () => {
+        if (!confirm('ลบใบงาน ' + o.order_no + ' ?')) return;
+        const { error } = await sb.from('orders').delete().eq('id', o.id);
+        if (error) { alert('ลบไม่สำเร็จ: ' + error.message); return; }
+        currentView = 'orders'; boot();
+      });
+
+      // แถบเปลี่ยนสถานะ
+      const stBar = document.createElement('div');
+      stBar.className = 'chips no-print';
+      stBar.innerHTML = Object.entries(ORDER_STATUS)
+        .map(([k, v]) => `<button class="chip ${o.status === k ? 'active' : ''}" data-s="${k}">${esc(v.label)}</button>`).join('');
+      app.appendChild(stBar);
+      stBar.querySelectorAll('.chip').forEach(c => c.addEventListener('click', async () => {
+        const { error } = await sb.from('orders').update({ status: c.dataset.s }).eq('id', o.id);
+        if (error) { alert('เปลี่ยนสถานะไม่สำเร็จ: ' + error.message); return; }
+        await boot();
+      }));
+
+      const d = new Date(o.created_at);
+      const st = ORDER_STATUS[o.status] || ORDER_STATUS.new;
+      const paper = document.createElement('div');
+      paper.className = 'receipt-paper';
+      paper.innerHTML = `
+        <div class="receipt-head">
+          <div>
+            <div class="receipt-shop">Haifa Design</div>
+            <div class="receipt-shop-sub">ใบงาน</div>
+          </div>
+          <div class="receipt-meta">
+            <div class="r-no">${esc(o.order_no)}</div>
+            <div>${d.toLocaleDateString('th-TH', { day: 'numeric', month: 'long' })} ${d.getFullYear() + 543}</div>
+            <div style="margin-top:4px"><span class="st ${st.cls}">${esc(st.label)}</span></div>
+          </div>
+        </div>
+        <div class="receipt-to">
+          ${o.customer ? `<div class="r-label">ลูกค้า</div>${esc(o.customer)}` : '<div class="r-label">ลูกค้า</div>—'}
+          <div style="margin-top:8px;font-size:12px;color:#6b7280">
+            ช่องทาง: ${esc(o.channel || '—')}${o.due_date ? ' · กำหนดส่ง: ' + new Date(o.due_date).toLocaleDateString('th-TH') : ''}
+          </div>
+        </div>
+        <table class="receipt-table">
+          <thead><tr><th>รายการ</th><th>ขนาด</th><th>จำนวน</th><th>ราคา/หน่วย</th><th>รวม</th></tr></thead>
+          <tbody>${items.map(i => `<tr>
+            <td>${esc(i.name)}</td>
+            <td>${i.width_cm && i.length_cm ? i.width_cm + ' x ' + i.length_cm : '—'}</td>
+            <td>${i.qty}</td>
+            <td>${fmtBaht(i.unit_price)}</td>
+            <td>${fmtBaht(i.line_total)}</td>
+          </tr>`).join('')}</tbody>
+        </table>
+        <div class="receipt-total"><span>ยอดรวม</span><span>${fmtBaht(round2(o.total))} บาท</span></div>
+        ${o.note ? `<div class="receipt-note">หมายเหตุ: ${esc(o.note)}</div>` : ''}
+      `;
+      app.appendChild(paper);
     }
 
     // ===== ใบเสร็จ =====
@@ -1722,7 +2276,7 @@
       if (activeTab === 'customer') activeTab = 'daily';
       const app = document.getElementById('app');
       app.innerHTML = '';
-      app.appendChild(buildPageHead('ป้ายผ้า', 'ล็อตงาน คำนวณผ้า และสถานะการชำระเงิน'));
+      app.appendChild(buildPageHead('ต้นทุนผลิต (ป้ายผ้า)', 'งานที่ส่งผลิตกับร้านอื่น — ล็อตงาน คำนวณผ้า และยอดที่ต้องจ่ายร้านผลิต'));
 
       let totalPieces = 0, grandTotalYard = 0, grandTotalPrice = 0;
       const lotBlocks = lots.map(lot => {
