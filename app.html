@@ -400,6 +400,18 @@
     // วาง URL ที่ได้จากการ deploy drive-images.gs ตรงนี้ (ลงท้ายด้วย /exec)
     const DRIVE_API_URL = '';
 
+    // ชื่อโฟลเดอร์ในไดรฟ์เขียนไม่เหมือนกัน (30-7-69 / 10 / 7/ 69 / 7/8/69)
+    // ทำให้เป็นรูปแบบเดียวกันก่อนจับคู่ ให้ตรงกับ normalizeLotName ใน drive-images.gs
+    function normalizeLotName(name) {
+      return String(name == null ? '' : name)
+        .replace(/[\s ]/g, '')
+        .replace(/[-.]/g, '/')
+        .split('/')
+        .filter(p => p !== '')
+        .map(p => /^\d+$/.test(p) ? String(parseInt(p, 10)) : p)
+        .join('/');
+    }
+
     async function driveList(lot) {
       if (!DRIVE_API_URL) return [];
       const url = DRIVE_API_URL + '?action=list&lot=' + encodeURIComponent(lot);
