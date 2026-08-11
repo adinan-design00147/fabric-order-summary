@@ -4509,12 +4509,14 @@
             if (error) throw error;
             say('สมัครแล้ว — เช็คอีเมล ' + e + ' แล้วกดลิงก์ยืนยัน จากนั้นกลับมาเข้าสู่ระบบ', 'ok');
           } else {
-            const { error } = await sb.auth.signInWithPassword({ email: e, password: p });
+            const { data, error } = await sb.auth.signInWithPassword({ email: e, password: p });
             if (error) throw error;
             pass.value = '';
-            await enterApp();
+            say('เข้าสู่ระบบสำเร็จ กำลังโหลดข้อมูล...', 'ok');
+            await enterApp(data.user);
           }
         } catch (err) {
+          console.error(err);
           const m = String(err.message || err);
           say(/Invalid login/i.test(m) ? 'อีเมลหรือรหัสผ่านไม่ถูกต้อง'
             : /not confirmed/i.test(m) ? 'ยังไม่ได้ยืนยันอีเมล — กดลิงก์ในอีเมลก่อน'
@@ -4541,14 +4543,10 @@
       });
     }
 
-    async function enterApp() {
-      const { data } = await sb.auth.getUser();
+    async function enterApp(user) {
       const who = document.getElementById('whoami');
       const out = document.getElementById('logoutBtn');
-      if (data && data.user) {
-        who.textContent = data.user.email;
-        out.hidden = false;
-      }
+      if (user) { who.textContent = user.email || ''; out.hidden = false; }
       showAuthScreen(false);
       applyHash();
       await boot();
@@ -4567,8 +4565,16 @@
       }
       sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
       bindAuthUI();
-      const { data: { session } } = await sb.auth.getSession();
-      if (session) { await enterApp(); }
+      let session = null;
+      try {
+        // กันค้าง: ถ้าอ่าน session ไม่เสร็จใน 8 วิ ให้ถือว่ายังไม่ล็อกอิน
+        const res = await Promise.race([
+          sb.auth.getSession(),
+          new Promise(r => setTimeout(() => r({ data: { session: null } }), 8000)),
+        ]);
+        session = res && res.data ? res.data.session : null;
+      } catch (e) { session = null; }
+      if (session) { await enterApp(session.user); }
       else { showAuthScreen(true); document.getElementById('auEmail').focus(); }
     })();
   </script>
