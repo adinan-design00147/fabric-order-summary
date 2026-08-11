@@ -223,6 +223,59 @@
 
   .loading { text-align: center; color: var(--sub); padding: var(--space-6); font-size: 13px; }
 
+  /* ===== เลือกรายการ + ใบเสร็จ ===== */
+  .pick { width: 20px; height: 20px; accent-color: var(--accent); cursor: pointer; margin: 0; }
+  td.pick-cell, th.pick-cell { width: 40px; text-align: center; }
+
+  .selbar {
+    position: fixed; left: 220px; right: 0; bottom: 0; z-index: 40;
+    background: var(--card); border-top: 1px solid var(--border);
+    padding: var(--space-3) var(--space-5); display: flex; align-items: center;
+    justify-content: space-between; gap: var(--space-3); flex-wrap: wrap;
+    box-shadow: 0 -4px 16px rgba(0,0,0,.08);
+  }
+  .selbar-info { font-size: 14px; font-weight: 600; }
+  .selbar-info .sb-sum { color: var(--accent); }
+  .selbar-actions { display: flex; gap: var(--space-2); flex-wrap: wrap; }
+
+  .receipt-paper {
+    background: #fff; color: #1f2430; border: 1px solid var(--border); border-radius: var(--radius);
+    padding: var(--space-6); max-width: 620px; margin: 0 auto;
+  }
+  .receipt-head { display: flex; justify-content: space-between; gap: var(--space-4); flex-wrap: wrap; border-bottom: 2px solid #1f2430; padding-bottom: var(--space-3); margin-bottom: var(--space-4); }
+  .receipt-shop { font-size: 18px; font-weight: 700; }
+  .receipt-shop-sub { font-size: 11px; color: #6b7280; letter-spacing: .12em; text-transform: uppercase; margin-top: 2px; }
+  .receipt-meta { text-align: right; font-size: 12px; color: #6b7280; }
+  .receipt-meta .r-no { font-size: 14px; font-weight: 700; color: #1f2430; }
+  .receipt-to { font-size: 13px; margin-bottom: var(--space-4); }
+  .receipt-to .r-label { font-size: 11px; color: #6b7280; }
+  .receipt-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .receipt-table th { text-align: right; font-size: 11px; color: #6b7280; border-bottom: 1px solid #e6e3dd; padding: 6px 8px; }
+  .receipt-table th:first-child, .receipt-table td:first-child { text-align: left; }
+  .receipt-table td { text-align: right; padding: 8px; border-bottom: 1px solid #f0eeea; font-variant-numeric: tabular-nums; }
+  .receipt-total { display: flex; justify-content: flex-end; gap: var(--space-5); margin-top: var(--space-4); padding-top: var(--space-3); border-top: 2px solid #1f2430; font-size: 16px; font-weight: 700; }
+  .receipt-note { margin-top: var(--space-4); font-size: 12px; color: #6b7280; white-space: pre-wrap; }
+  .receipt-foot { margin-top: var(--space-6); font-size: 11px; color: #9aa3b4; text-align: center; }
+
+  .rc-row { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); padding: var(--space-3) var(--space-4); background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: var(--space-2); cursor: pointer; font-family: inherit; width: 100%; text-align: left; }
+  .rc-row:hover { border-color: var(--accent); }
+  .rc-main { min-width: 0; }
+  .rc-no { font-size: 14px; font-weight: 700; }
+  .rc-sub { font-size: 11px; color: var(--sub); margin-top: 2px; }
+  .rc-amt { font-size: 14px; font-weight: 700; color: var(--accent); white-space: nowrap; font-variant-numeric: tabular-nums; }
+
+  @media (max-width: 900px) {
+    .selbar { left: 0; bottom: 76px; padding: var(--space-3) var(--space-4); }
+    .receipt-paper { padding: var(--space-4); }
+  }
+
+  @media print {
+    .sidebar, .bottom-nav, header, .selbar, .no-print { display: none !important; }
+    .container { margin: 0 !important; padding: 0 !important; max-width: none !important; }
+    .receipt-paper { border: none; max-width: none; padding: 0; }
+    body { background: #fff; padding: 0; }
+  }
+
   .info-note {
     background: var(--warn-bg); border: 1px solid var(--warn-border); color: var(--warn-text);
     border-radius: var(--radius); padding: var(--space-3) var(--space-4); font-size: 12px;
@@ -605,15 +658,22 @@
       { key: 'card',      label: 'การ์ด',      icon: '🎴' },
       { sep: true },
       { key: 'customers', label: 'ลูกค้า',     icon: '👤' },
+      { key: 'receipts',  label: 'ใบเสร็จ',    icon: '🧾' },
     ];
-    const MOBILE_NAV = ['dashboard', 'calendar', 'fabric', 'favor', 'customers'];
+    const MOBILE_NAV = ['dashboard', 'calendar', 'fabric', 'receipts', 'customers'];
 
     function viewMeta(key) {
       if (key === 'dashboard') return { label: 'แดชบอร์ด', icon: '📊' };
       if (key === 'calendar') return { label: 'ปฏิทิน', icon: '🗓️' };
       if (key === 'customers') return { label: 'ข้อมูลลูกค้า', icon: '👤' };
+      if (key === 'receipts') return { label: 'ใบเสร็จ', icon: '🧾' };
+      if (key === 'receiptView') return { label: 'ใบเสร็จ', icon: '🧾' };
       return PRODUCT_CATEGORIES[key] || { label: 'ระบบจัดการร้าน', icon: '' };
     }
+
+    // ===== สถานะการเลือกชิ้นงาน =====
+    let selectedPieces = new Map();   // id -> ข้อมูลชิ้นงาน
+    let viewingReceiptId = null;
 
     function renderNav() {
       const list = document.getElementById('navList');
@@ -678,6 +738,10 @@
 
     async function boot() {
       destroyCharts();
+      // การเลือกชิ้นงานใช้ได้เฉพาะหน้าป้ายผ้า ออกจากหน้านี้ให้ล้างทิ้ง
+      if (currentView !== 'fabric' && selectedPieces.size) selectedPieces.clear();
+      renderSelBar();
+      document.getElementById('receiptForm')?.remove();
       updateHeaderTitle();
       renderNav();
       document.getElementById('app').innerHTML = '<div class="loading">กำลังโหลดข้อมูล...</div>';
@@ -690,6 +754,10 @@
           await loadAll();
         } else if (currentView === 'customers') {
           await loadGlobalCustomers();
+        } else if (currentView === 'receipts') {
+          await loadReceipts();
+        } else if (currentView === 'receiptView') {
+          await loadReceiptDetail(viewingReceiptId);
         } else {
           await loadProducts(currentView);
         }
@@ -800,6 +868,238 @@
       app.appendChild(row2);
 
       drawCharts(all);
+    }
+
+    // ===== ใบเสร็จ =====
+    function clearSelection() {
+      selectedPieces.clear();
+      renderSelBar();
+    }
+
+    function renderSelBar() {
+      let bar = document.getElementById('selBar');
+      if (selectedPieces.size === 0) { if (bar) bar.remove(); return; }
+      if (!bar) {
+        bar = document.createElement('div');
+        bar.id = 'selBar';
+        bar.className = 'selbar no-print';
+        document.body.appendChild(bar);
+      }
+      const total = [...selectedPieces.values()].reduce((s, p) => s + Number(p.price), 0);
+      bar.innerHTML = `
+        <div class="selbar-info">เลือก ${selectedPieces.size} ชิ้น · <span class="sb-sum">${fmtBaht(round2(total))} บาท</span></div>
+        <div class="selbar-actions">
+          <button class="btn secondary btn-sm" id="selClear">ล้างที่เลือก</button>
+          <button class="btn btn-sm" id="selReceipt">🧾 ออกใบเสร็จ</button>
+        </div>
+      `;
+      bar.querySelector('#selClear').addEventListener('click', () => {
+        document.querySelectorAll('.pick:checked').forEach(c => { c.checked = false; });
+        clearSelection();
+      });
+      bar.querySelector('#selReceipt').addEventListener('click', openReceiptForm);
+    }
+
+    function openReceiptForm() {
+      const items = [...selectedPieces.values()];
+      if (!items.length) return;
+      const total = round2(items.reduce((s, p) => s + Number(p.price), 0));
+
+      const overlay = document.createElement('div');
+      overlay.className = 'panel no-print';
+      overlay.id = 'receiptForm';
+      overlay.style.cssText = 'position:fixed;inset:auto 0 0 0;z-index:60;max-width:520px;margin:0 auto 90px;box-shadow:0 8px 32px rgba(0,0,0,.18)';
+      overlay.innerHTML = `
+        <h2>🧾 ออกใบเสร็จ</h2>
+        <div class="hint" style="margin-top:0">${items.length} ชิ้น · รวม ${fmtBaht(total)} บาท</div>
+        <div class="field" style="margin-top:var(--space-3)">
+          <label for="rcpTo">ชื่อลูกค้า/ผู้รับ</label>
+          <input id="rcpTo" placeholder="ไม่บังคับ">
+        </div>
+        <div class="field" style="margin-top:var(--space-3)">
+          <label for="rcpNote">หมายเหตุ</label>
+          <input id="rcpNote" placeholder="ไม่บังคับ">
+        </div>
+        <div style="display:flex;gap:var(--space-2);margin-top:var(--space-4)">
+          <button class="btn secondary block" id="rcpCancel">ยกเลิก</button>
+          <button class="btn block" id="rcpSave">บันทึกใบเสร็จ</button>
+        </div>
+        <div class="msg" id="rcpMsg"></div>
+      `;
+      document.body.appendChild(overlay);
+      overlay.querySelector('#rcpTo').focus();
+      overlay.querySelector('#rcpCancel').addEventListener('click', () => overlay.remove());
+      overlay.querySelector('#rcpSave').addEventListener('click', async () => {
+        const btn = overlay.querySelector('#rcpSave');
+        const msg = overlay.querySelector('#rcpMsg');
+        btn.disabled = true; btn.textContent = 'กำลังบันทึก...';
+        try {
+          const id = await createReceipt(
+            items,
+            overlay.querySelector('#rcpTo').value.trim(),
+            overlay.querySelector('#rcpNote').value.trim(),
+            total
+          );
+          overlay.remove();
+          clearSelection();
+          viewingReceiptId = id;
+          currentView = 'receiptView';
+          await boot();
+        } catch (e) {
+          msg.textContent = e.message; msg.className = 'msg error';
+          btn.disabled = false; btn.textContent = 'บันทึกใบเสร็จ';
+        }
+      });
+    }
+
+    async function nextReceiptNo() {
+      const { data } = await sb.from('receipts').select('receipt_no').order('created_at', { ascending: false }).limit(1);
+      const now = new Date();
+      const prefix = 'RC' + String((now.getFullYear() + 543) % 100) + String(now.getMonth() + 1).padStart(2, '0');
+      let run = 1;
+      if (data && data.length) {
+        const m = String(data[0].receipt_no).match(/^RC(\d{4})-(\d+)$/);
+        if (m && m[1] === prefix.slice(2)) run = parseInt(m[2]) + 1;
+        else {
+          const { count } = await sb.from('receipts').select('id', { count: 'exact', head: true });
+          run = (count || 0) + 1;
+        }
+      }
+      return prefix + '-' + String(run).padStart(3, '0');
+    }
+
+    async function createReceipt(items, recipient, note, total) {
+      const receipt_no = await nextReceiptNo();
+      const { data: rc, error: e1 } = await sb.from('receipts').insert({
+        receipt_no, recipient: recipient || null, note: note || null,
+        total, item_count: items.length,
+      }).select('id').single();
+      if (e1) throw new Error('บันทึกใบเสร็จไม่สำเร็จ: ' + e1.message);
+
+      const rows = items.map(p => ({
+        receipt_id: rc.id, piece_id: p.id, lot_name: p.lotName,
+        label: p.label || null, width_cm: p.width_cm, length_cm: p.length_cm, price: p.price,
+      }));
+      const { error: e2 } = await sb.from('receipt_items').insert(rows);
+      if (e2) throw new Error('บันทึกรายการไม่สำเร็จ: ' + e2.message);
+
+      // มาร์คชิ้นที่อยู่ในใบเสร็จว่าจ่ายแล้ว
+      const { error: e3 } = await sb.from('pieces').update({ paid: true }).in('id', items.map(p => p.id));
+      if (e3) throw new Error('อัปเดตสถานะจ่ายไม่สำเร็จ: ' + e3.message);
+
+      return rc.id;
+    }
+
+    async function loadReceipts() {
+      document.getElementById('statusMsg').textContent = 'กำลังโหลด...';
+      const { data, error } = await sb.from('receipts')
+        .select('id,receipt_no,recipient,note,total,item_count,created_at')
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      renderReceipts(data);
+      document.getElementById('statusMsg').textContent = 'อัปเดตล่าสุด: ' + new Date().toLocaleString('th-TH');
+    }
+
+    function renderReceipts(list) {
+      const app = document.getElementById('app');
+      app.innerHTML = '';
+      app.appendChild(buildPageHead('ใบเสร็จ', 'ประวัติใบเสร็จย้อนหลังทั้งหมด'));
+
+      if (!list.length) {
+        const empty = document.createElement('div');
+        empty.className = 'loading';
+        empty.innerHTML = 'ยังไม่มีใบเสร็จ<br><span style="font-size:12px">ไปที่แท็บป้ายผ้า เลือกชิ้นงานที่ต้องการ แล้วกด "ออกใบเสร็จ"</span>';
+        app.appendChild(empty);
+        return;
+      }
+
+      const totalAll = list.reduce((s, r) => s + Number(r.total), 0);
+      const sum = document.createElement('div');
+      sum.className = 'summary-grid';
+      sum.innerHTML = `
+        <div class="stat"><div class="num">${list.length}</div><div class="lbl">ใบเสร็จทั้งหมด</div></div>
+        <div class="stat"><div class="num">${fmtBaht(round2(totalAll))}</div><div class="lbl">ยอดรวมทุกใบ (บาท)</div></div>
+      `;
+      app.appendChild(sum);
+
+      list.forEach(r => {
+        const btn = document.createElement('button');
+        btn.className = 'rc-row';
+        btn.innerHTML = `
+          <span class="rc-main">
+            <span class="rc-no">${esc(r.receipt_no)}</span>
+            <span class="rc-sub">${new Date(r.created_at).toLocaleString('th-TH')} · ${r.item_count} ชิ้น${r.recipient ? ' · ' + esc(r.recipient) : ''}</span>
+          </span>
+          <span class="rc-amt">${fmtBaht(round2(r.total))} บาท</span>
+        `;
+        btn.addEventListener('click', () => {
+          viewingReceiptId = r.id;
+          currentView = 'receiptView';
+          boot();
+        });
+        app.appendChild(btn);
+      });
+    }
+
+    async function loadReceiptDetail(id) {
+      document.getElementById('statusMsg').textContent = 'กำลังโหลด...';
+      const [rcRes, itRes] = await Promise.all([
+        sb.from('receipts').select('id,receipt_no,recipient,note,total,item_count,created_at').eq('id', id).single(),
+        sb.from('receipt_items').select('lot_name,label,width_cm,length_cm,price').eq('receipt_id', id),
+      ]);
+      if (rcRes.error) throw rcRes.error;
+      if (itRes.error) throw itRes.error;
+      renderReceiptDetail(rcRes.data, itRes.data);
+      document.getElementById('statusMsg').textContent = 'อัปเดตล่าสุด: ' + new Date().toLocaleString('th-TH');
+    }
+
+    function renderReceiptDetail(rc, items) {
+      const app = document.getElementById('app');
+      app.innerHTML = '';
+
+      const bar = document.createElement('div');
+      bar.className = 'no-print';
+      bar.style.cssText = 'display:flex;gap:var(--space-2);margin-bottom:var(--space-4);flex-wrap:wrap';
+      bar.innerHTML = `
+        <button class="btn secondary btn-sm" id="rcBack">← ประวัติใบเสร็จ</button>
+        <button class="btn btn-sm" id="rcPrint">🖨️ พิมพ์ / บันทึกเป็น PDF</button>
+      `;
+      app.appendChild(bar);
+      bar.querySelector('#rcBack').addEventListener('click', () => { currentView = 'receipts'; boot(); });
+      bar.querySelector('#rcPrint').addEventListener('click', () => window.print());
+
+      const d = new Date(rc.created_at);
+      const paper = document.createElement('div');
+      paper.className = 'receipt-paper';
+      paper.innerHTML = `
+        <div class="receipt-head">
+          <div>
+            <div class="receipt-shop">Haifa Design</div>
+            <div class="receipt-shop-sub">ใบสรุปยอด</div>
+          </div>
+          <div class="receipt-meta">
+            <div class="r-no">${esc(rc.receipt_no)}</div>
+            <div>${d.toLocaleDateString('th-TH', { day: 'numeric', month: 'long' })} ${d.getFullYear() + 543}</div>
+            <div>${d.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })} น.</div>
+          </div>
+        </div>
+        ${rc.recipient ? `<div class="receipt-to"><div class="r-label">ผู้รับ</div>${esc(rc.recipient)}</div>` : ''}
+        <table class="receipt-table">
+          <thead><tr><th>รายการ</th><th>ล็อต</th><th>ขนาด (ซม.)</th><th>ราคา</th></tr></thead>
+          <tbody>
+            ${items.map(i => `<tr>
+              <td>${esc(i.label || '-')}</td>
+              <td>${esc(i.lot_name || '-')}</td>
+              <td>${i.width_cm} x ${i.length_cm}</td>
+              <td>${fmtBaht(i.price)}</td>
+            </tr>`).join('')}
+          </tbody>
+        </table>
+        <div class="receipt-total"><span>รวมทั้งสิ้น</span><span>${fmtBaht(round2(rc.total))} บาท</span></div>
+        ${rc.note ? `<div class="receipt-note">หมายเหตุ: ${esc(rc.note)}</div>` : ''}
+        <div class="receipt-foot">ออกโดยระบบจัดการออเดอร์ Haifa Design</div>
+      `;
+      app.appendChild(paper);
     }
 
     // ===== ปฏิทิน =====
@@ -1421,6 +1721,11 @@
         const rowsHtml = rows.map(r => {
           const { yardPerPiece } = calcPiece(r.width_cm, r.length_cm, SETTINGS);
           return `<tr>
+            <td class="pick-cell" data-label="เลือก">
+              <input type="checkbox" class="pick" data-id="${r.id}" data-lot="${esc(lot.name)}"
+                data-label-txt="${esc(r.label || '')}" data-w="${r.width_cm}" data-l="${r.length_cm}"
+                data-price="${r.price}" aria-label="เลือกชิ้นงานนี้" ${selectedPieces.has(r.id) ? 'checked' : ''}>
+            </td>
             <td class="piece-name" data-label="รายการ">
               <span class="piece-name-text">${esc(r.label || '-')}</span>
               <span class="piece-name-actions">
@@ -1446,11 +1751,12 @@
           <div class="lot-actions">
             ${hasUnpaid ? `<button class="btn secondary btn-sm mark-lot-paid" data-lot="${lot.id}">✅ จ่ายครบล็อตนี้</button>` : ''}
             <button class="btn secondary btn-sm toggle-gallery">🖼️ รูปงาน</button>
+            ${rows.length ? `<button class="btn secondary btn-sm pick-all">☑️ เลือกทั้งล็อต</button>` : ''}
           </div>
           <div class="table-wrap">
             <table>
-              <thead><tr><th>รายการ</th><th>ขนาด (ซม.)</th><th>ราคา</th><th>ผ้า (หลา)</th><th>สถานะ</th></tr></thead>
-              <tbody>${rowsHtml || '<tr><td colspan="5" class="empty-cell">ยังไม่มีชิ้นงาน</td></tr>'}</tbody>
+              <thead><tr><th class="pick-cell"></th><th>รายการ</th><th>ขนาด (ซม.)</th><th>ราคา</th><th>ผ้า (หลา)</th><th>สถานะ</th></tr></thead>
+              <tbody>${rowsHtml || '<tr><td colspan="6" class="empty-cell">ยังไม่มีชิ้นงาน</td></tr>'}</tbody>
             </table>
           </div>
         `;
@@ -1711,7 +2017,7 @@
           const width = btn.dataset.width;
           const length = btn.dataset.length;
           tr.innerHTML = `
-            <td colspan="5">
+            <td colspan="6">
               <div class="edit-row">
                 <input class="edit-label" placeholder="ชื่อ/รายละเอียด" aria-label="ชื่อ/รายละเอียด" value="${esc(label)}">
                 <input class="edit-width" type="number" min="0" step="any" value="${width}" placeholder="กว้าง" aria-label="กว้าง (ซม.)">
@@ -1751,6 +2057,37 @@
           td.classList.toggle('active');
         });
       });
+
+      app.querySelectorAll('.pick').forEach(cb => {
+        cb.addEventListener('change', () => {
+          const id = cb.dataset.id;
+          if (cb.checked) {
+            selectedPieces.set(id, {
+              id, lotName: cb.dataset.lot, label: cb.dataset.labelTxt,
+              width_cm: Number(cb.dataset.w), length_cm: Number(cb.dataset.l),
+              price: Number(cb.dataset.price),
+            });
+          } else {
+            selectedPieces.delete(id);
+          }
+          renderSelBar();
+        });
+      });
+
+      app.querySelectorAll('.pick-all').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const card = btn.closest('.lot-card');
+          const boxes = [...card.querySelectorAll('.pick')];
+          const allOn = boxes.every(b => b.checked);
+          boxes.forEach(b => {
+            b.checked = !allOn;
+            b.dispatchEvent(new Event('change'));
+          });
+          btn.textContent = allOn ? '☑️ เลือกทั้งล็อต' : '⬜ ยกเลิกที่เลือก';
+        });
+      });
+
+      renderSelBar();
 
       app.querySelectorAll('.mark-lot-paid').forEach(btn => {
         btn.addEventListener('click', async () => {
