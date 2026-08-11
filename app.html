@@ -994,11 +994,18 @@
 
     async function fetchProducts() {
       const { data, error } = await sb.from('products')
-        .select('id,name,category,pricing_mode,unit_price,area_rate,unit,note,active')
-        .order('created_at');
+        .select('id,name,category,pricing_mode,unit_price,area_rate,unit,note,active,width_cm,length_cm,sort_order')
+        .order('sort_order').order('created_at');
       if (error) throw error;
       PRODUCTS = data;
       return data;
+    }
+
+    function productOptionLabel(p) {
+      const price = p.pricing_mode === 'per_area'
+        ? fmtBaht(p.area_rate) + ' บ./ตร.ซม.'
+        : fmtBaht(p.unit_price || 0) + ' บ.';
+      return p.name + ' — ' + price + (p.note === 'ขนาดขายดี' ? ' ★' : '');
     }
 
     async function loadProductCatalog() {
@@ -1035,6 +1042,8 @@
             </select>
           </div>
           <div class="field"><label for="pPrice">ราคาขาย</label><input id="pPrice" type="number" min="0" step="any" placeholder="0" inputmode="decimal"></div>
+          <div class="field"><label for="pW">กว้าง (ซม.)</label><input id="pW" type="number" min="0" step="any" placeholder="ไม่บังคับ" inputmode="decimal"></div>
+          <div class="field"><label for="pL">ยาว (ซม.)</label><input id="pL" type="number" min="0" step="any" placeholder="ไม่บังคับ" inputmode="decimal"></div>
         </div>
         <button id="pAdd" class="btn secondary block">${icon('plus', 15)}เพิ่มสินค้า</button>
         <div class="msg" id="pMsg"></div>
@@ -1065,6 +1074,9 @@
           pricing_mode: mode,
           unit_price: mode === 'fixed' ? price : null,
           area_rate: mode === 'per_area' ? price : null,
+          width_cm: parseFloat(panel.querySelector('#pW').value) || null,
+          length_cm: parseFloat(panel.querySelector('#pL').value) || null,
+          sort_order: 10,
         });
         if (error) { msg.textContent = 'เพิ่มไม่สำเร็จ: ' + error.message; msg.className = 'msg error'; btn.disabled = false; return; }
         await loadProductCatalog();
@@ -1074,7 +1086,7 @@
       const card = document.createElement('div');
       card.className = 'lot-card';
       const rows = list.map(p => `<tr>
-        <td data-label="สินค้า">${esc(p.name)}${p.category ? '<br><span style="font-size:11px;color:var(--sub)">' + esc(p.category) + '</span>' : ''}</td>
+        <td data-label="สินค้า">${esc(p.name)}${p.note === 'ขนาดขายดี' ? ' <span class="st st-paid">ขายดี</span>' : ''}${p.category ? '<br><span style="font-size:11px;color:var(--sub)">' + esc(p.category) + (p.width_cm && p.length_cm ? ' · ' + p.width_cm + ' x ' + p.length_cm + ' ซม.' : '') + '</span>' : ''}</td>
         <td data-label="คิดราคา">${p.pricing_mode === 'per_area' ? 'ตามขนาด' : 'ตายตัว'}</td>
         <td data-label="ราคาขาย">${esc(priceLabel(p))}</td>
         <td data-label="จัดการ" class="row-actions">
@@ -1306,10 +1318,10 @@
           <div class="field">
             <label>สินค้า</label>
             <select class="i-prod">
-              <option value="">— พิมพ์ชื่อเอง —</option>
-              ${PRODUCTS.map(p => `<option value="${p.id}">${esc(p.name)}</option>`).join('')}
+              <option value="">— ขนาดพิเศษ / พิมพ์เอง —</option>
+              ${PRODUCTS.map(p => `<option value="${p.id}">${esc(productOptionLabel(p))}</option>`).join('')}
             </select>
-            <input class="i-name" placeholder="ชื่อรายการ" aria-label="ชื่อรายการ" style="margin-top:6px">
+            <input class="i-name" placeholder="ชื่อรายการ / ขนาดที่ลูกค้าต้องการ" aria-label="ชื่อรายการ" style="margin-top:6px">
           </div>
           <div class="field i-size"><label>กว้าง</label><input class="i-w" type="number" min="0" step="any" placeholder="ซม." inputmode="decimal"></div>
           <div class="field i-size"><label>ยาว</label><input class="i-l" type="number" min="0" step="any" placeholder="ซม." inputmode="decimal"></div>
@@ -1325,11 +1337,18 @@
         function syncMode() {
           const p = PRODUCTS.find(x => x.id === sel.value);
           const perArea = p && p.pricing_mode === 'per_area';
-          row.querySelectorAll('.i-size').forEach(el => { el.style.display = perArea ? '' : 'none'; });
-          row.classList.toggle('no-size', !perArea);
+          // โชว์ช่องขนาดเมื่อ: คิดตามพื้นที่ หรือ ขนาดพิเศษ (พิมพ์เอง)
+          const showSize = perArea || !p;
+          row.querySelectorAll('.i-size').forEach(el => { el.style.display = showSize ? '' : 'none'; });
+          row.classList.toggle('no-size', !showSize);
           row.querySelector('.i-price').readOnly = !!perArea;
           nameInput.style.display = sel.value ? 'none' : '';
-          if (p && p.pricing_mode === 'fixed') row.querySelector('.i-price').value = p.unit_price || 0;
+          if (p && p.pricing_mode === 'fixed') {
+            row.querySelector('.i-price').value = p.unit_price || 0;
+            // สินค้าที่มีขนาดกำหนดไว้แล้ว ให้ใช้ขนาดนั้น
+            row.querySelector('.i-w').value = p.width_cm ?? '';
+            row.querySelector('.i-l').value = p.length_cm ?? '';
+          }
           recalcAll();
         }
         sel.addEventListener('change', syncMode);
