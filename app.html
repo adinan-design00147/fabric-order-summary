@@ -470,7 +470,7 @@
             <input id="oQty" type="number" min="1" value="1" inputmode="numeric">
           </div>
           <div class="field">
-            <label for="oCost">ต้นทุน/ชิ้น (บาท)</label>
+            <label for="oCost">ราคา/ชิ้น (บาท)</label>
             <input id="oCost" type="number" min="0" placeholder="0" inputmode="decimal">
           </div>
           <div class="field">
@@ -492,7 +492,7 @@
         const btn = panel.querySelector('#addOrderBtn');
         msg.textContent = ''; msg.className = 'msg';
         if (!name) { msg.textContent = 'กรอกชื่อ/แบบก่อน'; msg.className = 'msg error'; return; }
-        if (isNaN(cost)) { msg.textContent = 'กรอกต้นทุนต่อชิ้น'; msg.className = 'msg error'; return; }
+        if (isNaN(cost)) { msg.textContent = 'กรอกราคาต่อชิ้น'; msg.className = 'msg error'; return; }
         btn.disabled = true; btn.textContent = 'กำลังเพิ่ม...';
         const { error } = await sb.from('product_orders').insert({
           category, name, customer: customer || null, quantity: qty, unit_cost: cost, unit_sell_price: sell, paid: false
@@ -526,8 +526,8 @@
       summary.className = 'summary-grid';
       summary.innerHTML = `
         <div class="stat"><div class="num">${orders.length}</div><div class="lbl">ออเดอร์ทั้งหมด</div></div>
-        <div class="stat"><div class="num">${fmtBaht(round2(totalCost))}</div><div class="lbl">ต้นทุนรวม (บาท)</div></div>
-        <div class="stat"><div class="num">${fmtBaht(round2(unpaidCost))}</div><div class="lbl">ค้างชำระต้นทุน (บาท)</div></div>
+        <div class="stat"><div class="num">${fmtBaht(round2(totalCost))}</div><div class="lbl">ยอดรวม (บาท)</div></div>
+        <div class="stat"><div class="num">${fmtBaht(round2(unpaidCost))}</div><div class="lbl">ยอดค้างชำระ (บาท)</div></div>
         ${hasSell
           ? `<div class="stat"><div class="num">${fmtBaht(round2(profit))}</div><div class="lbl">กำไรรวม (บาท)</div></div>`
           : `<div class="stat"><div class="num">${totalQty}</div><div class="lbl">จำนวนรวม (ชิ้น)</div></div>`}
@@ -554,7 +554,7 @@
             </span>
           </td>
           <td data-label="จำนวน">${o.quantity}</td>
-          <td data-label="ต้นทุน">${fmtBaht(cost)}</td>
+          <td data-label="ราคา">${fmtBaht(cost)}</td>
           <td data-label="ราคาขาย">${sell !== null ? fmtBaht(sell) : '-'}</td>
           <td data-label="สถานะ"><span class="paid-badge ${o.paid ? 'paid' : 'unpaid'}" data-id="${o.id}" data-paid="${o.paid}">${o.paid ? 'จ่ายแล้ว' : 'ยังไม่จ่าย'}</span></td>
         </tr>`;
@@ -562,7 +562,7 @@
       listCard.innerHTML = `
         <div class="table-wrap">
           <table>
-            <thead><tr><th>รายการ</th><th>จำนวน</th><th>ต้นทุน</th><th>ราคาขาย</th><th>สถานะ</th></tr></thead>
+            <thead><tr><th>รายการ</th><th>จำนวน</th><th>ราคา</th><th>ราคาขาย</th><th>สถานะ</th></tr></thead>
             <tbody>${rowsHtml || '<tr><td colspan="5" class="empty-cell">ยังไม่มีออเดอร์</td></tr>'}</tbody>
           </table>
         </div>
@@ -595,7 +595,7 @@
                 <input class="edit-o-name" placeholder="ชื่อ/แบบ" aria-label="ชื่อ/แบบ" value="${esc(btn.dataset.name)}">
                 <input class="edit-o-customer" placeholder="ลูกค้า/งาน" aria-label="ลูกค้า/งาน" value="${esc(btn.dataset.customer)}">
                 <input class="edit-o-qty" type="number" min="1" step="1" placeholder="จำนวน" aria-label="จำนวน" value="${btn.dataset.qty}">
-                <input class="edit-o-cost" type="number" min="0" step="any" placeholder="ต้นทุน/ชิ้น" aria-label="ต้นทุนต่อชิ้น" value="${btn.dataset.cost}">
+                <input class="edit-o-cost" type="number" min="0" step="any" placeholder="ราคา/ชิ้น" aria-label="ราคาต่อชิ้น" value="${btn.dataset.cost}">
                 <input class="edit-o-sell" type="number" min="0" step="any" placeholder="ราคาขาย/ชิ้น" aria-label="ราคาขายต่อชิ้น" value="${btn.dataset.sell}">
                 <button class="btn btn-sm save-order">✅ บันทึก</button>
                 <button class="btn secondary btn-sm cancel-order">✖️ ยกเลิก</button>
@@ -690,7 +690,7 @@
       summary.className = 'summary-grid';
       summary.innerHTML = `
         <div class="stat"><div class="num">${totalPieces}</div><div class="lbl">ชิ้นรวม</div></div>
-        <div class="stat"><div class="num">${fmtBaht(grandTotalPrice)}</div><div class="lbl">ต้นทุนรวม (บาท)</div></div>
+        <div class="stat"><div class="num">${fmtBaht(grandTotalPrice)}</div><div class="lbl">ยอดรวม (บาท)</div></div>
         <div class="stat"><div class="num">${round4(grandTotalYard).toFixed(2)}</div><div class="lbl">ผ้าที่ต้องใช้ (หลา)</div></div>
         <div class="stat"><div class="num">${bufferYard.toFixed(2)}</div><div class="lbl">แนะนำสั่งซื้อ +5% (หลา)</div></div>
         ${hasSell ? `<div class="stat"><div class="num">${fmtBaht(round2(grandProfit))}</div><div class="lbl">กำไรรวม (บาท)</div></div>` : ''}
@@ -751,7 +751,7 @@
               </span>
             </td>
             <td data-label="ขนาด (ซม.)">${r.width_cm} x ${r.length_cm}</td>
-            <td data-label="ต้นทุน">${fmtBaht(r.price)}</td>
+            <td data-label="ราคา">${fmtBaht(r.price)}</td>
             <td data-label="ราคาขาย">${r.sell_price !== null && r.sell_price !== undefined ? fmtBaht(r.sell_price) : '-'}</td>
             <td data-label="ผ้า (หลา)">${yardPerPiece.toFixed(2)}</td>
             <td data-label="สถานะ"><span class="paid-badge ${r.paid ? 'paid' : 'unpaid'}" data-id="${r.id}" data-paid="${r.paid}">${r.paid ? 'จ่ายแล้ว' : 'ยังไม่จ่าย'}</span></td>
@@ -765,7 +765,7 @@
           ${hasUnpaid ? `<div class="lot-actions"><button class="btn secondary btn-sm mark-lot-paid" data-lot="${lot.id}">✅ จ่ายครบล็อตนี้</button></div>` : ''}
           <div class="table-wrap">
             <table>
-              <thead><tr><th>รายการ</th><th>ขนาด (ซม.)</th><th>ต้นทุน</th><th>ราคาขาย</th><th>ผ้า (หลา)</th><th>สถานะ</th></tr></thead>
+              <thead><tr><th>รายการ</th><th>ขนาด (ซม.)</th><th>ราคา</th><th>ราคาขาย</th><th>ผ้า (หลา)</th><th>สถานะ</th></tr></thead>
               <tbody>${rowsHtml || '<tr><td colspan="6" class="empty-cell">ยังไม่มีชิ้นงาน</td></tr>'}</tbody>
             </table>
           </div>
@@ -856,9 +856,9 @@
       const paySummary = document.createElement('div');
       paySummary.className = 'summary-grid';
       paySummary.innerHTML = `
-        <div class="stat"><div class="num">${fmtBaht(round2(unpaidPrice))}</div><div class="lbl">ค้างจ่ายร้านผลิต (บาท)</div></div>
+        <div class="stat"><div class="num">${fmtBaht(round2(unpaidPrice))}</div><div class="lbl">ยอดค้างชำระรวม (บาท)</div></div>
         <div class="stat"><div class="num">${unpaidPieces}</div><div class="lbl">ชิ้นที่ยังไม่จ่าย</div></div>
-        <div class="stat"><div class="num">${fmtBaht(round2(paidPrice))}</div><div class="lbl">จ่ายร้านผลิตแล้ว (บาท)</div></div>
+        <div class="stat"><div class="num">${fmtBaht(round2(paidPrice))}</div><div class="lbl">ยอดจ่ายแล้วรวม (บาท)</div></div>
         <div class="stat"><div class="num">${paidPieces}</div><div class="lbl">ชิ้นที่จ่ายแล้ว</div></div>
       `;
       paymentEl.appendChild(paySummary);
@@ -1145,7 +1145,7 @@
         </div>
         <button id="addPieceBtn" class="btn secondary block">+ เพิ่มชิ้นงาน</button>
         <div class="msg" id="pieceMsg"></div>
-        <div class="hint">ต้นทุนต่อชิ้นคำนวณอัตโนมัติ = กว้าง x ยาว x ${SETTINGS.price_rate} บาท/ตร.ซม. (ราคาขายกรอกเองแยกต่างหาก)</div>
+        <div class="hint">ราคาต่อชิ้นคำนวณอัตโนมัติ = กว้าง x ยาว x ${SETTINGS.price_rate} บาท/ตร.ซม. (ราคาขายกรอกเองแยกต่างหาก)</div>
       `;
       piecePanel.querySelector('#pieceLot').addEventListener('change', (e) => {
         lastSelectedLotId = e.target.value;
