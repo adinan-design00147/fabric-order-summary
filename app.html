@@ -290,6 +290,8 @@
 
   /* หน้าจอเข้าสู่ระบบ */
   #authScreen { position: fixed; inset: 0; z-index: 200; background: var(--bg); display: flex; align-items: center; justify-content: center; padding: var(--space-4); }
+  /* ต้องมี !important เพราะ display:flex ด้านบนชนะ attribute hidden ของเบราว์เซอร์ */
+  #authScreen[hidden] { display: none !important; }
   .auth-box { width: 100%; max-width: 380px; background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: var(--space-6) var(--space-5); box-shadow: 0 10px 40px rgba(0,0,0,.08); }
   .auth-brand { font-size: 22px; font-weight: 700; }
   .auth-sub { font-size: 13px; color: var(--sub); margin-bottom: var(--space-5); }
