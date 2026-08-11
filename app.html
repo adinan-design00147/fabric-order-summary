@@ -313,6 +313,40 @@
     .item-row .line-sum { grid-column: 1 / -1; text-align: left; padding-bottom: 0; }
   }
 
+  /* ===== ชีตเมนูเพิ่มเติม (มือถือ) ===== */
+  .sheet-backdrop { position: fixed; inset: 0; z-index: 70; background: rgba(0,0,0,.45); display: flex; align-items: flex-end; }
+  .sheet {
+    background: var(--card); width: 100%; border-radius: 18px 18px 0 0;
+    padding: var(--space-3) var(--space-4) calc(var(--space-5) + env(safe-area-inset-bottom, 0px));
+    max-height: 80vh; overflow-y: auto;
+  }
+  .sheet-bar { width: 42px; height: 4px; border-radius: 999px; background: var(--border); margin: 0 auto var(--space-3); }
+  .sheet-title { font-size: 13px; font-weight: 700; color: var(--sub); margin-bottom: var(--space-2); }
+  .sheet-item {
+    display: flex; align-items: center; gap: var(--space-3); width: 100%; min-height: 52px;
+    background: none; border: none; border-radius: 12px; cursor: pointer; font-family: inherit;
+    font-size: 15px; font-weight: 600; color: var(--text); text-align: left; padding: 0 var(--space-3);
+  }
+  .sheet-item.active, .sheet-item:hover { background: var(--accent-soft); color: var(--accent); }
+
+  /* ===== การชำระเงิน / ใบปะหน้าพัสดุ ===== */
+  .pay-line { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); padding: var(--space-2) 0; border-bottom: 1px solid var(--border); font-size: 13px; }
+  .pay-line:last-child { border-bottom: none; }
+  .pay-amt { font-weight: 700; color: var(--ok-text); font-variant-numeric: tabular-nums; }
+  .bal-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-2); margin-bottom: var(--space-3); }
+  @media (max-width: 640px) { .bal-grid { grid-template-columns: 1fr; } }
+
+  .ship-label {
+    background: #fff; color: #1f2430; border: 2px dashed #9aa3b4; border-radius: 12px;
+    padding: var(--space-5); max-width: 480px; margin: 0 auto;
+  }
+  .ship-from { font-size: 11px; color: #6b7280; border-bottom: 1px solid #e6e3dd; padding-bottom: var(--space-3); margin-bottom: var(--space-3); }
+  .ship-to-label { font-size: 10px; letter-spacing: .18em; text-transform: uppercase; color: #6b7280; }
+  .ship-name { font-size: 20px; font-weight: 700; margin: 4px 0 6px; }
+  .ship-addr { font-size: 15px; line-height: 1.7; white-space: pre-wrap; }
+  .ship-phone { font-size: 16px; font-weight: 600; margin-top: var(--space-3); }
+  .ship-foot { margin-top: var(--space-4); padding-top: var(--space-3); border-top: 1px solid #e6e3dd; font-size: 12px; color: #6b7280; display: flex; justify-content: space-between; gap: var(--space-3); }
+
   @media (max-width: 900px) {
     .selbar { left: 0; bottom: 76px; padding: var(--space-3) var(--space-4); }
     .receipt-paper { padding: var(--space-4); }
@@ -322,6 +356,8 @@
     .sidebar, .bottom-nav, header, .selbar, .no-print { display: none !important; }
     .container { margin: 0 !important; padding: 0 !important; max-width: none !important; }
     .receipt-paper { border: none; max-width: none; padding: 0; }
+    .ship-label { border: 2px dashed #000; max-width: none; }
+    .sheet-backdrop { display: none !important; }
     body { background: #fff; padding: 0; }
   }
 
@@ -431,10 +467,17 @@
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   }
   .cal-chip.unpaid { background: var(--warn-bg); color: var(--warn-text); }
+  .cal-chip.lay-recv { background: var(--accent-soft); color: var(--accent); }
+  .cal-chip.lay-due  { background: #e8f1fe; color: #1f5fbf; }
+  .cal-chip.lay-cost { background: var(--warn-bg); color: var(--warn-text); }
+  html[data-theme="dark"] .cal-chip.lay-due { background: #1b2a44; color: #8ab4f8; }
   .cal-more { font-size: 10px; color: var(--sub); }
   .cal-dot-row { display: none; gap: 3px; flex-wrap: wrap; }
   .cal-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
   .cal-dot.unpaid { background: var(--warn-border); }
+  .cal-dot.lay-recv { background: var(--accent); }
+  .cal-dot.lay-due  { background: #1f5fbf; }
+  .cal-dot.lay-cost { background: var(--warn-border); }
 
   @media (max-width: 900px) {
     .cal-grid { gap: 4px; }
@@ -682,6 +725,10 @@
       price:     '<path d="M3.6 11.2 11 3.8a2 2 0 0 1 1.4-.6h5a2.4 2.4 0 0 1 2.4 2.4v5a2 2 0 0 1-.6 1.4l-7.4 7.4a2 2 0 0 1-2.8 0l-5.4-5.4a2 2 0 0 1 0-2.8Z"/><path d="M9.6 12.8a1.8 1.8 0 1 1 2.6 2.5"/><circle cx="16" cy="8" r="1.2"/>',
       factory:   '<path d="M3 21V10l5.5 3.5V10L14 13.5V7l7 4.5V21Z"/><path d="M3 21h18"/><path d="M9 17h1.5M14 17h1.5"/>',
       truck:     '<rect x="2" y="7" width="12" height="10" rx="2"/><path d="M14 10h3.5l3 3.2V17H14z"/><circle cx="7" cy="18.5" r="1.8"/><circle cx="17.5" cy="18.5" r="1.8"/>',
+      more:      '<circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/>',
+      cash:      '<rect x="2.5" y="6" width="19" height="12" rx="2.5"/><circle cx="12" cy="12" r="2.6"/><path d="M6 12h.01M18 12h.01"/>',
+      pin2:      '<path d="M12 21s7-6.4 7-11a7 7 0 1 0-14 0c0 4.6 7 11 7 11Z"/><circle cx="12" cy="10" r="2.4"/>',
+      phone:     '<path d="M6.5 3h3l1.5 4-2 1.4a12 12 0 0 0 5.6 5.6L16 12l4 1.5v3a2 2 0 0 1-2.2 2A16.5 16.5 0 0 1 4.5 5.2 2 2 0 0 1 6.5 3Z"/>',
     };
 
     function icon(name, size) {
@@ -754,7 +801,10 @@
       { key: 'customers', label: 'ลูกค้า',     icon: 'user' },
       { key: 'receipts',  label: 'ใบเสร็จ',    icon: 'receipt' },
     ];
-    const MOBILE_NAV = ['dashboard', 'orders', 'calendar', 'fabric', 'receipts'];
+    // แถบล่างมือถือ: 4 หน้าหลัก + ปุ่มเพิ่มเติมสำหรับที่เหลือ
+    const MOBILE_NAV = ['dashboard', 'orders', 'calendar', 'fabric'];
+    const MOBILE_MORE = ['products', 'customers', 'receipts'];
+    const PAY_METHODS = ['เงินสด', 'โอนธนาคาร', 'พร้อมเพย์', 'เก็บปลายทาง', 'บัตรเครดิต', 'อื่นๆ'];
 
     // ช่องทางรับออเดอร์ (แก้เพิ่ม/ลดได้ที่นี่)
     const CHANNELS = ['LINE', 'Facebook', 'Instagram', 'TikTok', 'Shopee', 'หน้าร้าน', 'โทรศัพท์', 'อื่นๆ'];
@@ -797,20 +847,53 @@
       ).join('');
 
       const bottom = document.getElementById('bottomNav');
+      const moreActive = MOBILE_MORE.includes(currentView);
       bottom.innerHTML = MOBILE_NAV.map(k => {
         const m = viewMeta(k);
+        const label = k === 'fabric' ? 'ต้นทุนผลิต' : m.label;
         return `<button class="nav-item ${currentView === k ? 'active' : ''}" data-key="${k}">
-                  <span class="nav-ico">${icon(m.icon, 21)}</span><span>${esc(m.label)}</span>
+                  <span class="nav-ico">${icon(m.icon, 21)}</span><span>${esc(label)}</span>
                 </button>`;
-      }).join('');
+      }).join('') + `
+        <button class="nav-item ${moreActive ? 'active' : ''}" id="moreBtn">
+          <span class="nav-ico">${icon('more', 21)}</span><span>เพิ่มเติม</span>
+        </button>`;
 
-      document.querySelectorAll('.nav-item').forEach(btn => {
+      document.querySelectorAll('.nav-item[data-key]').forEach(btn => {
         btn.addEventListener('click', () => {
           if (btn.dataset.key === currentView) return;
           currentView = btn.dataset.key;
           boot();
         });
       });
+      document.getElementById('moreBtn')?.addEventListener('click', openMoreSheet);
+    }
+
+    function openMoreSheet() {
+      document.getElementById('moreSheet')?.remove();
+      const wrap = document.createElement('div');
+      wrap.id = 'moreSheet';
+      wrap.className = 'sheet-backdrop no-print';
+      wrap.innerHTML = `
+        <div class="sheet">
+          <div class="sheet-bar"></div>
+          <div class="sheet-title">เมนูเพิ่มเติม</div>
+          ${MOBILE_MORE.map(k => {
+            const m = viewMeta(k);
+            return `<button class="sheet-item ${currentView === k ? 'active' : ''}" data-key="${k}">
+                      <span class="nav-ico">${icon(m.icon, 20)}</span><span>${esc(m.label)}</span>
+                    </button>`;
+          }).join('')}
+          <button class="btn secondary block" id="sheetClose" style="margin-top:var(--space-3)">ปิด</button>
+        </div>
+      `;
+      document.body.appendChild(wrap);
+      const close = () => wrap.remove();
+      wrap.addEventListener('click', (e) => { if (e.target === wrap) close(); });
+      wrap.querySelector('#sheetClose').addEventListener('click', close);
+      wrap.querySelectorAll('.sheet-item').forEach(b => b.addEventListener('click', () => {
+        currentView = b.dataset.key; close(); boot();
+      }));
     }
 
     function updateHeaderTitle() {
@@ -889,22 +972,109 @@
     async function loadDashboard() {
       document.getElementById('statusMsg').textContent = 'กำลังโหลด...';
       SETTINGS = await loadSettings();
-      const [lotsRes, piecesRes, ordersRes] = await Promise.all([
+      const [lotsRes, piecesRes, ordersRes, salesRes] = await Promise.all([
         sb.from('lots').select('id,name'),
         sb.from('pieces').select('id,lot_id,width_cm,length_cm,label,price,paid'),
         sb.from('product_orders').select('id,category,name,customer,quantity,unit_cost,paid,created_at'),
+        sb.from('orders').select('id,order_no,customer,channel,status,total,paid_amount,due_date,created_at'),
       ]);
       if (lotsRes.error) throw lotsRes.error;
       if (piecesRes.error) throw piecesRes.error;
       if (ordersRes.error) throw ordersRes.error;
-      renderDashboard(lotsRes.data, piecesRes.data, ordersRes.data);
+      if (salesRes.error) throw salesRes.error;
+      renderDashboard(lotsRes.data, piecesRes.data, ordersRes.data, salesRes.data);
       document.getElementById('statusMsg').textContent = 'อัปเดตล่าสุด: ' + new Date().toLocaleString('th-TH');
     }
 
-    function renderDashboard(lots, pieces, orders) {
+    function renderDashboard(lots, pieces, orders, sales) {
+      sales = sales || [];
       const app = document.getElementById('app');
       app.innerHTML = '';
-      app.appendChild(buildPageHead('แดชบอร์ด', 'ภาพรวมออเดอร์ทั้งร้าน'));
+      app.appendChild(buildPageHead('แดชบอร์ด', 'ภาพรวมทั้งร้าน — ฝั่งขายและฝั่งต้นทุนผลิต'));
+
+      // ===== ฝั่งขาย (ใบงาน) =====
+      const now2 = new Date();
+      const salesThisMonth = sales.filter(s => {
+        const d = new Date(s.created_at);
+        return d.getFullYear() === now2.getFullYear() && d.getMonth() === now2.getMonth() && s.status !== 'cancelled';
+      });
+      const salesTotal = salesThisMonth.reduce((s, o) => s + Number(o.total), 0);
+      const activeOrders = sales.filter(s => s.status !== 'paid' && s.status !== 'cancelled');
+      const custOutstanding = sales
+        .filter(s => s.status !== 'cancelled')
+        .reduce((s, o) => s + Math.max(0, Number(o.total) - Number(o.paid_amount || 0)), 0);
+      const dueSoon = sales.filter(s => {
+        if (!s.due_date || s.status === 'paid' || s.status === 'cancelled') return false;
+        const diff = (new Date(s.due_date) - new Date(new Date().toDateString())) / 86400000;
+        return diff >= 0 && diff <= 7;
+      });
+
+      const salesHead = document.createElement('h2');
+      salesHead.className = 'section-title';
+      salesHead.style.marginTop = '0';
+      salesHead.innerHTML = icon('clipboard', 17) + 'ฝั่งขาย (ใบงาน)';
+      app.appendChild(salesHead);
+
+      const salesKpi = document.createElement('div');
+      salesKpi.className = 'kpi-grid';
+      salesKpi.innerHTML = `
+        <div class="kpi">
+          <div class="kpi-top"><span class="kpi-ico">${icon('cash', 17)}</span><span class="kpi-trend up">${salesThisMonth.length} ใบ</span></div>
+          <div><div class="kpi-num">${fmtBaht(round2(salesTotal))}</div><div class="kpi-lbl">ยอดขายเดือนนี้ (บาท)</div></div>
+        </div>
+        <div class="kpi">
+          <div class="kpi-top"><span class="kpi-ico">${icon('clock', 17)}</span><span class="kpi-trend ${custOutstanding > 0 ? 'down' : 'up'}">ลูกค้า</span></div>
+          <div><div class="kpi-num">${fmtBaht(round2(custOutstanding))}</div><div class="kpi-lbl">ค้างเก็บจากลูกค้า (บาท)</div></div>
+        </div>
+        <div class="kpi">
+          <div class="kpi-top"><span class="kpi-ico">${icon('clipboard', 17)}</span><span class="kpi-trend flat">ยังไม่ปิด</span></div>
+          <div><div class="kpi-num">${activeOrders.length}</div><div class="kpi-lbl">ใบงานที่ค้างอยู่</div></div>
+        </div>
+        <div class="kpi">
+          <div class="kpi-top"><span class="kpi-ico">${icon('truck', 17)}</span><span class="kpi-trend ${dueSoon.length ? 'down' : 'flat'}">7 วัน</span></div>
+          <div><div class="kpi-num">${dueSoon.length}</div><div class="kpi-lbl">ใกล้ถึงกำหนดส่ง</div></div>
+        </div>
+      `;
+      app.appendChild(salesKpi);
+
+      if (sales.length) {
+        const byChannel = {};
+        sales.filter(s => s.status !== 'cancelled').forEach(s => {
+          const c = s.channel || 'ไม่ระบุ';
+          byChannel[c] = (byChannel[c] || 0) + Number(s.total);
+        });
+        const chRow = document.createElement('div');
+        chRow.className = 'dash-row thirds';
+        chRow.innerHTML = `
+          <div class="panel-card">
+            <h3>ยอดขายตามช่องทาง</h3>
+            <div class="panel-sub">รวมทุกใบงานที่ไม่ถูกยกเลิก</div>
+            <div class="chart-box donut"><canvas id="chartChannel"></canvas></div>
+          </div>
+          <div class="panel-card">
+            <h3>ใบงานล่าสุด</h3>
+            <div class="panel-sub">${sales.length} ใบทั้งหมด</div>
+            <div class="mini-list">${sales.slice(0, 8).map(s => {
+              const st = ORDER_STATUS[s.status] || ORDER_STATUS.new;
+              const bal = Math.max(0, Number(s.total) - Number(s.paid_amount || 0));
+              return `<div class="mini-row">
+                <div class="mini-main">
+                  <div class="mini-title">${esc(s.order_no)} ${s.customer ? '· ' + esc(s.customer) : ''}</div>
+                  <div class="mini-meta">${esc(st.label)}${s.channel ? ' · ' + esc(s.channel) : ''}${bal > 0 ? ' · ค้าง ' + fmtBaht(round2(bal)) : ''}</div>
+                </div>
+                <div class="mini-amt">${fmtBaht(round2(s.total))}</div>
+              </div>`;
+            }).join('')}</div>
+          </div>
+        `;
+        app.appendChild(chRow);
+        setTimeout(() => drawChannelChart(byChannel), 30);
+      }
+
+      const costHead = document.createElement('h2');
+      costHead.className = 'section-title';
+      costHead.innerHTML = icon('factory', 17) + 'ฝั่งต้นทุนผลิต (ส่งผลิตร้านอื่น)';
+      app.appendChild(costHead);
 
       const all = flattenOrders(lots, pieces, orders);
 
@@ -1266,7 +1436,19 @@
             <select id="oChan">${CHANNELS.map(c => `<option ${isEdit && editOrder.channel === c ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select>
           </div>
           <div class="field"><label for="oDue">กำหนดส่ง</label><input id="oDue" type="date" value="${isEdit ? (editOrder.due_date || '') : ''}"></div>
+          <div class="field"><label for="oPhone">เบอร์โทร</label><input id="oPhone" placeholder="เพิ่มทีหลังได้" value="${isEdit ? esc(editOrder.phone || '') : ''}"></div>
+          <div class="field">
+            <label for="oPay">ช่องทางชำระ</label>
+            <select id="oPay">
+              <option value="">— ยังไม่ระบุ —</option>
+              ${PAY_METHODS.map(m => `<option ${isEdit && editOrder.payment_method === m ? 'selected' : ''}>${esc(m)}</option>`).join('')}
+            </select>
+          </div>
           <div class="field"><label for="oNote">หมายเหตุ</label><input id="oNote" placeholder="ไม่บังคับ" value="${isEdit ? esc(editOrder.note || '') : ''}"></div>
+        </div>
+        <div class="field" style="margin-top:var(--space-3)">
+          <label for="oAddr">ที่อยู่จัดส่ง (เพิ่มทีหลังได้)</label>
+          <input id="oAddr" placeholder="บ้านเลขที่ ถนน ตำบล อำเภอ จังหวัด รหัสไปรษณีย์" value="${isEdit ? esc(editOrder.address || '') : ''}">
         </div>
       `;
       app.appendChild(head);
@@ -1411,6 +1593,9 @@
             channel: head.querySelector('#oChan').value,
             due_date: head.querySelector('#oDue').value || null,
             note: head.querySelector('#oNote').value.trim() || null,
+            phone: head.querySelector('#oPhone').value.trim() || null,
+            address: head.querySelector('#oAddr').value.trim() || null,
+            payment_method: head.querySelector('#oPay').value || null,
             total,
           };
 
@@ -1449,17 +1634,23 @@
     async function loadOrderDetail(id) {
       document.getElementById('statusMsg').textContent = 'กำลังโหลด...';
       const [oRes, iRes] = await Promise.all([
-        sb.from('orders').select('id,order_no,customer,channel,status,due_date,note,total,created_at').eq('id', id).single(),
+        sb.from('orders').select('id,order_no,customer,channel,status,due_date,note,total,created_at,phone,address,payment_method,paid_amount').eq('id', id).single(),
         sb.from('order_items').select('id,product_id,name,width_cm,length_cm,qty,unit_price,line_total').eq('order_id', id),
       ]);
+      const payRes = await sb.from('order_payments').select('id,amount,method,note,paid_at')
+        .eq('order_id', id).order('paid_at');
       await fetchProducts();
       if (oRes.error) throw oRes.error;
       if (iRes.error) throw iRes.error;
-      renderOrderDetail(oRes.data, iRes.data);
+      if (payRes.error) throw payRes.error;
+      renderOrderDetail(oRes.data, iRes.data, payRes.data);
       document.getElementById('statusMsg').textContent = 'อัปเดตล่าสุด: ' + new Date().toLocaleString('th-TH');
     }
 
-    function renderOrderDetail(o, items) {
+    function renderOrderDetail(o, items, payments) {
+      payments = payments || [];
+      const paid = payments.reduce((s, p) => s + Number(p.amount), 0);
+      const balance = round2(Number(o.total) - paid);
       const app = document.getElementById('app');
       app.innerHTML = '';
 
@@ -1470,12 +1661,14 @@
         <button class="btn secondary btn-sm" id="oBack">${icon('back', 15)}รายการใบงาน</button>
         <button class="btn btn-sm" id="oEdit">${icon('edit', 15)}แก้ไขใบงาน</button>
         <button class="btn secondary btn-sm" id="oPrint">${icon('printer', 15)}พิมพ์ใบงาน</button>
+        <button class="btn secondary btn-sm" id="oShip">${icon('truck', 15)}ใบปะหน้าพัสดุ</button>
         <button class="btn secondary btn-sm icon-btn-delete" id="oDel" style="width:auto;height:auto;padding:0 14px;min-height:44px">${icon('trash', 15)}ลบใบงาน</button>
       `;
       app.appendChild(bar);
       bar.querySelector('#oBack').addEventListener('click', () => { currentView = 'orders'; boot(); });
       bar.querySelector('#oEdit').addEventListener('click', () => openOrderForm(o, items));
       bar.querySelector('#oPrint').addEventListener('click', () => window.print());
+      bar.querySelector('#oShip').addEventListener('click', () => openShippingLabel(o));
       bar.querySelector('#oDel').addEventListener('click', async () => {
         if (!confirm('ลบใบงาน ' + o.order_no + ' ?')) return;
         const { error } = await sb.from('orders').delete().eq('id', o.id);
@@ -1492,6 +1685,77 @@
       stBar.querySelectorAll('.chip').forEach(c => c.addEventListener('click', async () => {
         const { error } = await sb.from('orders').update({ status: c.dataset.s }).eq('id', o.id);
         if (error) { alert('เปลี่ยนสถานะไม่สำเร็จ: ' + error.message); return; }
+        await boot();
+      }));
+
+      // ---- การชำระเงินจากลูกค้า ----
+      const payPanel = document.createElement('div');
+      payPanel.className = 'panel no-print';
+      payPanel.innerHTML = `
+        <h2>${icon('cash', 17)}การชำระเงินจากลูกค้า</h2>
+        <div class="bal-grid">
+          <div class="stat"><div class="num">${fmtBaht(round2(o.total))}</div><div class="lbl">ยอดรวม (บาท)</div></div>
+          <div class="stat"><div class="num" style="color:var(--ok-text)">${fmtBaht(round2(paid))}</div><div class="lbl">รับแล้ว (บาท)</div></div>
+          <div class="stat"><div class="num" style="color:${balance > 0 ? 'var(--warn-text)' : 'var(--ok-text)'}">${fmtBaht(balance)}</div><div class="lbl">${balance > 0 ? 'ค้างชำระ (บาท)' : 'ชำระครบแล้ว'}</div></div>
+        </div>
+        ${payments.length ? `<div style="margin-bottom:var(--space-3)">${payments.map(p => `
+          <div class="pay-line">
+            <span>
+              <span style="font-weight:600">${new Date(p.paid_at).toLocaleDateString('th-TH')}</span>
+              <span style="color:var(--sub)"> · ${esc(p.method || 'ไม่ระบุช่องทาง')}${p.note ? ' · ' + esc(p.note) : ''}</span>
+            </span>
+            <span style="display:flex;align-items:center;gap:var(--space-2)">
+              <span class="pay-amt">+${fmtBaht(round2(p.amount))}</span>
+              <button class="icon-btn icon-btn-delete del-pay" data-id="${p.id}" aria-label="ลบรายการรับเงิน" title="ลบ">${icon('trash', 16)}</button>
+            </span>
+          </div>`).join('')}</div>` : '<div class="hint" style="margin:0 0 var(--space-3)">ยังไม่มีการรับชำระ</div>'}
+        ${balance > 0 ? `
+        <div class="form-grid">
+          <div class="field"><label for="payAmt">จำนวนเงินที่รับ</label><input id="payAmt" type="number" min="0" step="any" value="${balance}" inputmode="decimal"></div>
+          <div class="field">
+            <label for="payMethod">ช่องทาง</label>
+            <select id="payMethod">${PAY_METHODS.map(m => `<option ${o.payment_method === m ? 'selected' : ''}>${esc(m)}</option>`).join('')}</select>
+          </div>
+          <div class="field"><label for="payNote">หมายเหตุ</label><input id="payNote" placeholder="เช่น มัดจำ"></div>
+        </div>
+        <button class="btn secondary block" id="addPay">${icon('plus', 15)}บันทึกรับเงิน</button>
+        <div class="msg" id="payMsg"></div>` : ''}
+      `;
+      app.appendChild(payPanel);
+
+      async function syncPaidAmount() {
+        const { data } = await sb.from('order_payments').select('amount').eq('order_id', o.id);
+        const sum = (data || []).reduce((s, p) => s + Number(p.amount), 0);
+        await sb.from('orders').update({ paid_amount: sum }).eq('id', o.id);
+        return sum;
+      }
+
+      payPanel.querySelector('#addPay')?.addEventListener('click', async () => {
+        const amt = parseFloat(payPanel.querySelector('#payAmt').value);
+        const msg = payPanel.querySelector('#payMsg');
+        msg.textContent = ''; msg.className = 'msg';
+        if (!amt || amt <= 0) { msg.textContent = 'ใส่จำนวนเงินก่อน'; msg.className = 'msg error'; return; }
+        const btn = payPanel.querySelector('#addPay');
+        btn.disabled = true; btn.textContent = 'กำลังบันทึก...';
+        const { error } = await sb.from('order_payments').insert({
+          order_id: o.id, amount: amt,
+          method: payPanel.querySelector('#payMethod').value,
+          note: payPanel.querySelector('#payNote').value.trim() || null,
+        });
+        if (error) { msg.textContent = 'บันทึกไม่สำเร็จ: ' + error.message; msg.className = 'msg error'; btn.disabled = false; return; }
+        const sum = await syncPaidAmount();
+        // รับครบแล้วเลื่อนสถานะเป็นเก็บเงินแล้วให้อัตโนมัติ
+        if (sum >= Number(o.total) && o.status !== 'cancelled') {
+          await sb.from('orders').update({ status: 'paid' }).eq('id', o.id);
+        }
+        await boot();
+      });
+
+      payPanel.querySelectorAll('.del-pay').forEach(b => b.addEventListener('click', async () => {
+        if (!confirm('ลบรายการรับเงินนี้?')) return;
+        const { error } = await sb.from('order_payments').delete().eq('id', b.dataset.id);
+        if (error) { alert('ลบไม่สำเร็จ: ' + error.message); return; }
+        await syncPaidAmount();
         await boot();
       }));
 
@@ -1528,9 +1792,53 @@
           </tr>`).join('')}</tbody>
         </table>
         <div class="receipt-total"><span>ยอดรวม</span><span>${fmtBaht(round2(o.total))} บาท</span></div>
+        ${paid > 0 ? `<div class="receipt-total" style="border-top:none;padding-top:0;font-size:13px;font-weight:600">
+          <span style="color:#6b7280">รับแล้ว</span><span style="color:#067647">${fmtBaht(round2(paid))} บาท</span>
+        </div>` : ''}
+        ${balance > 0 ? `<div class="receipt-total" style="border-top:none;padding-top:0;font-size:14px">
+          <span>ค้างชำระ</span><span style="color:#92400e">${fmtBaht(balance)} บาท</span>
+        </div>` : ''}
+        ${o.address ? `<div class="receipt-note">จัดส่ง: ${esc(o.address)}${o.phone ? ' · โทร ' + esc(o.phone) : ''}</div>` : ''}
         ${o.note ? `<div class="receipt-note">หมายเหตุ: ${esc(o.note)}</div>` : ''}
       `;
       app.appendChild(paper);
+    }
+
+    // ---- ใบปะหน้าพัสดุ ----
+    function openShippingLabel(o) {
+      if (!o.address && !o.phone) {
+        if (!confirm('ใบงานนี้ยังไม่มีที่อยู่/เบอร์โทร\nกด "แก้ไขใบงาน" เพื่อเพิ่มก่อน — จะเปิดใบเปล่าไว้ดูรูปแบบไหม?')) return;
+      }
+      const app = document.getElementById('app');
+      app.innerHTML = '';
+
+      const bar = document.createElement('div');
+      bar.className = 'no-print';
+      bar.style.cssText = 'display:flex;gap:var(--space-2);margin-bottom:var(--space-4);flex-wrap:wrap';
+      bar.innerHTML = `
+        <button class="btn secondary btn-sm" id="sBack">${icon('back', 15)}กลับไปใบงาน</button>
+        <button class="btn btn-sm" id="sPrint">${icon('printer', 15)}พิมพ์ใบปะหน้า</button>
+      `;
+      app.appendChild(bar);
+      bar.querySelector('#sBack').addEventListener('click', () => { currentView = 'orderView'; boot(); });
+      bar.querySelector('#sPrint').addEventListener('click', () => window.print());
+
+      const label = document.createElement('div');
+      label.className = 'ship-label';
+      label.innerHTML = `
+        <div class="ship-from">
+          <strong>ผู้ส่ง</strong> · Haifa Design
+        </div>
+        <div class="ship-to-label">ผู้รับ</div>
+        <div class="ship-name">${esc(o.customer || '—')}</div>
+        <div class="ship-addr">${esc(o.address || '(ยังไม่ได้กรอกที่อยู่)')}</div>
+        ${o.phone ? `<div class="ship-phone">โทร. ${esc(o.phone)}</div>` : ''}
+        <div class="ship-foot">
+          <span>เลขที่ ${esc(o.order_no)}</span>
+          <span>${o.payment_method === 'เก็บปลายทาง' ? 'เก็บปลายทาง ' + fmtBaht(round2(Number(o.total) - Number(o.paid_amount || 0))) + ' บาท' : ''}</span>
+        </div>
+      `;
+      app.appendChild(label);
     }
 
     // ===== ใบเสร็จ =====
@@ -1830,43 +2138,117 @@
       return all;
     }
 
+    // ชั้นข้อมูลที่โชว์บนปฏิทิน (เปิด/ปิดได้)
+    let calLayers = { received: true, due: true, cost: true };
+
     async function loadCalendar() {
       document.getElementById('statusMsg').textContent = 'กำลังโหลด...';
       SETTINGS = await loadSettings();
-      const [lotsRes, piecesRes, ordersRes] = await Promise.all([
+      const [lotsRes, piecesRes, ordersRes, salesRes] = await Promise.all([
         sb.from('lots').select('id,name'),
         sb.from('pieces').select('id,lot_id,width_cm,length_cm,label,price,paid'),
         sb.from('product_orders').select('id,category,name,customer,quantity,unit_cost,paid,created_at'),
+        sb.from('orders').select('id,order_no,customer,channel,status,total,paid_amount,due_date,created_at'),
       ]);
       if (lotsRes.error) throw lotsRes.error;
       if (piecesRes.error) throw piecesRes.error;
       if (ordersRes.error) throw ordersRes.error;
-      renderCalendar(flattenOrders(lotsRes.data, piecesRes.data, ordersRes.data));
+      if (salesRes.error) throw salesRes.error;
+
+      const events = [];
+
+      // ชั้น 1: วันรับงาน (ใบงานถูกสร้าง)
+      salesRes.data.forEach(o => {
+        if (o.status === 'cancelled') return;
+        events.push({
+          layer: 'received', title: 'รับงาน ' + o.order_no,
+          sub: (o.customer || 'ไม่ระบุลูกค้า') + (o.channel ? ' · ' + o.channel : ''),
+          amount: Number(o.total), date: new Date(o.created_at), orderId: o.id,
+        });
+      });
+
+      // ชั้น 2: วันส่งงาน (กำหนดส่ง)
+      salesRes.data.forEach(o => {
+        if (!o.due_date || o.status === 'cancelled') return;
+        const [y, m, dd] = o.due_date.split('-').map(Number);
+        events.push({
+          layer: 'due', title: 'ส่งงาน ' + o.order_no,
+          sub: (o.customer || 'ไม่ระบุลูกค้า') + ' · ' + (ORDER_STATUS[o.status] || ORDER_STATUS.new).label,
+          amount: Number(o.total), date: new Date(y, m - 1, dd), orderId: o.id,
+        });
+      });
+
+      // ชั้น 3: ค้างจ่ายร้านผลิต (จากล็อตป้ายผ้า)
+      const lotById = {};
+      lotsRes.data.forEach(l => lotById[l.id] = l);
+      const unpaidByLot = {};
+      piecesRes.data.forEach(p => {
+        if (p.paid) return;
+        const lot = lotById[p.lot_id];
+        if (!lot) return;
+        if (!unpaidByLot[lot.id]) unpaidByLot[lot.id] = { name: lot.name, amount: 0, count: 0 };
+        unpaidByLot[lot.id].amount += Number(p.price);
+        unpaidByLot[lot.id].count++;
+      });
+      Object.values(unpaidByLot).forEach(l => {
+        const d = parseLotDate(l.name);
+        if (!d) return;
+        events.push({
+          layer: 'cost', title: 'ค้างจ่ายร้านผลิต',
+          sub: 'ล็อต ' + l.name + ' · ' + l.count + ' ชิ้น',
+          amount: l.amount, date: d,
+        });
+      });
+
+      renderCalendar(events);
       document.getElementById('statusMsg').textContent = 'อัปเดตล่าสุด: ' + new Date().toLocaleString('th-TH');
     }
 
     function renderCalendar(all) {
       const app = document.getElementById('app');
       app.innerHTML = '';
-      app.appendChild(buildPageHead('ปฏิทิน', 'ออเดอร์ทุกสินค้ากระจายตามวัน'));
+      app.appendChild(buildPageHead('ปฏิทิน', 'วันรับงาน วันส่งงาน และยอดค้างจ่ายร้านผลิต'));
+
+      const LAYER_META = {
+        received: { label: 'วันรับงาน',        cls: 'lay-recv' },
+        due:      { label: 'วันส่งงาน',        cls: 'lay-due' },
+        cost:     { label: 'ค้างจ่ายร้านผลิต', cls: 'lay-cost' },
+      };
+
+      // ปุ่มกรองชั้นข้อมูล
+      const layerBar = document.createElement('div');
+      layerBar.className = 'chips';
+      layerBar.innerHTML = Object.entries(LAYER_META).map(([k, v]) => {
+        const n = all.filter(e => e.layer === k).length;
+        return `<button class="chip ${calLayers[k] ? 'active' : ''}" data-l="${k}">${esc(v.label)} (${n})</button>`;
+      }).join('');
+      app.appendChild(layerBar);
+      layerBar.querySelectorAll('.chip').forEach(c => c.addEventListener('click', () => {
+        calLayers[c.dataset.l] = !calLayers[c.dataset.l];
+        renderCalendar(all);
+      }));
+
+      const shown = all.filter(e => calLayers[e.layer]);
 
       // จัดกลุ่มตามวัน
       const byDay = {};
-      all.forEach(r => {
+      shown.forEach(r => {
         if (!r.date) return;
         const k = r.date.getFullYear() + '-' + r.date.getMonth() + '-' + r.date.getDate();
         (byDay[k] = byDay[k] || []).push(r);
       });
 
-      const monthItems = all.filter(r => r.date && r.date.getFullYear() === calYear && r.date.getMonth() === calMonth);
-      const monthUnpaid = monthItems.filter(r => !r.paid);
+      const monthItems = shown.filter(r => r.date && r.date.getFullYear() === calYear && r.date.getMonth() === calMonth);
+      const mRecv = monthItems.filter(r => r.layer === 'received');
+      const mDue = monthItems.filter(r => r.layer === 'due');
+      const mCost = monthItems.filter(r => r.layer === 'cost');
 
       const top = document.createElement('div');
       top.className = 'cal-top';
       top.innerHTML = `
         <div>
           <div class="cal-title">${THAI_MONTHS[calMonth + 1]} ${calYear + 543}</div>
-          <div class="page-sub">${monthItems.length} รายการ · ค้างชำระ ${monthUnpaid.length} · รวม ${fmtBaht(round2(monthItems.reduce((s, r) => s + r.amount, 0)))} บาท</div>
+          <div class="page-sub">รับงาน ${mRecv.length} · ส่งงาน ${mDue.length} · ค้างจ่ายร้านผลิต ${fmtBaht(round2(mCost.reduce((s, r) => s + r.amount, 0)))} บาท</div>
         </div>
         <div class="cal-nav">
           <button class="btn secondary btn-sm" id="calPrev">‹ ก่อนหน้า</button>
@@ -1901,9 +2283,9 @@
         const shown = items.slice(0, 2);
         cell.innerHTML = `
           <span class="cal-daynum">${d.getDate()}</span>
-          ${shown.map(r => `<span class="cal-chip ${r.paid ? '' : 'unpaid'}">${esc(r.title)}</span>`).join('')}
+          ${shown.map(r => `<span class="cal-chip ${LAYER_META[r.layer].cls}">${esc(r.title)}</span>`).join('')}
           ${items.length > 2 ? `<span class="cal-more">+${items.length - 2} รายการ</span>` : ''}
-          <span class="cal-dot-row">${items.slice(0, 4).map(r => `<span class="cal-dot ${r.paid ? '' : 'unpaid'}"></span>`).join('')}</span>
+          <span class="cal-dot-row">${items.slice(0, 4).map(r => `<span class="cal-dot ${LAYER_META[r.layer].cls}"></span>`).join('')}</span>
         `;
         cell.addEventListener('click', () => {
           calSelected = calSelected === key ? null : key;
@@ -1923,9 +2305,22 @@
         detail.innerHTML = `
           <h3>${dd} ${THAI_MONTHS[mm + 1]} ${yy + 543}</h3>
           <div class="panel-sub">${items.length} รายการ · รวม ${fmtBaht(round2(items.reduce((s, r) => s + r.amount, 0)))} บาท</div>
-          <div class="mini-list">${items.length ? items.map(miniRow).join('') : '<div class="mini-empty">ไม่มีออเดอร์วันนี้</div>'}</div>
+          <div class="mini-list">${items.length ? items.map((r, idx) => `
+            <div class="mini-row ${r.orderId ? 'cal-jump' : ''}" data-oid="${r.orderId || ''}" ${r.orderId ? 'style="cursor:pointer"' : ''}>
+              <div class="mini-main">
+                <div class="mini-title">${esc(r.title)}</div>
+                <div class="mini-meta">${esc(LAYER_META[r.layer].label)} · ${esc(r.sub)}</div>
+              </div>
+              <div class="mini-amt">${fmtBaht(round2(r.amount))}</div>
+            </div>`).join('') : '<div class="mini-empty">ไม่มีรายการวันนี้</div>'}</div>
         `;
         app.appendChild(detail);
+        detail.querySelectorAll('.cal-jump').forEach(el => el.addEventListener('click', () => {
+          if (!el.dataset.oid) return;
+          viewingOrderId = el.dataset.oid;
+          currentView = 'orderView';
+          boot();
+        }));
       }
 
       top.querySelector('#calPrev').addEventListener('click', () => {
@@ -1941,6 +2336,30 @@
         calMonth = t.getMonth(); calYear = t.getFullYear();
         calSelected = null; renderCalendar(all);
       });
+    }
+
+    function drawChannelChart(byChannel) {
+      if (typeof Chart === 'undefined') return;
+      const el = document.getElementById('chartChannel');
+      if (!el) return;
+      const labels = Object.keys(byChannel).filter(k => byChannel[k] > 0);
+      if (!labels.length) return;
+      const css = getComputedStyle(document.documentElement);
+      dashCharts.push(new Chart(el, {
+        type: 'doughnut',
+        data: {
+          labels,
+          datasets: [{
+            data: labels.map(k => round2(byChannel[k])),
+            backgroundColor: ['#3454d1', '#f5b77e', '#5fd497', '#b48ef5', '#f58ea8', '#7ec8f5'],
+            borderWidth: 2, borderColor: css.getPropertyValue('--card').trim() || '#fff',
+          }],
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false, cutout: '62%',
+          plugins: { legend: { position: 'bottom', labels: { boxWidth: 10, padding: 12, font: { size: 11 } } } },
+        },
+      }));
     }
 
     function miniRow(r) {
