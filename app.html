@@ -492,18 +492,28 @@
             <button class="gallery-del" data-id="${esc(f.id)}" aria-label="ลบรูป" title="ลบรูป">✕</button>
           </div>
         `).join('');
-        // บางไฟล์ Drive ไม่สร้าง thumbnail ให้ — ลองขนาดอื่นก่อน ถ้ายังไม่ได้ค่อยโชว์ชื่อไฟล์แทนช่องว่าง
+        // Drive บางทีไม่สร้าง thumbnail ให้ หรือจำกัดโควตาแล้วค้างไม่ตอบ
+        // -> ลองลิงก์สำรอง ถ้ายังไม่ได้ (หรือค้างเกิน 12 วิ) ให้โชว์ชื่อไฟล์แทนช่องว่าง
         grid.querySelectorAll('.gallery-item img').forEach((img, i) => {
+          const id = files[i].id;
           let tried = 0;
-          img.addEventListener('error', () => {
-            const id = files[i].id;
-            tried++;
-            if (tried === 1) { img.src = 'https://lh3.googleusercontent.com/d/' + id + '=w800'; return; }
-            if (tried === 2) { img.src = 'https://drive.google.com/thumbnail?id=' + id + '&sz=w400'; return; }
+          let done = false;
+          const showFallback = () => {
+            if (done) return;
+            done = true;
             img.hidden = true;
             const fb = img.parentElement.querySelector('.gallery-fallback');
             if (fb) fb.hidden = false;
+          };
+          img.addEventListener('load', () => { done = true; });
+          img.addEventListener('error', () => {
+            if (done) return;
+            tried++;
+            if (tried === 1) { img.src = 'https://lh3.googleusercontent.com/d/' + id + '=w800'; return; }
+            if (tried === 2) { img.src = 'https://drive.google.com/thumbnail?id=' + id + '&sz=w400'; return; }
+            showFallback();
           });
+          setTimeout(() => { if (!img.complete || img.naturalWidth === 0) showFallback(); }, 12000);
         });
         grid.querySelectorAll('.gallery-del').forEach(b => {
           b.addEventListener('click', async () => {
