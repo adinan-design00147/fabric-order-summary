@@ -288,6 +288,26 @@
   .receipt-note { margin-top: var(--space-4); font-size: 12px; color: #6b7280; white-space: pre-wrap; }
   .receipt-foot { margin-top: var(--space-6); font-size: 11px; color: #9aa3b4; text-align: center; }
 
+  /* โหมดดูอย่างเดียว (viewer) — ซ่อนปุ่มที่แก้ข้อมูล ฐานข้อมูลกันอีกชั้นอยู่แล้ว */
+  body.role-viewer .icon-btn-delete,
+  body.role-viewer .icon-btn-edit,
+  body.role-viewer .paid-badge,
+  body.role-viewer .mark-lot-paid,
+  body.role-viewer #newOrder,
+  body.role-viewer #oEdit,
+  body.role-viewer #oDel,
+  body.role-viewer #addPieceBtn,
+  body.role-viewer #addLotBtn,
+  body.role-viewer #pAdd,
+  body.role-viewer #stOpen,
+  body.role-viewer #stAdd,
+  body.role-viewer .s-out, body.role-viewer .s-in, body.role-viewer .s-del,
+  body.role-viewer .gallery-bar label,
+  body.role-viewer #sSave { display: none !important; }
+  .viewer-banner { background: #fff7ed; border: 1px solid #fed7aa; color: #92400e; border-radius: var(--radius);
+                   padding: 10px var(--space-4); font-size: 13px; margin-bottom: var(--space-3); }
+  html[data-theme="dark"] .viewer-banner { background: #3a2f1c; border-color: #6b4f1d; color: #fcd9a5; }
+
   /* หน้าจอเข้าสู่ระบบ */
   #authScreen { position: fixed; inset: 0; z-index: 200; background: var(--bg); display: flex; align-items: center; justify-content: center; padding: var(--space-4); }
   /* ต้องมี !important เพราะ display:flex ด้านบนชนะ attribute hidden ของเบราว์เซอร์ */
@@ -902,10 +922,11 @@
       { key: 'receipts',  label: 'ใบเสร็จ',    icon: 'receipt' },
       { sep: true },
       { key: 'health',    label: 'ตรวจระบบ & สำรอง', icon: 'check' },
+      { key: 'profile',   label: 'โปรไฟล์ผู้ใช้', icon: 'user' },
     ];
     // แถบล่างมือถือ: 4 หน้าหลัก + ปุ่มเพิ่มเติมสำหรับที่เหลือ
     const MOBILE_NAV = ['dashboard', 'orders', 'calendar', 'fabric'];
-    const MOBILE_MORE = ['products', 'stock', 'customers', 'receipts', 'health'];
+    const MOBILE_MORE = ['products', 'stock', 'customers', 'receipts', 'health', 'profile'];
     const PAY_METHODS = ['เงินสด', 'โอนธนาคาร', 'พร้อมเพย์', 'เก็บปลายทาง', 'บัตรเครดิต', 'อื่นๆ'];
 
     // ช่องทางรับออเดอร์ (แก้เพิ่ม/ลดได้ที่นี่)
@@ -931,6 +952,7 @@
       if (key === 'fabric') return { label: 'ต้นทุนผลิต', icon: 'factory' };
       if (key === 'stock') return { label: 'สต็อกของ', icon: 'box' };
       if (key === 'health') return { label: 'ตรวจระบบ & สำรองข้อมูล', icon: 'check' };
+      if (key === 'profile') return { label: 'โปรไฟล์ผู้ใช้', icon: 'user' };
       return PRODUCT_CATEGORIES[key] || { label: 'ระบบจัดการร้าน', icon: '' };
     }
 
@@ -938,7 +960,7 @@
     let orderFilter = 'all';
 
     // ===== URL routing (ทำให้กดค้าง/คลิกขวา → เปิดในแท็บใหม่ได้ และปุ่ม back ใช้งานได้) =====
-    const VALID_VIEWS = ['dashboard', 'calendar', 'orders', 'products', 'fabric', 'stock', 'customers', 'receipts', 'health'];
+    const VALID_VIEWS = ['dashboard', 'calendar', 'orders', 'products', 'fabric', 'stock', 'customers', 'receipts', 'health', 'profile'];
 
     function routeFor(view, id) {
       if (view === 'orderView') return '#/order/' + id;
@@ -1046,6 +1068,19 @@
     }
 
     function buildPageHead(title, sub) {
+      if (MY_ROLE && MY_ROLE !== 'admin') {
+        const wrap = document.createDocumentFragment();
+        const warn = document.createElement('div');
+        warn.className = 'viewer-banner no-print';
+        warn.textContent = 'โหมดดูอย่างเดียว — บัญชีนี้ดูข้อมูลได้ แต่แก้ไข/เพิ่ม/ลบไม่ได้';
+        wrap.appendChild(warn);
+        wrap.appendChild(buildPageHeadInner(title, sub));
+        return wrap;
+      }
+      return buildPageHeadInner(title, sub);
+    }
+
+    function buildPageHeadInner(title, sub) {
       const el = document.createElement('div');
       el.className = 'page-head';
       el.innerHTML = `<h2>${esc(title)}</h2>${sub ? `<div class="page-sub">${esc(sub)}</div>` : ''}`;
@@ -1104,6 +1139,8 @@
           await loadStock();
         } else if (currentView === 'health') {
           await loadHealth();
+        } else if (currentView === 'profile') {
+          await loadProfile();
         } else {
           await loadProducts(currentView);
         }
@@ -1301,6 +1338,123 @@
       app.appendChild(row2);
 
       drawCharts(all);
+    }
+
+    // ===== โปรไฟล์ผู้ใช้ + สิทธิ์ =====
+    let ME = null, MY_ROLE = null, MY_NAME = '';
+    const isAdmin = () => MY_ROLE === 'admin';
+
+    async function loadMyProfile() {
+      MY_ROLE = null; MY_NAME = '';
+      if (!ME) return;
+      try {
+        const { data } = await sb.from('app_users').select('role,display_name').eq('user_id', ME.id).single();
+        if (data) { MY_ROLE = data.role; MY_NAME = data.display_name || ''; }
+      } catch (e) { /* ยังไม่มีแถวก็ปล่อยผ่าน */ }
+    }
+
+    /** โหมดดูอย่างเดียว: ซ่อนปุ่มที่แก้ข้อมูล (ฐานข้อมูลกันอีกชั้นอยู่แล้ว) */
+    function applyRoleUI() {
+      document.body.classList.toggle('role-viewer', !!MY_ROLE && !isAdmin());
+    }
+
+    async function loadProfile() {
+      const app = document.getElementById('app');
+      app.innerHTML = '';
+      app.appendChild(buildPageHead('โปรไฟล์ผู้ใช้', 'ชื่อเรียก รหัสผ่าน และผู้ใช้ที่เข้าระบบนี้ได้'));
+      document.getElementById('statusMsg').textContent = 'อัปเดตล่าสุด: ' + new Date().toLocaleString('th-TH');
+
+      // ---- ข้อมูลของฉัน ----
+      const me = document.createElement('div');
+      me.className = 'panel';
+      me.innerHTML = `
+        <h2>${icon('user', 17)}ข้อมูลของฉัน</h2>
+        <div class="form-grid">
+          <div class="field"><label>อีเมล (ใช้ล็อกอิน)</label><input value="${esc(ME ? ME.email : '')}" disabled></div>
+          <div class="field"><label for="pfName">ชื่อเรียก</label><input id="pfName" value="${esc(MY_NAME)}" placeholder="เช่น อดินัน"></div>
+        </div>
+        <button class="btn secondary" id="pfSaveName">${icon('check', 15)}บันทึกชื่อ</button>
+        <div class="msg" id="pfNameMsg"></div>
+        <div class="hint">สิทธิ์ของคุณ: <b>${MY_ROLE === 'admin' ? 'ผู้ดูแล — แก้ไขได้ทุกอย่าง' : MY_ROLE === 'viewer' ? 'ดูอย่างเดียว — แก้ไขข้อมูลไม่ได้' : 'ยังไม่ระบุ'}</b></div>
+      `;
+      app.appendChild(me);
+      me.querySelector('#pfSaveName').addEventListener('click', async () => {
+        const msg = me.querySelector('#pfNameMsg');
+        const name = me.querySelector('#pfName').value.trim();
+        const { error } = await sb.from('app_users').update({ display_name: name || null }).eq('user_id', ME.id);
+        if (error) { msg.textContent = 'บันทึกไม่สำเร็จ: ' + error.message; msg.className = 'msg error'; return; }
+        MY_NAME = name;
+        document.getElementById('whoami').innerHTML = esc(name || ME.email) +
+          ' <span class="st ' + (isAdmin() ? 'st-paid' : 'st-prod') + '">' + (isAdmin() ? 'ผู้ดูแล' : 'ดูอย่างเดียว') + '</span>';
+        msg.textContent = 'บันทึกแล้ว'; msg.className = 'msg ok';
+      });
+
+      // ---- เปลี่ยนรหัสผ่าน ----
+      const pw = document.createElement('div');
+      pw.className = 'panel';
+      pw.innerHTML = `
+        <h2>${icon('checkbox', 17)}เปลี่ยนรหัสผ่าน</h2>
+        <div class="form-grid">
+          <div class="field"><label for="pfPass1">รหัสผ่านใหม่</label>
+            <input id="pfPass1" type="password" autocomplete="new-password" placeholder="อย่างน้อย 8 ตัวอักษร"></div>
+          <div class="field"><label for="pfPass2">พิมพ์ซ้ำอีกครั้ง</label>
+            <input id="pfPass2" type="password" autocomplete="new-password" placeholder="พิมพ์ให้ตรงกัน"></div>
+        </div>
+        <button class="btn" id="pfSavePass">${icon('check', 15)}เปลี่ยนรหัสผ่าน</button>
+        <div class="msg" id="pfPassMsg"></div>
+        <div class="hint">เปลี่ยนได้ทันทีในหน้านี้ ไม่ต้องรอลิงก์ทางอีเมล · เครื่องอื่นที่ล็อกอินค้างไว้จะยังใช้ได้จนกว่าจะออกจากระบบ</div>
+      `;
+      app.appendChild(pw);
+      pw.querySelector('#pfSavePass').addEventListener('click', async () => {
+        const msg = pw.querySelector('#pfPassMsg');
+        const a = pw.querySelector('#pfPass1').value, b = pw.querySelector('#pfPass2').value;
+        msg.textContent = ''; msg.className = 'msg';
+        if (a.length < 8) { msg.textContent = 'รหัสผ่านต้องยาวอย่างน้อย 8 ตัวอักษร'; msg.className = 'msg error'; return; }
+        if (a !== b) { msg.textContent = 'รหัสผ่านสองช่องไม่ตรงกัน'; msg.className = 'msg error'; return; }
+        const btn = pw.querySelector('#pfSavePass');
+        btn.disabled = true;
+        const { error } = await sb.auth.updateUser({ password: a });
+        btn.disabled = false;
+        if (error) { msg.textContent = 'เปลี่ยนไม่สำเร็จ: ' + error.message; msg.className = 'msg error'; return; }
+        pw.querySelector('#pfPass1').value = ''; pw.querySelector('#pfPass2').value = '';
+        msg.textContent = 'เปลี่ยนรหัสผ่านเรียบร้อย ครั้งหน้าใช้รหัสใหม่'; msg.className = 'msg ok';
+      });
+
+      // ---- ผู้ใช้ทั้งหมด ----
+      const users = document.createElement('div');
+      users.className = 'lot-card';
+      app.appendChild(users);
+      const { data: list, error } = await sb.from('app_users')
+        .select('user_id,email,display_name,role,created_at').order('created_at');
+      if (error) { users.innerHTML = '<div class="msg error" style="padding:16px">โหลดรายชื่อไม่สำเร็จ: ' + esc(error.message) + '</div>'; return; }
+
+      users.innerHTML = `
+        <div class="lot-head"><span>${icon('user', 16)}ผู้ใช้ที่เข้าระบบนี้ได้ (${list.length})</span></div>
+        <div class="table-wrap"><table>
+          <thead><tr><th>ผู้ใช้</th><th>สิทธิ์</th><th>เข้าร่วมเมื่อ</th>${isAdmin() ? '<th>จัดการ</th>' : ''}</tr></thead>
+          <tbody>${list.map(u => `<tr>
+            <td data-label="ผู้ใช้">${esc(u.display_name || '—')}<br><span style="font-size:11.5px;color:var(--sub)">${esc(u.email || '')}</span></td>
+            <td data-label="สิทธิ์"><span class="st ${u.role === 'admin' ? 'st-paid' : 'st-prod'}">${u.role === 'admin' ? 'ผู้ดูแล' : 'ดูอย่างเดียว'}</span></td>
+            <td data-label="เข้าร่วมเมื่อ">${new Date(u.created_at).toLocaleDateString('th-TH')}</td>
+            ${isAdmin() ? `<td data-label="จัดการ">${u.user_id === (ME && ME.id)
+              ? '<span style="color:var(--sub);font-size:12px">ตัวคุณเอง</span>'
+              : `<select class="u-role" data-id="${u.user_id}" aria-label="สิทธิ์ผู้ใช้">
+                   <option value="viewer" ${u.role === 'viewer' ? 'selected' : ''}>ดูอย่างเดียว</option>
+                   <option value="admin" ${u.role === 'admin' ? 'selected' : ''}>ผู้ดูแล</option>
+                 </select>`}</td>` : ''}
+          </tr>`).join('')}</tbody>
+        </table></div>
+        <div class="hint" style="padding:0 var(--space-4) var(--space-4)">
+          ${isAdmin()
+            ? 'เพิ่มคนใหม่: ให้เขาเปิดเว็บนี้ → กด "สมัครใช้งานครั้งแรก" → ยืนยันอีเมล → ชื่อจะขึ้นในตารางนี้เป็น "ดูอย่างเดียว" แล้วคุณค่อยเลื่อนสิทธิ์ให้'
+            : 'เฉพาะผู้ดูแลเท่านั้นที่เปลี่ยนสิทธิ์ผู้ใช้ได้'}
+        </div>`;
+
+      users.querySelectorAll('.u-role').forEach(sel => sel.addEventListener('change', async () => {
+        const { error } = await sb.from('app_users').update({ role: sel.value }).eq('user_id', sel.dataset.id);
+        if (error) { alert('เปลี่ยนสิทธิ์ไม่สำเร็จ: ' + error.message); }
+        await loadProfile();
+      }));
     }
 
     // ===== ตรวจสุขภาพระบบ (self-check) =====
@@ -4682,9 +4836,17 @@ end $$;
     }
 
     async function enterApp(user) {
+      ME = user || null;
+      await loadMyProfile();
       const who = document.getElementById('whoami');
       const out = document.getElementById('logoutBtn');
-      if (user) { who.textContent = user.email || ''; out.hidden = false; }
+      if (user) {
+        who.innerHTML = esc(MY_NAME || user.email || '') +
+          (MY_ROLE ? ' <span class="st ' + (MY_ROLE === 'admin' ? 'st-paid' : 'st-prod') + '">' +
+            (MY_ROLE === 'admin' ? 'ผู้ดูแล' : 'ดูอย่างเดียว') + '</span>' : '');
+        out.hidden = false;
+      }
+      applyRoleUI();
       showAuthScreen(false);
       applyHash();
       await boot();
