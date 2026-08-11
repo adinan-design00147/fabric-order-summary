@@ -8,6 +8,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@400;500;600;700&display=swap" rel="stylesheet">
 <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <style>
   :root {
     --bg: #f7f5f2; --card: #ffffff; --text: #1f2430; --sub: #586273;
@@ -19,19 +20,38 @@
     --space-1: 4px; --space-2: 8px; --space-3: 12px; --space-4: 16px;
     --space-5: 20px; --space-6: 24px; --space-8: 32px;
   }
+  html[data-theme="dark"] {
+    --bg: #12151c; --card: #191d26; --text: #e8eaf0; --sub: #9aa3b4;
+    --accent: #6b87ff; --accent-soft: #232a3d; --border: #2a303c;
+    --warn-bg: #3a2a17; --warn-border: #7a5320; --warn-text: #f0b866;
+    --ok-bg: #16301f; --ok-text: #5fd497;
+    --err-text: #ff8b7d;
+  }
+  html[data-theme="dark"] .switch-knob { background: #e8eaf0; }
+  html[data-theme="dark"] .lot-actions { background: var(--accent-soft); }
+  html[data-theme="dark"] .icon-btn { background: var(--card); }
+  html[data-theme="dark"] .field input,
+  html[data-theme="dark"] .field select,
+  html[data-theme="dark"] .edit-row input,
+  html[data-theme="dark"] .search-wrap input { background: var(--bg); color: var(--text); }
   * { box-sizing: border-box; }
   body {
     margin: 0; font-family: 'Prompt', -apple-system, "Segoe UI", Roboto, "Noto Sans Thai", sans-serif;
     background: var(--bg); color: var(--text); padding-bottom: 96px;
   }
   header {
-    position: sticky; top: 0; z-index: 5; background: rgba(255,255,255,.92); backdrop-filter: blur(8px);
+    position: sticky; top: 0; z-index: 5; background: var(--card);
     border-bottom: 1px solid var(--border); padding: var(--space-4) var(--space-5);
     display: flex; align-items: center; justify-content: space-between; gap: var(--space-3);
+    margin-left: 220px;
   }
   header h1 { margin: 0; font-size: 17px; font-weight: 600; }
   header .meta { font-size: 12px; color: var(--sub); margin-top: 2px; }
-  .container { padding: var(--space-4) var(--space-4) 0; max-width: 720px; margin: 0 auto; }
+  .container { padding: var(--space-5) var(--space-5) 0; max-width: 1100px; margin: 0 auto; margin-left: 220px; }
+  @media (max-width: 900px) {
+    header { margin-left: 0; padding: var(--space-3) var(--space-4); }
+    .container { margin-left: auto; padding: var(--space-4) var(--space-4) 0; max-width: 720px; }
+  }
 
   .tabs { display: flex; gap: var(--space-2); margin-bottom: var(--space-4); }
   .tab-btn {
@@ -188,37 +208,101 @@
     line-height: 1.6; margin-bottom: var(--space-3);
   }
 
-  .picker-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: var(--space-3); margin-top: var(--space-2); }
-  .picker-card {
-    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--space-2);
-    background: var(--card); border: 1px solid var(--border); border-radius: var(--radius);
-    padding: var(--space-6) var(--space-3); cursor: pointer; font-family: inherit;
-    min-height: 120px; transition: border-color .15s ease, transform .1s ease;
+  /* ===== Sidebar (จอคอม) ===== */
+  .sidebar {
+    position: fixed; top: 0; left: 0; bottom: 0; width: 220px; z-index: 20;
+    background: var(--card); border-right: 1px solid var(--border);
+    display: flex; flex-direction: column; padding: var(--space-4) var(--space-3);
   }
-  .picker-card:hover { border-color: var(--accent); }
-  .picker-card:active { transform: scale(.98); }
-  .picker-card:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-  .picker-icon { font-size: 32px; }
-  .picker-label { font-size: 14px; font-weight: 600; color: var(--text); }
+  .sidebar-brand { padding: var(--space-2) var(--space-3) var(--space-4); }
+  .sidebar-brand .b-name { font-size: 15px; font-weight: 700; letter-spacing: .01em; }
+  .sidebar-brand .b-sub { font-size: 10px; color: var(--sub); letter-spacing: .16em; text-transform: uppercase; margin-top: 2px; }
+  .nav-list { display: flex; flex-direction: column; gap: 2px; flex: 1; overflow-y: auto; }
+  .nav-item {
+    display: flex; align-items: center; gap: var(--space-3); width: 100%;
+    background: none; border: none; border-radius: 10px; cursor: pointer; font-family: inherit;
+    font-size: 13.5px; font-weight: 500; color: var(--sub); text-align: left;
+    padding: 10px var(--space-3); min-height: 42px; transition: background .15s ease, color .15s ease;
+  }
+  .nav-item:hover { background: var(--accent-soft); color: var(--accent); }
+  .nav-item.active { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+  .nav-item:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+  .nav-ico { font-size: 15px; width: 20px; text-align: center; flex-shrink: 0; }
+  .nav-sep { height: 1px; background: var(--border); margin: var(--space-2) var(--space-3); }
+  .sidebar-foot { border-top: 1px solid var(--border); padding-top: var(--space-3); margin-top: var(--space-2); }
+  .theme-row {
+    display: flex; align-items: center; justify-content: space-between; gap: var(--space-2);
+    padding: 8px var(--space-3); font-size: 13px; color: var(--sub);
+  }
+  .switch { position: relative; width: 40px; height: 24px; flex-shrink: 0; border: none; background: none; padding: 0; cursor: pointer; }
+  .switch-track { display: block; width: 40px; height: 24px; border-radius: 999px; background: var(--border); transition: background .18s ease; }
+  .switch-knob { position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.25); transition: transform .18s ease; }
+  .switch[aria-checked="true"] .switch-track { background: var(--accent); }
+  .switch[aria-checked="true"] .switch-knob { transform: translateX(16px); }
 
-  .picker-wide-card {
-    display: flex; align-items: center; gap: var(--space-3); width: 100%; margin-top: var(--space-3);
-    background: var(--card); border: 1px solid var(--border); border-radius: var(--radius);
-    padding: var(--space-4); cursor: pointer; font-family: inherit; text-align: left;
-    transition: border-color .15s ease, transform .1s ease;
-  }
-  .picker-wide-card:hover { border-color: var(--accent); }
-  .picker-wide-card:active { transform: scale(.99); }
-  .picker-wide-card:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-  .picker-wide-card .picker-icon { font-size: 22px; }
+  /* ===== Bottom nav (มือถือ) ===== */
+  .bottom-nav { display: none; }
 
-  .back-link {
-    display: inline-flex; align-items: center; gap: 6px; background: none; border: none;
-    color: var(--sub); font-family: inherit; font-size: 13px; font-weight: 500; cursor: pointer;
-    padding: var(--space-2) 0; margin-bottom: var(--space-2); min-height: 36px;
+  .page-head { margin-bottom: var(--space-4); }
+  .page-head h2 { margin: 0; font-size: 20px; font-weight: 700; }
+  .page-head .page-sub { font-size: 12px; color: var(--sub); margin-top: 2px; }
+
+  /* ===== Dashboard ===== */
+  .kpi-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--space-3); margin-bottom: var(--space-4); }
+  .kpi {
+    background: var(--card); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: var(--space-4); display: flex; flex-direction: column; gap: var(--space-3);
   }
-  .back-link:hover { color: var(--accent); }
-  .back-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .kpi-top { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
+  .kpi-ico {
+    width: 30px; height: 30px; border-radius: 9px; background: var(--accent-soft); color: var(--accent);
+    display: inline-flex; align-items: center; justify-content: center; font-size: 14px; flex-shrink: 0;
+  }
+  .kpi-trend { font-size: 11px; font-weight: 600; padding: 3px 8px; border-radius: 999px; white-space: nowrap; }
+  .kpi-trend.up { background: var(--ok-bg); color: var(--ok-text); }
+  .kpi-trend.down { background: var(--warn-bg); color: var(--warn-text); }
+  .kpi-trend.flat { background: var(--bg); color: var(--sub); }
+  .kpi-num { font-size: 24px; font-weight: 700; line-height: 1.1; font-variant-numeric: tabular-nums; }
+  .kpi-lbl { font-size: 11px; color: var(--sub); letter-spacing: .04em; text-transform: uppercase; margin-top: 3px; }
+
+  .dash-row { display: grid; grid-template-columns: 1.6fr 1fr; gap: var(--space-3); margin-bottom: var(--space-3); }
+  .dash-row.thirds { grid-template-columns: repeat(2, 1fr); }
+  .panel-card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: var(--space-4); }
+  .panel-card h3 { margin: 0; font-size: 14px; font-weight: 600; }
+  .panel-card .panel-sub { font-size: 11px; color: var(--sub); margin-top: 2px; margin-bottom: var(--space-3); }
+  .chart-box { position: relative; height: 220px; }
+  .chart-box.donut { height: 200px; }
+
+  .mini-list { display: flex; flex-direction: column; gap: var(--space-2); max-height: 260px; overflow-y: auto; }
+  .mini-row { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); padding: var(--space-2) 0; border-bottom: 1px solid var(--border); }
+  .mini-row:last-child { border-bottom: none; }
+  .mini-main { min-width: 0; }
+  .mini-title { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .mini-meta { font-size: 11px; color: var(--sub); margin-top: 1px; }
+  .mini-amt { font-size: 13px; font-weight: 600; color: var(--accent); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .mini-empty { font-size: 12px; color: var(--sub); text-align: center; padding: var(--space-5) 0; }
+
+  @media (max-width: 900px) {
+    .sidebar { display: none; }
+    body { padding-bottom: 88px; }
+    .bottom-nav {
+      display: flex; position: fixed; left: 0; right: 0; bottom: 0; z-index: 30;
+      background: var(--card); border-top: 1px solid var(--border);
+      padding: 6px 4px calc(6px + env(safe-area-inset-bottom, 0px));
+    }
+    .bottom-nav .nav-item {
+      flex-direction: column; gap: 3px; flex: 1; min-width: 0; padding: 6px 2px;
+      font-size: 10px; font-weight: 500; text-align: center; min-height: 52px; justify-content: center;
+    }
+    .bottom-nav .nav-ico { font-size: 18px; width: auto; }
+    .bottom-nav .nav-item span:last-child { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+
+    .kpi-grid { grid-template-columns: repeat(2, 1fr); gap: var(--space-2); }
+    .kpi { padding: var(--space-3); gap: var(--space-2); }
+    .kpi-num { font-size: 19px; }
+    .dash-row, .dash-row.thirds { grid-template-columns: 1fr; }
+    .chart-box { height: 190px; }
+  }
 </style>
 </head>
 <body>
@@ -229,9 +313,27 @@
     </div>
   </header>
 
+  <nav class="sidebar" aria-label="เมนูหลัก">
+    <div class="sidebar-brand">
+      <div class="b-name">Haifa Design</div>
+      <div class="b-sub">Order Suite</div>
+    </div>
+    <div class="nav-list" id="navList"></div>
+    <div class="sidebar-foot">
+      <div class="theme-row">
+        <span>🌙 โหมดมืด</span>
+        <button class="switch" id="themeToggle" role="switch" aria-checked="false" aria-label="สลับโหมดมืด">
+          <span class="switch-track"></span><span class="switch-knob"></span>
+        </button>
+      </div>
+    </div>
+  </nav>
+
   <div class="container" id="app">
     <div class="loading">กำลังโหลดข้อมูล...</div>
   </div>
+
+  <nav class="bottom-nav" id="bottomNav" aria-label="เมนูหลัก (มือถือ)"></nav>
 
   <script>
     // ===== ตั้งค่า Supabase =====
@@ -280,7 +382,8 @@
     let SETTINGS = null;
     let lastSelectedLotId = null;
     let activeTab = 'daily';
-    let currentView = 'picker';
+    let currentView = 'dashboard';
+    let dashCharts = [];
 
     const PRODUCT_CATEGORIES = {
       fabric:   { label: 'ป้ายผ้า',    icon: '🏷️' },
@@ -289,56 +392,94 @@
       card:     { label: 'การ์ด',      icon: '🎴' },
     };
 
-    function updateHeaderTitle() {
-      const h1 = document.querySelector('header h1');
-      if (currentView === 'picker') { h1.textContent = 'เมนูสินค้า'; return; }
-      if (currentView === 'customers') { h1.textContent = '👤 ข้อมูลลูกค้า'; return; }
-      const meta = PRODUCT_CATEGORIES[currentView];
-      h1.textContent = meta ? meta.icon + ' ' + meta.label : 'ระบบจัดการร้าน';
+    const NAV_ITEMS = [
+      { key: 'dashboard', label: 'แดชบอร์ด', icon: '📊' },
+      { sep: true },
+      { key: 'fabric',    label: 'ป้ายผ้า',    icon: '🏷️' },
+      { key: 'favor',     label: 'ของชำร่วย',  icon: '🎁' },
+      { key: 'notebook',  label: 'สมุดเล็ก',   icon: '📓' },
+      { key: 'card',      label: 'การ์ด',      icon: '🎴' },
+      { sep: true },
+      { key: 'customers', label: 'ลูกค้า',     icon: '👤' },
+    ];
+    const MOBILE_NAV = ['dashboard', 'fabric', 'favor', 'card', 'customers'];
+
+    function viewMeta(key) {
+      if (key === 'dashboard') return { label: 'แดชบอร์ด', icon: '📊' };
+      if (key === 'customers') return { label: 'ข้อมูลลูกค้า', icon: '👤' };
+      return PRODUCT_CATEGORIES[key] || { label: 'ระบบจัดการร้าน', icon: '' };
     }
 
-    function buildBackLink() {
-      const btn = document.createElement('button');
-      btn.className = 'back-link';
-      btn.innerHTML = '← เมนูสินค้า';
-      btn.addEventListener('click', () => { currentView = 'picker'; boot(); });
-      return btn;
-    }
+    function renderNav() {
+      const list = document.getElementById('navList');
+      list.innerHTML = NAV_ITEMS.map(it => it.sep
+        ? '<div class="nav-sep"></div>'
+        : `<button class="nav-item ${currentView === it.key ? 'active' : ''}" data-key="${it.key}">
+             <span class="nav-ico">${it.icon}</span><span>${esc(it.label)}</span>
+           </button>`
+      ).join('');
 
-    function renderPicker() {
-      document.getElementById('statusMsg').textContent = 'เลือกสินค้าที่ต้องการจัดการ';
-      const app = document.getElementById('app');
-      app.innerHTML = '';
-      const grid = document.createElement('div');
-      grid.className = 'picker-grid';
-      grid.innerHTML = Object.entries(PRODUCT_CATEGORIES).map(([key, meta]) => `
-        <button class="picker-card" data-key="${key}">
-          <span class="picker-icon">${meta.icon}</span>
-          <span class="picker-label">${esc(meta.label)}</span>
-        </button>
-      `).join('');
-      app.appendChild(grid);
+      const bottom = document.getElementById('bottomNav');
+      bottom.innerHTML = MOBILE_NAV.map(k => {
+        const m = viewMeta(k);
+        return `<button class="nav-item ${currentView === k ? 'active' : ''}" data-key="${k}">
+                  <span class="nav-ico">${m.icon}</span><span>${esc(m.label)}</span>
+                </button>`;
+      }).join('');
 
-      const customerBtn = document.createElement('button');
-      customerBtn.className = 'picker-wide-card';
-      customerBtn.innerHTML = `<span class="picker-icon">👤</span><span class="picker-label">ข้อมูลลูกค้า (ทุกสินค้า)</span>`;
-      customerBtn.addEventListener('click', () => { currentView = 'customers'; boot(); });
-      app.appendChild(customerBtn);
-
-      grid.querySelectorAll('.picker-card').forEach(btn => {
+      document.querySelectorAll('.nav-item').forEach(btn => {
         btn.addEventListener('click', () => {
+          if (btn.dataset.key === currentView) return;
           currentView = btn.dataset.key;
           boot();
         });
       });
     }
 
+    function updateHeaderTitle() {
+      const m = viewMeta(currentView);
+      document.querySelector('header h1').textContent = (m.icon ? m.icon + ' ' : '') + m.label;
+    }
+
+    function destroyCharts() {
+      dashCharts.forEach(c => { try { c.destroy(); } catch (e) {} });
+      dashCharts = [];
+    }
+
+    function buildPageHead(title, sub) {
+      const el = document.createElement('div');
+      el.className = 'page-head';
+      el.innerHTML = `<h2>${esc(title)}</h2>${sub ? `<div class="page-sub">${esc(sub)}</div>` : ''}`;
+      return el;
+    }
+
+    // ---- Theme ----
+    function applyTheme(theme) {
+      document.documentElement.setAttribute('data-theme', theme);
+      const t = document.getElementById('themeToggle');
+      if (t) t.setAttribute('aria-checked', theme === 'dark' ? 'true' : 'false');
+      try { localStorage.setItem('theme', theme); } catch (e) {}
+    }
+    function initTheme() {
+      let saved = 'light';
+      try { saved = localStorage.getItem('theme') || 'light'; } catch (e) {}
+      applyTheme(saved);
+      document.getElementById('themeToggle').addEventListener('click', () => {
+        const next = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+        applyTheme(next);
+        if (currentView === 'dashboard') boot();
+      });
+    }
+
     async function boot() {
+      destroyCharts();
       updateHeaderTitle();
-      if (currentView === 'picker') { renderPicker(); return; }
+      renderNav();
       document.getElementById('app').innerHTML = '<div class="loading">กำลังโหลดข้อมูล...</div>';
       try {
-        if (currentView === 'fabric') {
+        if (currentView === 'dashboard') {
+          await loadDashboard();
+        } else if (currentView === 'fabric') {
           await loadAll();
         } else if (currentView === 'customers') {
           await loadGlobalCustomers();
@@ -347,6 +488,221 @@
         }
       } catch (err) {
         document.getElementById('statusMsg').textContent = 'โหลดไม่สำเร็จ: ' + err.message;
+      }
+    }
+
+    // ===== แดชบอร์ดรวม =====
+    async function loadDashboard() {
+      document.getElementById('statusMsg').textContent = 'กำลังโหลด...';
+      SETTINGS = await loadSettings();
+      const [lotsRes, piecesRes, ordersRes] = await Promise.all([
+        sb.from('lots').select('id,name'),
+        sb.from('pieces').select('id,lot_id,width_cm,length_cm,label,price,paid'),
+        sb.from('product_orders').select('id,category,name,customer,quantity,unit_cost,paid,created_at'),
+      ]);
+      if (lotsRes.error) throw lotsRes.error;
+      if (piecesRes.error) throw piecesRes.error;
+      if (ordersRes.error) throw ordersRes.error;
+      renderDashboard(lotsRes.data, piecesRes.data, ordersRes.data);
+      document.getElementById('statusMsg').textContent = 'อัปเดตล่าสุด: ' + new Date().toLocaleString('th-TH');
+    }
+
+    function renderDashboard(lots, pieces, orders) {
+      const app = document.getElementById('app');
+      app.innerHTML = '';
+      app.appendChild(buildPageHead('แดชบอร์ด', 'ภาพรวมออเดอร์ทั้งร้าน'));
+
+      const lotById = {};
+      lots.forEach(l => lotById[l.id] = l);
+
+      // รวมทุกออเดอร์เป็นรูปแบบเดียว
+      const all = [];
+      pieces.forEach(p => {
+        const lot = lotById[p.lot_id];
+        const ymd = lot ? parseLotDate(lot.name) : null;
+        all.push({
+          kind: 'fabric', title: p.label || 'ไม่ระบุชื่อ',
+          sub: p.width_cm + ' x ' + p.length_cm + ' ซม.' + (lot ? ' · ' + lot.name : ''),
+          amount: Number(p.price), paid: p.paid, date: ymd,
+          yard: calcPiece(p.width_cm, p.length_cm, SETTINGS).yardPerPiece,
+        });
+      });
+      orders.forEach(o => {
+        const meta = PRODUCT_CATEGORIES[o.category];
+        all.push({
+          kind: o.category, title: o.name,
+          sub: (meta ? meta.label : o.category) + ' · ' + o.quantity + ' ชิ้น' + (o.customer ? ' · ' + o.customer : ''),
+          amount: Number(o.unit_cost) * o.quantity, paid: o.paid,
+          date: o.created_at ? new Date(o.created_at) : null, yard: 0,
+        });
+      });
+
+      const now = new Date();
+      const inMonth = (d, offset) => {
+        if (!d) return false;
+        const t = new Date(now.getFullYear(), now.getMonth() + offset, 1);
+        return d.getFullYear() === t.getFullYear() && d.getMonth() === t.getMonth();
+      };
+      const sum = arr => arr.reduce((s, r) => s + r.amount, 0);
+      const thisMonth = all.filter(r => inMonth(r.date, 0));
+      const lastMonth = all.filter(r => inMonth(r.date, -1));
+      const unpaid = all.filter(r => !r.paid);
+      const totalYard = round4(all.reduce((s, r) => s + r.yard, 0));
+      const bufferYard = round4(totalYard * SETTINGS.buffer_rate);
+
+      const thisSum = sum(thisMonth), lastSum = sum(lastMonth);
+      const pct = lastSum > 0 ? Math.round(((thisSum - lastSum) / lastSum) * 100) : null;
+      const trendCls = pct === null ? 'flat' : (pct >= 0 ? 'up' : 'down');
+      const trendTxt = pct === null ? 'ใหม่' : (pct >= 0 ? '▲ ' + pct + '%' : '▼ ' + Math.abs(pct) + '%');
+
+      const kpi = document.createElement('div');
+      kpi.className = 'kpi-grid';
+      kpi.innerHTML = `
+        <div class="kpi">
+          <div class="kpi-top"><span class="kpi-ico">💵</span><span class="kpi-trend ${trendCls}">${trendTxt}</span></div>
+          <div><div class="kpi-num">${fmtBaht(round2(thisSum))}</div><div class="kpi-lbl">ยอดเดือนนี้ (บาท)</div></div>
+        </div>
+        <div class="kpi">
+          <div class="kpi-top"><span class="kpi-ico">⏳</span><span class="kpi-trend ${unpaid.length ? 'down' : 'up'}">${unpaid.length} รายการ</span></div>
+          <div><div class="kpi-num">${fmtBaht(round2(sum(unpaid)))}</div><div class="kpi-lbl">ค้างชำระรวม (บาท)</div></div>
+        </div>
+        <div class="kpi">
+          <div class="kpi-top"><span class="kpi-ico">📦</span><span class="kpi-trend flat">ทั้งหมด</span></div>
+          <div><div class="kpi-num">${all.length}</div><div class="kpi-lbl">ออเดอร์ทั้งหมด</div></div>
+        </div>
+        <div class="kpi">
+          <div class="kpi-top"><span class="kpi-ico">🧵</span><span class="kpi-trend flat">+5%</span></div>
+          <div><div class="kpi-num">${bufferYard.toFixed(2)}</div><div class="kpi-lbl">ผ้าที่ต้องสั่ง (หลา)</div></div>
+        </div>
+      `;
+      app.appendChild(kpi);
+
+      // แถวกราฟ
+      const row1 = document.createElement('div');
+      row1.className = 'dash-row';
+      row1.innerHTML = `
+        <div class="panel-card">
+          <h3>ยอดออเดอร์ 7 วันล่าสุด</h3>
+          <div class="panel-sub">รวมทุกสินค้า (บาท)</div>
+          <div class="chart-box"><canvas id="chartTrend"></canvas></div>
+        </div>
+        <div class="panel-card">
+          <h3>สัดส่วนสินค้า</h3>
+          <div class="panel-sub">ตามยอดเงินรวม</div>
+          <div class="chart-box donut"><canvas id="chartMix"></canvas></div>
+        </div>
+      `;
+      app.appendChild(row1);
+
+      // แถวลิสต์
+      const todayStr = new Date().toDateString();
+      const todayItems = all.filter(r => r.date && r.date.toDateString() === todayStr);
+      const oldestUnpaid = unpaid.slice().sort((a, b) => (a.date ? a.date.getTime() : 0) - (b.date ? b.date.getTime() : 0)).slice(0, 8);
+
+      const row2 = document.createElement('div');
+      row2.className = 'dash-row thirds';
+      row2.innerHTML = `
+        <div class="panel-card">
+          <h3>ออเดอร์วันนี้</h3>
+          <div class="panel-sub">${todayItems.length} รายการ</div>
+          <div class="mini-list">${todayItems.length ? todayItems.map(miniRow).join('') : '<div class="mini-empty">ยังไม่มีออเดอร์วันนี้</div>'}</div>
+        </div>
+        <div class="panel-card">
+          <h3>ค้างชำระนานสุด</h3>
+          <div class="panel-sub">${unpaid.length} รายการที่ยังไม่จ่าย</div>
+          <div class="mini-list">${oldestUnpaid.length ? oldestUnpaid.map(miniRow).join('') : '<div class="mini-empty">ไม่มียอดค้างชำระ 🎉</div>'}</div>
+        </div>
+      `;
+      app.appendChild(row2);
+
+      drawCharts(all);
+    }
+
+    function miniRow(r) {
+      return `<div class="mini-row">
+        <div class="mini-main">
+          <div class="mini-title">${esc(r.title)}</div>
+          <div class="mini-meta">${esc(r.sub)}</div>
+        </div>
+        <div class="mini-amt">${fmtBaht(round2(r.amount))}</div>
+      </div>`;
+    }
+
+    function parseLotDate(name) {
+      const m = String(name).match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
+      if (!m) return null;
+      let yy = parseInt(m[3]);
+      if (yy < 100) yy += 2500;          // พ.ศ. 2 หลัก
+      else if (yy > 2400) { /* พ.ศ. เต็ม */ }
+      const ce = yy - 543;
+      return new Date(ce, parseInt(m[2]) - 1, parseInt(m[1]));
+    }
+
+    function drawCharts(all) {
+      if (typeof Chart === 'undefined') return;
+      const css = getComputedStyle(document.documentElement);
+      const accent = css.getPropertyValue('--accent').trim() || '#3454d1';
+      const sub = css.getPropertyValue('--sub').trim() || '#6b7280';
+      const border = css.getPropertyValue('--border').trim() || '#e6e3dd';
+      Chart.defaults.font.family = "'Prompt', sans-serif";
+      Chart.defaults.color = sub;
+
+      // 7 วันล่าสุด
+      const days = [], labels = [];
+      for (let i = 6; i >= 0; i--) {
+        const d = new Date(); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() - i);
+        days.push(d);
+        labels.push(d.getDate() + '/' + (d.getMonth() + 1));
+      }
+      const totals = days.map(d => {
+        const key = d.toDateString();
+        return round2(all.filter(r => r.date && r.date.toDateString() === key).reduce((s, r) => s + r.amount, 0));
+      });
+
+      const c1 = document.getElementById('chartTrend');
+      if (c1) {
+        dashCharts.push(new Chart(c1, {
+          type: 'line',
+          data: { labels, datasets: [{
+            data: totals, borderColor: accent, backgroundColor: accent + '22',
+            fill: true, tension: .35, borderWidth: 2, pointRadius: 3, pointBackgroundColor: accent,
+          }]},
+          options: {
+            responsive: true, maintainAspectRatio: false,
+            plugins: { legend: { display: false } },
+            scales: {
+              y: { beginAtZero: true, grid: { color: border }, border: { display: false } },
+              x: { grid: { display: false }, border: { color: border } },
+            },
+          },
+        }));
+      }
+
+      // สัดส่วนสินค้า
+      const mix = {};
+      all.forEach(r => {
+        const m = r.kind === 'fabric' ? PRODUCT_CATEGORIES.fabric : PRODUCT_CATEGORIES[r.kind];
+        const name = m ? m.label : r.kind;
+        mix[name] = (mix[name] || 0) + r.amount;
+      });
+      const mixLabels = Object.keys(mix).filter(k => mix[k] > 0);
+      const c2 = document.getElementById('chartMix');
+      if (c2 && mixLabels.length) {
+        dashCharts.push(new Chart(c2, {
+          type: 'doughnut',
+          data: {
+            labels: mixLabels,
+            datasets: [{
+              data: mixLabels.map(k => round2(mix[k])),
+              backgroundColor: [accent, '#f5b77e', '#5fd497', '#b48ef5'],
+              borderWidth: 2, borderColor: css.getPropertyValue('--card').trim() || '#fff',
+            }],
+          },
+          options: {
+            responsive: true, maintainAspectRatio: false, cutout: '62%',
+            plugins: { legend: { position: 'bottom', labels: { boxWidth: 10, padding: 12, font: { size: 11 } } } },
+          },
+        }));
       }
     }
 
@@ -365,7 +721,7 @@
     function renderGlobalCustomers(lots, pieces, orders) {
       const app = document.getElementById('app');
       app.innerHTML = '';
-      app.appendChild(buildBackLink());
+      app.appendChild(buildPageHead('ข้อมูลลูกค้า', 'รายการออเดอร์ของลูกค้าแต่ละราย (ทุกสินค้า)'));
 
       const lotNameById = {};
       lots.forEach(l => lotNameById[l.id] = l.name);
@@ -510,7 +866,8 @@
     function renderProductCategory(category, orders) {
       const app = document.getElementById('app');
       app.innerHTML = '';
-      app.appendChild(buildBackLink());
+      const catMeta = PRODUCT_CATEGORIES[category];
+      app.appendChild(buildPageHead(catMeta ? catMeta.label : category, 'จัดการออเดอร์และสถานะการชำระเงิน'));
 
       let totalQty = 0, totalCost = 0, totalSell = 0, hasSell = false, unpaidCost = 0, unpaidCount = 0;
       orders.forEach(o => {
@@ -655,7 +1012,7 @@
       if (activeTab === 'customer') activeTab = 'daily';
       const app = document.getElementById('app');
       app.innerHTML = '';
-      app.appendChild(buildBackLink());
+      app.appendChild(buildPageHead('ป้ายผ้า', 'ล็อตงาน คำนวณผ้า และสถานะการชำระเงิน'));
 
       let totalPieces = 0, grandTotalYard = 0, grandTotalPrice = 0;
       const lotBlocks = lots.map(lot => {
@@ -1174,6 +1531,7 @@
       return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
     }
 
+    initTheme();
     boot();
   </script>
 </body>
