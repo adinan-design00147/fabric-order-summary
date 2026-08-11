@@ -2,14 +2,17 @@
 # Supabase ถือว่า "ไม่ใช้งาน" เมื่อไม่มี request เข้าฐานข้อมูลตลอด 7 วัน
 # workflow นี้ยิง request เบาๆ วันละครั้ง (แค่ขอ 1 แถวจากตาราง settings)
 #
-# GitHub จะปิด scheduled workflow อัตโนมัติถ้า repo ไม่มีความเคลื่อนไหวเกิน 60 วัน
-# ถ้าไม่ได้แก้โค้ดนานๆ ให้เข้ามากด Run workflow เองสักครั้ง แล้วนับ 60 วันใหม่
+# นอกจากนี้ยังเขียนไฟล์ .keepalive แล้ว commit ทุกวันอาทิตย์
+# เพื่อให้ repo มีความเคลื่อนไหวตลอด GitHub จะได้ไม่ปิด schedule ทิ้งเมื่อครบ 60 วัน
 name: keep-supabase-awake
 
 on:
   schedule:
     - cron: '0 1 * * *'
   workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   ping:
@@ -31,3 +34,19 @@ jobs:
             exit 1
           fi
           echo "OK - Supabase responded"
+
+      - name: checkout
+        uses: actions/checkout@v4
+
+      - name: keep repo active (weekly commit)
+        run: |
+          if [ "$(date -u +%u)" != "7" ]; then
+            echo "not sunday - skip commit"
+            exit 0
+          fi
+          date -u +"last ping: %Y-%m-%d %H:%M UTC" > .keepalive
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .keepalive
+          git commit -m "keepalive: supabase ping ok" || { echo "nothing to commit"; exit 0; }
+          git push
