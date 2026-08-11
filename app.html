@@ -200,12 +200,6 @@
   .gallery-item { position: relative; aspect-ratio: 1; border-radius: 10px; overflow: hidden; border: 1px solid var(--border); background: var(--bg); }
   .gallery-item img { width: 100%; height: 100%; object-fit: cover; display: block; }
   .gallery-item a { display: block; width: 100%; height: 100%; }
-  .gallery-del {
-    position: absolute; top: 4px; right: 4px; width: 28px; height: 28px; border: none; cursor: pointer;
-    border-radius: 8px; background: rgba(0,0,0,.55); color: #fff; font-size: 13px; line-height: 1;
-    display: inline-flex; align-items: center; justify-content: center;
-  }
-  .gallery-del:hover { background: var(--err-text); }
   .gallery-fallback {
     display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
     width: 100%; height: 100%; padding: var(--space-2); text-align: center; font-size: 18px;
@@ -489,7 +483,6 @@
               <img src="${esc(f.thumb)}" alt="${esc(f.name)}" loading="lazy" referrerpolicy="no-referrer">
               <span class="gallery-fallback" hidden>🖼️<span class="gf-name">${esc(f.name)}</span><span class="gf-hint">เปิดในไดรฟ์</span></span>
             </a>
-            <button class="gallery-del" data-id="${esc(f.id)}" aria-label="ลบรูป" title="ลบรูป">✕</button>
           </div>
         `).join('');
         // Drive บางทีไม่สร้าง thumbnail ให้ หรือจำกัดโควตาแล้วค้างไม่ตอบ
@@ -514,17 +507,6 @@
             showFallback();
           });
           setTimeout(() => { if (!img.complete || img.naturalWidth === 0) showFallback(); }, 12000);
-        });
-        grid.querySelectorAll('.gallery-del').forEach(b => {
-          b.addEventListener('click', async () => {
-            if (!confirm('ลบรูปนี้ออกจากไดรฟ์?')) return;
-            setMsg('กำลังลบ...');
-            try {
-              await drivePost({ action: 'delete', fileId: b.dataset.id });
-              await load();
-              setMsg('ลบแล้ว');
-            } catch (e) { setMsg(e.message, true); }
-          });
         });
       }
 
