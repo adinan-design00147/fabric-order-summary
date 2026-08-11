@@ -1,0 +1,33 @@
+# กัน Supabase แพลนฟรี pause โปรเจกต์เพราะไม่มีการใช้งาน
+# Supabase ถือว่า "ไม่ใช้งาน" เมื่อไม่มี request เข้าฐานข้อมูลตลอด 7 วัน
+# workflow นี้ยิง request เบาๆ วันละครั้ง (แค่ขอ 1 แถวจากตาราง settings)
+#
+# GitHub จะปิด scheduled workflow อัตโนมัติถ้า repo ไม่มีความเคลื่อนไหวเกิน 60 วัน
+# ถ้าไม่ได้แก้โค้ดนานๆ ให้เข้ามากด Run workflow เองสักครั้ง แล้วนับ 60 วันใหม่
+name: keep-supabase-awake
+
+on:
+  schedule:
+    - cron: '0 1 * * *'
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: ping supabase
+        env:
+          SUPABASE_URL: https://pmcnamlesodpuynakkuk.supabase.co
+          SUPABASE_KEY: sb_publishable_qkWioinGX5ybtENThpRjLw_9R3OL_Gw
+        run: |
+          code=$(curl -s -o /tmp/out.txt -w '%{http_code}' \
+            "$SUPABASE_URL/rest/v1/settings?select=key&limit=1" \
+            -H "apikey: $SUPABASE_KEY" \
+            -H "Authorization: Bearer $SUPABASE_KEY")
+          echo "HTTP $code"
+          cat /tmp/out.txt
+          if [ "$code" != "200" ]; then
+            echo "::error::ping failed - project may be paused or key changed"
+            exit 1
+          fi
+          echo "OK - Supabase responded"
