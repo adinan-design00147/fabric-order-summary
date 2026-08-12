@@ -5638,7 +5638,7 @@ end $$;
             if (error) throw error;
             pass.value = '';
             say('เข้าสู่ระบบสำเร็จ กำลังโหลดข้อมูล...', 'ok');
-            await enterApp(data.user);
+            await enterApp(data.user, { fresh: true });
           }
         } catch (err) {
           console.error(err);
@@ -5668,7 +5668,7 @@ end $$;
       });
     }
 
-    async function enterApp(user) {
+    async function enterApp(user, opts) {
       ME = user || null;
       await loadMyProfile();
       const who = document.getElementById('whoami');
@@ -5681,7 +5681,16 @@ end $$;
       }
       applyRoleUI();
       showAuthScreen(false);
-      applyHash();
+      if (opts && opts.fresh) {
+        // เพิ่งล็อกอิน -> เริ่มที่แดชบอร์ดเสมอ (ไม่ค้างอยู่หน้าเดิมก่อนออกจากระบบ)
+        currentView = 'dashboard';
+        viewingOrderId = null; viewingReceiptId = null;
+        suppressHash = true;
+        location.hash = '#/dashboard';
+        setTimeout(() => { suppressHash = false; }, 150);
+      } else {
+        applyHash();   // เปิดลิงก์ตรงมา (เช่น #/order/xxx) ให้ไปหน้านั้นตามเดิม
+      }
       await boot();
     }
 
