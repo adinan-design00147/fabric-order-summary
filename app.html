@@ -316,6 +316,14 @@
   .ch-sub { font-size: 12px; color: var(--sub); }
   .cust-none { padding: 12px; font-size: 13px; color: var(--sub); }
 
+  .gallery-item { position: relative; }
+  .cover-btn { position: absolute; left: 6px; right: 6px; bottom: 6px; font-family: inherit; font-size: 11.5px;
+               font-weight: 600; padding: 5px 6px; border-radius: 8px; border: none; cursor: pointer;
+               background: rgba(31,36,48,.82); color: #fff; display: inline-flex; align-items: center;
+               justify-content: center; gap: 4px; }
+  .cover-btn:hover { background: rgba(31,36,48,.95); }
+  .cover-btn.is-cover { background: var(--accent); }
+
   /* ===== My Job — การ์ดใบงาน ===== */
   .job-hero { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3);
               background: #1f2430; color: #fff; border-radius: 16px; padding: 16px 18px; margin-bottom: var(--space-3); }
@@ -336,6 +344,14 @@
   .job-thumb { width: 78px; min-width: 78px; height: 78px; border-radius: 10px; background: var(--accent-soft);
                display: flex; align-items: center; justify-content: center; color: var(--sub); overflow: hidden; }
   .job-thumb img { width: 100%; height: 100%; object-fit: cover; }
+  .job-thumb { position: relative; }
+  .thumb-up { position: absolute; right: 4px; bottom: 4px; width: 26px; height: 26px; border-radius: 8px;
+              background: rgba(31,36,48,.8); color: #fff; display: flex; align-items: center;
+              justify-content: center; cursor: pointer; opacity: 0; transition: opacity .15s; }
+  .job-card:hover .thumb-up, .job-thumb:focus-within .thumb-up { opacity: 1; }
+  @media (hover: none) { .thumb-up { opacity: .9; } }
+  .job-thumb.uploading { opacity: .5; }
+
   .job-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
   .job-top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
   .job-id { font-size: 12.5px; color: var(--sub); font-weight: 600; letter-spacing: .3px; }
@@ -839,14 +855,24 @@
           grid.innerHTML = `<div class="gallery-empty">${esc(emptyText)}</div>`;
           return;
         }
-        grid.innerHTML = files.map(f => `
+        grid.innerHTML = files.map((f, i) => `
           <div class="gallery-item">
             <a href="${esc(f.view)}" target="_blank" rel="noopener" title="${esc(f.name)}">
               <img src="${esc(f.thumb)}" alt="${esc(f.name)}" loading="lazy" referrerpolicy="no-referrer">
               <span class="gallery-fallback" hidden>${icon('image', 22)}<span class="gf-name">${esc(f.name)}</span><span class="gf-hint">เปิดในไดรฟ์</span></span>
             </a>
+            ${opts && opts.onSetCover ? `<button class="cover-btn ${opts.currentCover === f.id ? 'is-cover' : ''}" data-i="${i}">
+              ${opts.currentCover === f.id ? icon('check', 13) + 'รูปปก' : 'ตั้งเป็นรูปปก'}</button>` : ''}
           </div>
         `).join('');
+        if (opts && opts.onSetCover) {
+          grid.querySelectorAll('.cover-btn').forEach(b => b.addEventListener('click', async (e) => {
+            e.preventDefault(); e.stopPropagation();
+            b.disabled = true; b.textContent = 'กำลังตั้ง...';
+            try { await opts.onSetCover(files[+b.dataset.i]); paint(files); }
+            catch (err) { setMsg(err.message, true); b.disabled = false; }
+          }));
+        }
         // Drive บางทีไม่สร้าง thumbnail ให้ หรือจำกัดโควตาแล้วค้างไม่ตอบ
         // -> ลองลิงก์สำรอง ถ้ายังไม่ได้ (หรือค้างเกิน 12 วิ) ให้โชว์ชื่อไฟล์แทนช่องว่าง
         grid.querySelectorAll('.gallery-item img').forEach((img, i) => {
@@ -1290,7 +1316,7 @@
         sb.from('lots').select('id,name'),
         sb.from('pieces').select('id,lot_id,width_cm,length_cm,label,price,paid,item_type'),
         sb.from('product_orders').select('id,category,name,customer,quantity,unit_cost,paid,created_at'),
-        sb.from('orders').select('id,order_no,customer,customer_id,channel,status,total,paid_amount,due_date,created_at'),
+        sb.from('orders').select('id,order_no,customer,customer_id,channel,status,total,paid_amount,due_date,created_at,cover_file_id,phone'),
       ]);
       if (lotsRes.error) throw lotsRes.error;
       if (piecesRes.error) throw piecesRes.error;
@@ -2803,6 +2829,35 @@ end $$;
 
     // แคชรูปปกของออเดอร์ (ดึงจากไดรฟ์ทีละใบตอนเลื่อนถึง)
     const ORDER_THUMBS = {};
+    // ดัชนีรูปงานผลิต: ชื่อลูกค้า(ตัวพิมพ์เล็ก) -> ไฟล์รูปแรกที่เจอ (สร้างครั้งเดียวต่อการเปิดหน้า)
+    let FABRIC_INDEX = null;
+
+    async function buildFabricIndex() {
+      if (FABRIC_INDEX) return FABRIC_INDEX;
+      FABRIC_INDEX = {};
+      try {
+        const { data: lots } = await sb.from('lots').select('name').order('created_at', { ascending: false });
+        for (const l of (lots || []).slice(0, 12)) {
+          const files = await driveList(l.name, 'fabric');
+          files.forEach(f => {
+            const parsed = parsePieceFromFilename(f.name);
+            const key = (parsed && parsed.label ? parsed.label : f.name.split(/[\s.]/)[0]).trim().toLowerCase();
+            if (key && !FABRIC_INDEX[key]) FABRIC_INDEX[key] = f;
+          });
+        }
+      } catch (e) { /* ไดรฟ์ล่มก็ปล่อยว่าง */ }
+      return FABRIC_INDEX;
+    }
+
+    /** หารูปจากงานผลิตที่ชื่อไฟล์ตรงกับชื่อลูกค้า */
+    async function findFabricPhoto(customer) {
+      const nm = (customer || '').trim().toLowerCase();
+      if (!nm || !DRIVE_API_URL) return null;
+      const idx = await buildFabricIndex();
+      if (idx[nm]) return idx[nm];
+      const hit = Object.keys(idx).find(k => k.includes(nm) || nm.includes(k));
+      return hit ? idx[hit] : null;
+    }
 
     function renderOrders(list) {
       const app = document.getElementById('app');
@@ -2885,7 +2940,15 @@ end $$;
         card.dataset.search = [o.order_no, o.customer, o.channel, st.label, o.total, o.phone, o.address]
           .filter(Boolean).join(' ').toLowerCase();
         card.innerHTML = `
-          <div class="job-thumb" data-order="${esc(o.order_no)}">${icon('image', 22)}</div>
+          <div class="job-thumb" data-order="${esc(o.order_no)}" data-id="${o.id}" data-cover="${esc(o.cover_file_id || '')}"
+               data-customer="${esc(o.customer || '')}">
+            ${o.cover_file_id
+              ? `<img src="https://drive.google.com/thumbnail?id=${esc(o.cover_file_id)}&sz=w400" alt="" loading="lazy" referrerpolicy="no-referrer">`
+              : icon('image', 22)}
+            <label class="thumb-up" title="อัปรูปปก" aria-label="อัปรูปปก">${icon('camera', 14)}
+              <input type="file" accept="image/*" hidden class="thumb-input">
+            </label>
+          </div>
           <div class="job-body">
             <div class="job-top">
               <span class="job-id">${esc(o.order_no)}</span>
@@ -2923,6 +2986,29 @@ end $$;
         countMsg.textContent = q ? (found ? 'เจอ ' + found + ' ใบงาน' : 'ไม่เจอใบงานที่ตรงกับ "' + input.value + '"') : '';
       });
 
+      // ---- อัปรูปปกจากการ์ดได้เลย ----
+      wrap.querySelectorAll('.thumb-input').forEach(inp => inp.addEventListener('change', async (e) => {
+        e.preventDefault();
+        const file = inp.files && inp.files[0];
+        if (!file) return;
+        const box = inp.closest('.job-thumb');
+        const orderNo = box.dataset.order, orderId = box.dataset.id;
+        box.classList.add('uploading');
+        try {
+          const up = await drivePost({
+            action: 'upload', root: 'order', lot: orderNo,
+            filename: file.name, mimeType: file.type, data: await fileToBase64(file),
+          });
+          await sb.from('orders').update({ cover_file_id: up.file.id, cover_name: up.file.name }).eq('id', orderId);
+          delete ORDER_THUMBS[orderNo];
+          await boot();
+        } catch (err) {
+          alert('อัปรูปไม่สำเร็จ: ' + err.message);
+          box.classList.remove('uploading');
+        }
+        inp.value = '';
+      }));
+
       // ---- โหลดรูปปกจากไดรฟ์เมื่อเลื่อนถึง ----
       if (DRIVE_API_URL && 'IntersectionObserver' in window) {
         const io = new IntersectionObserver((entries) => {
@@ -2931,10 +3017,12 @@ end $$;
             const el = en.target;
             io.unobserve(el);
             const no = el.dataset.order;
+            if (el.dataset.cover) return;    // มีรูปปกที่เลือกไว้แล้ว
             try {
               if (ORDER_THUMBS[no] === undefined) {
                 const files = await driveList(no, 'order');
-                ORDER_THUMBS[no] = files.length ? files[0] : null;
+                // ไม่มีรูปในออเดอร์ -> ลองหาจากรูปงานผลิตที่ชื่อไฟล์ขึ้นต้นด้วยชื่อลูกค้า
+                ORDER_THUMBS[no] = files.length ? files[0] : await findFabricPhoto(el.dataset.customer);
               }
               const f = ORDER_THUMBS[no];
               if (!f) return;
@@ -3378,7 +3466,7 @@ end $$;
       if (!CUSTOMERS.length) { try { await fetchCustomers(); } catch (e) {} }
       document.getElementById('statusMsg').textContent = 'กำลังโหลด...';
       const [oRes, iRes] = await Promise.all([
-        sb.from('orders').select('id,order_no,customer,channel,status,due_date,note,total,created_at,phone,address,payment_method,paid_amount').eq('id', id).single(),
+        sb.from('orders').select('id,order_no,customer,customer_id,channel,status,due_date,note,total,created_at,phone,address,payment_method,paid_amount,cover_file_id,cover_name').eq('id', id).single(),
         sb.from('order_items').select('id,product_id,name,width_cm,length_cm,qty,unit_price,line_total').eq('order_id', id),
       ]);
       const [payRes, logRes] = await Promise.all([
@@ -3504,6 +3592,14 @@ end $$;
         root: 'order',
         open: true,
         emptyText: 'ยังไม่มีรูปในออเดอร์นี้ — กด "เพิ่มรูป" เพื่ออัปโหลดขึ้นไดรฟ์',
+        currentCover: o.cover_file_id || null,
+        onSetCover: async (f) => {
+          const { error } = await sb.from('orders')
+            .update({ cover_file_id: f.id, cover_name: f.name }).eq('id', o.id);
+          if (error) throw new Error(error.message);
+          o.cover_file_id = f.id; o.cover_name = f.name;
+          delete ORDER_THUMBS[o.order_no];
+        },
       });
       imgPanel.appendChild(gal);
       app.appendChild(imgPanel);
@@ -4010,7 +4106,7 @@ end $$;
         sb.from('lots').select('id,name'),
         sb.from('pieces').select('id,lot_id,width_cm,length_cm,label,price,paid,item_type'),
         sb.from('product_orders').select('id,category,name,customer,quantity,unit_cost,paid,created_at'),
-        sb.from('orders').select('id,order_no,customer,customer_id,channel,status,total,paid_amount,due_date,created_at'),
+        sb.from('orders').select('id,order_no,customer,customer_id,channel,status,total,paid_amount,due_date,created_at,cover_file_id,phone'),
       ]);
       if (lotsRes.error) throw lotsRes.error;
       if (piecesRes.error) throw piecesRes.error;
