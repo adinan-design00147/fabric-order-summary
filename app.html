@@ -2842,7 +2842,8 @@ end $$;
           files.forEach(f => {
             const parsed = parsePieceFromFilename(f.name);
             const key = (parsed && parsed.label ? parsed.label : f.name.split(/[\s.]/)[0]).trim().toLowerCase();
-            if (key && !FABRIC_INDEX[key]) FABRIC_INDEX[key] = f;
+            // ข้ามชื่อสั้น/ตัวเลขล้วน (เช่น "50") กันจับคู่ผิดกับชื่อลูกค้า
+            if (key.length >= 3 && !/^\d+$/.test(key) && !FABRIC_INDEX[key]) FABRIC_INDEX[key] = f;
           });
         }
       } catch (e) { /* ไดรฟ์ล่มก็ปล่อยว่าง */ }
@@ -2852,10 +2853,10 @@ end $$;
     /** หารูปจากงานผลิตที่ชื่อไฟล์ตรงกับชื่อลูกค้า */
     async function findFabricPhoto(customer) {
       const nm = (customer || '').trim().toLowerCase();
-      if (!nm || !DRIVE_API_URL) return null;
+      if (nm.length < 3 || !DRIVE_API_URL) return null;
       const idx = await buildFabricIndex();
       if (idx[nm]) return idx[nm];
-      const hit = Object.keys(idx).find(k => k.includes(nm) || nm.includes(k));
+      const hit = Object.keys(idx).find(k => k.length >= 3 && (k.includes(nm) || nm.includes(k)));
       return hit ? idx[hit] : null;
     }
 
