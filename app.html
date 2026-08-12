@@ -413,6 +413,12 @@
                    padding: 10px var(--space-4); font-size: 13px; margin-bottom: var(--space-3); }
   html[data-theme="dark"] .viewer-banner { background: #3a2f1c; border-color: #6b4f1d; color: #fcd9a5; }
 
+  .update-bar { position: fixed; left: 50%; transform: translateX(-50%); bottom: 18px; z-index: 300;
+                display: flex; align-items: center; gap: 12px; background: #1f2430; color: #fff;
+                padding: 10px 14px; border-radius: 999px; box-shadow: 0 8px 30px rgba(0,0,0,.25); font-size: 14px; }
+  .update-bar .btn { background: #fff !important; color: #1f2430 !important; border-color: #fff !important; }
+  @media (max-width: 640px) { .update-bar { bottom: 78px; left: 12px; right: 12px; transform: none; justify-content: space-between; } }
+
   /* หน้าจอเข้าสู่ระบบ */
   #authScreen { position: fixed; inset: 0; z-index: 200; background: var(--bg); display: flex; align-items: center; justify-content: center; padding: var(--space-4); }
   /* ต้องมี !important เพราะ display:flex ด้านบนชนะ attribute hidden ของเบราว์เซอร์ */
@@ -2171,6 +2177,37 @@ end $$;
         } finally { btn.disabled = false; }
       });
       return panel;
+    }
+
+    // ===== เช็กว่ามีเวอร์ชันใหม่ไหม =====
+    // เบราว์เซอร์ชอบจำไฟล์เก่าไว้ (cache) ทำให้ไม่เห็นของที่เพิ่งอัปเดต
+    // ตัวนี้จะแอบเทียบเวอร์ชันกับไฟล์บนเซิร์ฟเวอร์ แล้วขึ้นแถบให้กดอัปเดต
+    const APP_BUILD = '20260812-2339';
+
+    async function checkForUpdate() {
+      try {
+        const res = await fetch('app.html?_=' + Date.now(), { cache: 'no-store' });
+        if (!res.ok) return;
+        const txt = await res.text();
+        const m = txt.match(/APP_BUILD = '([^']+)'/);
+        if (!m || m[1] === APP_BUILD) return;
+        showUpdateBar();
+      } catch (e) { /* ออฟไลน์ก็ข้ามไป */ }
+    }
+
+    function showUpdateBar() {
+      if (document.getElementById('updateBar')) return;
+      const bar = document.createElement('div');
+      bar.id = 'updateBar';
+      bar.className = 'update-bar no-print';
+      bar.innerHTML = `<span>${icon('check', 16)}มีเวอร์ชันใหม่ของระบบแล้ว</span>
+        <button class="btn btn-sm" id="doUpdate">อัปเดตเลย</button>`;
+      document.body.appendChild(bar);
+      bar.querySelector('#doUpdate').addEventListener('click', () => {
+        const u = new URL(location.href);
+        u.searchParams.set('v', Date.now());
+        location.replace(u.toString());
+      });
     }
 
     // ===== ข้อมูลร้าน / ช่องทางชำระเงิน =====
@@ -5928,6 +5965,9 @@ end $$;
         applyHash();   // เปิดลิงก์ตรงมา (เช่น #/order/xxx) ให้ไปหน้านั้นตามเดิม
       }
       await boot();
+      checkForUpdate();
+      setInterval(checkForUpdate, 10 * 60 * 1000);
+      window.addEventListener('focus', () => checkForUpdate());
     }
 
     // ---- จุดเริ่มระบบ: รอไลบรารีให้พร้อมก่อน ----
