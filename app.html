@@ -299,6 +299,9 @@
 
   .search-count { margin-top: 6px; min-height: 16px; }
 
+  .temp-pass { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px;
+               background: var(--accent-soft); color: var(--accent); padding: 3px 8px; border-radius: 6px; }
+
   /* หัวข้อขั้นตอนในฟอร์ม */
   .step-head { display: flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 700;
                margin-bottom: var(--space-3); }
@@ -712,8 +715,8 @@
     <div class="auth-box">
       <div class="auth-brand">Haifa Design</div>
       <div class="auth-sub">ระบบจัดการออเดอร์</div>
-      <div class="field"><label for="auEmail">อีเมล</label>
-        <input id="auEmail" type="email" autocomplete="username" placeholder="you@example.com"></div>
+      <div class="field"><label for="auEmail">ชื่อผู้ใช้ หรือ อีเมล</label>
+        <input id="auEmail" type="text" autocomplete="username" placeholder="เช่น HAIFA0002 หรือ you@example.com"></div>
       <div class="field"><label for="auPass">รหัสผ่าน</label>
         <input id="auPass" type="password" autocomplete="current-password" placeholder="รหัสผ่าน"></div>
       <button class="btn block" id="auLogin">เข้าสู่ระบบ</button>
@@ -1547,6 +1550,8 @@
         btn.disabled = false;
         if (error) { msg.textContent = 'เปลี่ยนไม่สำเร็จ: ' + error.message; msg.className = 'msg error'; return; }
         pw.querySelector('#pfPass1').value = ''; pw.querySelector('#pfPass2').value = '';
+        // เปลี่ยนรหัสเองแล้ว -> ลบรหัสชั่วคราวที่แอดมินตั้งไว้ทิ้ง (แอดมินจะไม่เห็นรหัสของคุณอีก)
+        try { await sb.from('user_temp_passwords').delete().eq('user_id', ME.id); } catch (e) {}
         msg.textContent = 'เปลี่ยนรหัสผ่านเรียบร้อย ครั้งหน้าใช้รหัสใหม่'; msg.className = 'msg ok';
       });
 
@@ -1560,10 +1565,10 @@
         inv.innerHTML = `
           <h2>${icon('plus', 17)}เพิ่มผู้ใช้เข้าระบบ</h2>
           <div class="form-grid">
-            <div class="field"><label for="nuEmail">อีเมล (ใช้ล็อกอิน)</label>
-              <input id="nuEmail" type="email" placeholder="name@example.com" autocomplete="off"></div>
-            <div class="field"><label for="nuName">ชื่อเรียก</label>
-              <input id="nuName" placeholder="เช่น น้องแอน ฝ่ายผลิต" autocomplete="off"></div>
+            <div class="field"><label for="nuUser">ชื่อผู้ใช้ (รหัสพนักงาน)</label>
+              <input id="nuUser" placeholder="เช่น HAIFA0002" autocomplete="off"></div>
+            <div class="field"><label for="nuEmail">อีเมลจริง (ไม่บังคับ)</label>
+              <input id="nuEmail" type="email" placeholder="ใส่ไว้เผื่อให้เขากู้รหัสเองได้" autocomplete="off"></div>
             <div class="field"><label for="nuPass">รหัสผ่านชั่วคราว</label>
               <input id="nuPass" type="text" placeholder="อย่างน้อย 8 ตัวอักษร" autocomplete="off"></div>
             <div class="field"><label for="nuRole">สิทธิ์</label>
@@ -1596,12 +1601,15 @@
 
         inv.querySelector('#nuAdd').addEventListener('click', async () => {
           const msg = inv.querySelector('#nuMsg');
+          const username = inv.querySelector('#nuUser').value.trim();
           const email = inv.querySelector('#nuEmail').value.trim().toLowerCase();
           const pass = inv.querySelector('#nuPass').value;
-          const nm = inv.querySelector('#nuName').value.trim();
           const role = inv.querySelector('#nuRole').value;
           msg.textContent = ''; msg.className = 'msg';
-          if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { msg.textContent = 'ใส่อีเมลให้ถูกต้องก่อน'; msg.className = 'msg error'; return; }
+          if (!username && !email) { msg.textContent = 'ใส่ชื่อผู้ใช้ (หรืออีเมล) อย่างน้อยหนึ่งอย่าง'; msg.className = 'msg error'; return; }
+          if (username && !/^[A-Za-z0-9._-]{3,32}$/.test(username)) {
+            msg.textContent = 'ชื่อผู้ใช้ใช้ได้เฉพาะ a-z A-Z 0-9 . _ - ยาว 3-32 ตัว'; msg.className = 'msg error'; return; }
+          if (email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { msg.textContent = 'อีเมลไม่ถูกต้อง'; msg.className = 'msg error'; return; }
           if (pass.length < 8) { msg.textContent = 'รหัสผ่านต้องยาวอย่างน้อย 8 ตัวอักษร (กด "สุ่มรหัสให้" ก็ได้)'; msg.className = 'msg error'; return; }
 
           const btn = inv.querySelector('#nuAdd');
@@ -1615,16 +1623,16 @@
                 'Authorization': 'Bearer ' + (session ? session.access_token : ''),
                 'apikey': SUPABASE_ANON_KEY,
               },
-              body: JSON.stringify({ email, password: pass, role, display_name: nm }),
+              body: JSON.stringify({ action: 'create', username, email, password: pass, role }),
             });
             const j = await res.json();
             if (!res.ok || j.error) throw new Error(j.error || 'สร้างบัญชีไม่สำเร็จ');
             msg.innerHTML = 'สร้างบัญชีเรียบร้อย — ส่งข้อมูลนี้ให้เขา:<br>' +
-              '<b>อีเมล:</b> ' + esc(email) + '<br><b>รหัสผ่าน:</b> ' + esc(pass) +
-              '<br>บอกให้เข้าไปเปลี่ยนรหัสที่เมนู "โปรไฟล์ผู้ใช้" หลังเข้าครั้งแรก';
+              '<b>ชื่อผู้ใช้:</b> ' + esc(username || email) + '<br><b>รหัสผ่าน:</b> ' + esc(pass) +
+              '<br>ให้เขาตั้งชื่อเรียกและเปลี่ยนรหัสเองที่เมนู "โปรไฟล์ผู้ใช้"';
             msg.className = 'msg ok';
+            inv.querySelector('#nuUser').value = '';
             inv.querySelector('#nuEmail').value = '';
-            inv.querySelector('#nuName').value = '';
             inv.querySelector('#nuPass').value = '';
             await loadProfile();
           } catch (e) {
@@ -1639,27 +1647,88 @@
       app.appendChild(users);
       if (error) { users.innerHTML = '<div class="msg error" style="padding:16px">โหลดรายชื่อไม่สำเร็จ: ' + esc(error.message) + '</div>'; return; }
 
+      // รหัสชั่วคราวที่ยังไม่ถูกเปลี่ยน (แอดมินเท่านั้นที่อ่านได้)
+      let tempMap = {};
+      if (isAdmin()) {
+        const { data: tp } = await sb.from('user_temp_passwords').select('user_id,temp_password,set_at');
+        (tp || []).forEach(t => { tempMap[t.user_id] = t; });
+      }
+
       users.innerHTML = `
         <div class="lot-head"><span>${icon('user', 16)}ผู้ใช้ที่เข้าระบบนี้ได้ (${list.length})</span></div>
         <div class="table-wrap"><table>
-          <thead><tr><th>ผู้ใช้</th><th>สิทธิ์</th><th>เข้าร่วมเมื่อ</th>${isAdmin() ? '<th>จัดการ</th>' : ''}</tr></thead>
-          <tbody>${list.map(u => `<tr>
-            <td data-label="ผู้ใช้">${esc(u.display_name || '—')}<br><span style="font-size:11.5px;color:var(--sub)">${esc(u.email || '')}</span></td>
+          <thead><tr><th>ผู้ใช้</th><th>สิทธิ์</th>${isAdmin() ? '<th>รหัสชั่วคราว</th>' : ''}<th>เข้าร่วมเมื่อ</th>${isAdmin() ? '<th>จัดการ</th>' : ''}</tr></thead>
+          <tbody>${list.map(u => {
+            const login = u.username || prettyLogin(u.email);
+            const tp = tempMap[u.user_id];
+            return `<tr>
+            <td data-label="ผู้ใช้"><b>${esc(login || '—')}</b><br><span style="font-size:11.5px;color:var(--sub)">${esc(u.display_name || 'ยังไม่ตั้งชื่อเรียก')}</span></td>
             <td data-label="สิทธิ์"><span class="st ${u.role === 'admin' ? 'st-paid' : 'st-prod'}">${u.role === 'admin' ? 'ผู้ดูแล' : 'ดูอย่างเดียว'}</span></td>
+            ${isAdmin() ? `<td data-label="รหัสชั่วคราว">${tp
+              ? `<code class="temp-pass">${esc(tp.temp_password)}</code>`
+              : '<span style="color:var(--ok-text);font-size:12px">เปลี่ยนรหัสเองแล้ว</span>'}</td>` : ''}
             <td data-label="เข้าร่วมเมื่อ">${new Date(u.created_at).toLocaleDateString('th-TH')}</td>
-            ${isAdmin() ? `<td data-label="จัดการ">${u.user_id === (ME && ME.id)
+            ${isAdmin() ? `<td data-label="จัดการ" class="row-actions">${u.user_id === (ME && ME.id)
               ? '<span style="color:var(--sub);font-size:12px">ตัวคุณเอง</span>'
               : `<select class="u-role" data-id="${u.user_id}" aria-label="สิทธิ์ผู้ใช้">
                    <option value="viewer" ${u.role === 'viewer' ? 'selected' : ''}>ดูอย่างเดียว</option>
                    <option value="admin" ${u.role === 'admin' ? 'selected' : ''}>ผู้ดูแล</option>
-                 </select>`}</td>` : ''}
-          </tr>`).join('')}</tbody>
+                 </select>
+                 <button class="btn secondary btn-sm u-reset" data-id="${u.user_id}" data-login="${esc(login || '')}">${icon('checkbox', 14)}ตั้งรหัสใหม่</button>
+                 <button class="icon-btn icon-btn-delete u-del" data-id="${u.user_id}" data-login="${esc(login || '')}" title="ลบผู้ใช้" aria-label="ลบผู้ใช้">${icon('trash', 18)}</button>`}</td>` : ''}
+          </tr>`;
+          }).join('')}</tbody>
         </table></div>
+        <div class="msg" id="uMsg" style="padding:0 var(--space-4)"></div>
         <div class="hint" style="padding:0 var(--space-4) var(--space-4)">
           ${isAdmin()
             ? 'เพิ่มคนใหม่: ให้เขาเปิดเว็บนี้ → กด "สมัครใช้งานครั้งแรก" → ยืนยันอีเมล → ชื่อจะขึ้นในตารางนี้เป็น "ดูอย่างเดียว" แล้วคุณค่อยเลื่อนสิทธิ์ให้'
             : 'เฉพาะผู้ดูแลเท่านั้นที่เปลี่ยนสิทธิ์ผู้ใช้ได้'}
         </div>`;
+
+      const callUserFn = async (payload) => {
+        const { data: { session } } = await sb.auth.getSession();
+        const res = await fetch(SUPABASE_URL + '/functions/v1/create-user', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer ' + (session ? session.access_token : ''),
+            'apikey': SUPABASE_ANON_KEY,
+          },
+          body: JSON.stringify(payload),
+        });
+        const j = await res.json();
+        if (!res.ok || j.error) throw new Error(j.error || 'ทำรายการไม่สำเร็จ');
+        return j;
+      };
+      const randomPass = () => {
+        const cs = 'abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+        const a = new Uint32Array(10); crypto.getRandomValues(a);
+        return Array.from(a, n => cs[n % cs.length]).join('');
+      };
+
+      users.querySelectorAll('.u-reset').forEach(b => b.addEventListener('click', async () => {
+        const m = users.querySelector('#uMsg');
+        if (!confirm('ตั้งรหัสผ่านใหม่ให้ ' + b.dataset.login + ' ?\nรหัสเดิมของเขาจะใช้ไม่ได้ทันที')) return;
+        b.disabled = true;
+        try {
+          const pass = randomPass();
+          await callUserFn({ action: 'reset', user_id: b.dataset.id, password: pass });
+          m.innerHTML = 'ตั้งรหัสใหม่ให้ <b>' + esc(b.dataset.login) + '</b> แล้ว — รหัสใหม่: <b>' + esc(pass) + '</b>';
+          m.className = 'msg ok';
+          await loadProfile();
+        } catch (e) { m.textContent = 'ตั้งรหัสไม่สำเร็จ: ' + e.message; m.className = 'msg error'; b.disabled = false; }
+      }));
+
+      users.querySelectorAll('.u-del').forEach(b => b.addEventListener('click', async () => {
+        const m = users.querySelector('#uMsg');
+        if (!confirm('ลบผู้ใช้ ' + b.dataset.login + ' ออกจากระบบ?\nเขาจะเข้าใช้งานไม่ได้อีก (ข้อมูลงานในระบบยังอยู่ครบ)')) return;
+        b.disabled = true;
+        try {
+          await callUserFn({ action: 'delete', user_id: b.dataset.id });
+          await loadProfile();
+        } catch (e) { m.textContent = 'ลบไม่สำเร็จ: ' + e.message; m.className = 'msg error'; b.disabled = false; }
+      }));
 
       users.querySelectorAll('.u-role').forEach(sel => sel.addEventListener('change', async () => {
         const { error } = await sb.from('app_users').update({ role: sel.value }).eq('user_id', sel.dataset.id);
@@ -5515,6 +5584,16 @@ end $$;
 
     // ===== เข้าสู่ระบบ =====
     let signupMode = false;
+    // ชื่อผู้ใช้ (ไม่มี @) จะถูกแปลงเป็นอีเมลภายในอัตโนมัติ เพราะระบบยืนยันตัวตนต้องใช้อีเมล
+    const LOGIN_DOMAIN = 'haifa-design.local';
+    const toLoginEmail = (v) => {
+      const t = (v || '').trim().toLowerCase();
+      return t.includes('@') ? t : t + '@' + LOGIN_DOMAIN;
+    };
+    const prettyLogin = (email) => {
+      const t = (email || '');
+      return t.endsWith('@' + LOGIN_DOMAIN) ? t.split('@')[0].toUpperCase() : t;
+    };
 
     function showAuthScreen(show) {
       document.getElementById('authScreen').hidden = !show;
@@ -5546,16 +5625,16 @@ end $$;
 
       async function submit() {
         const e = email.value.trim(), p = pass.value;
-        if (!e || !p) { say('กรอกอีเมลและรหัสผ่านให้ครบ', 'error'); return; }
+        if (!e || !p) { say('กรอกชื่อผู้ใช้/อีเมล และรหัสผ่านให้ครบ', 'error'); return; }
         if (signupMode && p.length < 8) { say('รหัสผ่านต้องยาวอย่างน้อย 8 ตัวอักษร', 'error'); return; }
         btn.disabled = true; say(signupMode ? 'กำลังสมัคร...' : 'กำลังเข้าสู่ระบบ...');
         try {
           if (signupMode) {
-            const { error } = await sb.auth.signUp({ email: e, password: p });
+            const { error } = await sb.auth.signUp({ email: toLoginEmail(e), password: p });
             if (error) throw error;
             say('สมัครแล้ว — เช็คอีเมล ' + e + ' แล้วกดลิงก์ยืนยัน จากนั้นกลับมาเข้าสู่ระบบ', 'ok');
           } else {
-            const { data, error } = await sb.auth.signInWithPassword({ email: e, password: p });
+            const { data, error } = await sb.auth.signInWithPassword({ email: toLoginEmail(e), password: p });
             if (error) throw error;
             pass.value = '';
             say('เข้าสู่ระบบสำเร็จ กำลังโหลดข้อมูล...', 'ok');
@@ -5564,7 +5643,7 @@ end $$;
         } catch (err) {
           console.error(err);
           const m = String(err.message || err);
-          say(/Invalid login/i.test(m) ? 'อีเมลหรือรหัสผ่านไม่ถูกต้อง'
+          say(/Invalid login/i.test(m) ? 'ชื่อผู้ใช้/อีเมล หรือรหัสผ่านไม่ถูกต้อง'
             : /not confirmed/i.test(m) ? 'ยังไม่ได้ยืนยันอีเมล — กดลิงก์ในอีเมลก่อน'
             : /already registered/i.test(m) ? 'อีเมลนี้สมัครไว้แล้ว กลับไปหน้าเข้าสู่ระบบได้เลย'
             : m, 'error');
@@ -5595,7 +5674,7 @@ end $$;
       const who = document.getElementById('whoami');
       const out = document.getElementById('logoutBtn');
       if (user) {
-        who.innerHTML = esc(MY_NAME || user.email || '') +
+        who.innerHTML = esc(MY_NAME || prettyLogin(user.email) || '') +
           (MY_ROLE ? ' <span class="st ' + (MY_ROLE === 'admin' ? 'st-paid' : 'st-prod') + '">' +
             (MY_ROLE === 'admin' ? 'ผู้ดูแล' : 'ดูอย่างเดียว') + '</span>' : '');
         out.hidden = false;
