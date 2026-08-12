@@ -710,6 +710,24 @@
       });
     }
 
+    /**
+     * แยก "ชื่อลูกค้า" กับ "ขนาด" ออกจากชื่อไฟล์รูป
+     * รองรับ: "Suraiya 65x85 .png", "mustaza 85 x 190ai.png", "Wea 50*200.jpg", "Ang-70X150.png"
+     * คืน null ถ้าหาขนาดไม่เจอ
+     */
+    function parsePieceFromFilename(filename) {
+      const base = String(filename || '').replace(/\.[a-z0-9]+$/i, '');
+      const m = base.match(/(\d{1,3})\s*[x×*]\s*(\d{1,3})/i);
+      if (!m) return null;
+      const w = parseInt(m[1], 10), l = parseInt(m[2], 10);
+      if (!w || !l) return null;
+      const label = base.slice(0, m.index)
+        .replace(/[-_]+$/, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+      return { label: label || null, width_cm: w, length_cm: l };
+    }
+
     function buildGallery(lotName, opts) {
       const root = (opts && opts.root) || 'fabric';
       const emptyText = (opts && opts.emptyText) || 'ยังไม่มีรูปในล็อตนี้';
@@ -4493,6 +4511,7 @@ end $$;
           <div class="lot-actions">
             ${hasUnpaid ? `<button class="btn secondary btn-sm mark-lot-paid" data-lot="${lot.id}">${icon('check', 15)}จ่ายครบล็อตนี้</button>` : ''}
             <button class="btn secondary btn-sm toggle-gallery" data-lot="${esc(lot.name)}">${icon('image', 15)}<span class="gal-label">รูปงาน</span></button>
+            <button class="btn secondary btn-sm from-photos" data-lot="${esc(lot.name)}" data-id="${lot.id}">${icon('plus', 15)}สร้างชิ้นงานจากชื่อไฟล์รูป</button>
             ${rows.length ? `<button class="btn secondary btn-sm pick-all">${icon('checkbox', 15)}เลือกทั้งล็อต</button>` : ''}
           </div>
           <div class="table-wrap">
@@ -4512,6 +4531,41 @@ end $$;
           galBtn.innerHTML = (gallery.hidden ? icon('image', 15) : icon('eyeOff', 15)) +
             '<span class="gal-label">' + (gallery.hidden ? 'รูปงาน' + n : 'ซ่อนรูป') + '</span>';
           if (!gallery.hidden && !loaded) { loaded = true; gallery.__load(); }
+        });
+
+        // สร้างชิ้นงานจากชื่อไฟล์รูปในไดรฟ์ (เช่น "Suraiya 65x85.png" -> Suraiya · 65 x 85)
+        const fromBtn = card.querySelector('.from-photos');
+        fromBtn.addEventListener('click', async () => {
+          fromBtn.disabled = true;
+          const label0 = fromBtn.innerHTML;
+          fromBtn.textContent = 'กำลังอ่านชื่อไฟล์...';
+          try {
+            const files = await driveList(lot.name, 'fabric');
+            const parsed = files.map(f => ({ file: f.name, ...(parsePieceFromFilename(f.name) || {}) }))
+              .filter(x => x.width_cm);
+            const already = new Set(rows.map(r => (r.label || '') + '|' + r.width_cm + 'x' + r.length_cm));
+            const fresh = parsed.filter(x => !already.has((x.label || '') + '|' + x.width_cm + 'x' + x.length_cm));
+            if (!parsed.length) {
+              alert('อ่านขนาดจากชื่อไฟล์ไม่ได้เลย\n\nตั้งชื่อไฟล์แบบนี้ระบบจะอ่านออก:\n  Suraiya 65x85.png\n  Wea 50 x 200.jpg');
+              return;
+            }
+            if (!fresh.length) {
+              alert('ชิ้นงานจากรูปทั้งหมดถูกเพิ่มเข้าล็อตนี้แล้ว (' + parsed.length + ' รูป)');
+              return;
+            }
+            const preview = fresh.map(x => '· ' + (x.label || '(ไม่มีชื่อ)') + ' — ' + x.width_cm + ' x ' + x.length_cm +
+              ' ซม. = ' + fmtBaht(Math.round(x.width_cm * x.length_cm * SETTINGS.price_rate)) + ' บาท').join('\n');
+            if (!confirm('เพิ่มชิ้นงาน ' + fresh.length + ' ชิ้นเข้าล็อต ' + lot.name + ' ?\n\n' + preview)) return;
+            const { error } = await sb.from('pieces').insert(fresh.map(x => ({
+              lot_id: lot.id, label: x.label, width_cm: x.width_cm, length_cm: x.length_cm,
+              price: Math.round(x.width_cm * x.length_cm * SETTINGS.price_rate),
+              paid: false, item_type: 'ป้ายผ้า',
+            })));
+            if (error) { alert('เพิ่มไม่สำเร็จ: ' + error.message); return; }
+            await loadAll();
+          } catch (e) {
+            alert('อ่านรูปจากไดรฟ์ไม่สำเร็จ: ' + e.message);
+          } finally { fromBtn.disabled = false; fromBtn.innerHTML = label0; }
         });
 
         dailyEl.appendChild(card);
