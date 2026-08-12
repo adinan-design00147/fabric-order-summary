@@ -394,6 +394,7 @@
   .cust-card + .cust-card { margin-top: -2px; }
 
   /* โหมดดูอย่างเดียว (viewer) — ซ่อนปุ่มที่แก้ข้อมูล ฐานข้อมูลกันอีกชั้นอยู่แล้ว */
+  body.role-viewer .admin-only,
   body.role-viewer .icon-btn-delete,
   body.role-viewer .icon-btn-edit,
   body.role-viewer .paid-badge,
@@ -1077,12 +1078,13 @@
       { key: 'customers', label: 'ลูกค้า',     icon: 'user' },
       { key: 'receipts',  label: 'ใบเสร็จ',    icon: 'receipt' },
       { sep: true },
+      { key: 'trash',     label: 'ถังขยะ',     icon: 'trash' },
       { key: 'health',    label: 'ตรวจระบบ & สำรอง', icon: 'check' },
       { key: 'profile',   label: 'โปรไฟล์ผู้ใช้', icon: 'user' },
     ];
     // แถบล่างมือถือ: 4 หน้าหลัก + ปุ่มเพิ่มเติมสำหรับที่เหลือ
     const MOBILE_NAV = ['dashboard', 'orders', 'calendar', 'fabric'];
-    const MOBILE_MORE = ['products', 'stock', 'customers', 'receipts', 'health', 'profile'];
+    const MOBILE_MORE = ['products', 'stock', 'customers', 'receipts', 'trash', 'health', 'profile'];
     const PAY_METHODS = ['เงินสด', 'โอนธนาคาร', 'พร้อมเพย์', 'เก็บปลายทาง', 'บัตรเครดิต', 'อื่นๆ'];
 
     // ช่องทางรับออเดอร์ (แก้เพิ่ม/ลดได้ที่นี่)
@@ -1107,6 +1109,7 @@
       if (key === 'products') return { label: 'สินค้า & ราคา', icon: 'price' };
       if (key === 'fabric') return { label: 'งานผลิต', icon: 'factory' };
       if (key === 'stock') return { label: 'สต็อกของ', icon: 'box' };
+      if (key === 'trash') return { label: 'ถังขยะ', icon: 'trash' };
       if (key === 'health') return { label: 'ตรวจระบบ & สำรองข้อมูล', icon: 'check' };
       if (key === 'profile') return { label: 'โปรไฟล์ผู้ใช้', icon: 'user' };
       return PRODUCT_CATEGORIES[key] || { label: 'ระบบจัดการร้าน', icon: '' };
@@ -1116,7 +1119,7 @@
     let orderFilter = 'all';
 
     // ===== URL routing (ทำให้กดค้าง/คลิกขวา → เปิดในแท็บใหม่ได้ และปุ่ม back ใช้งานได้) =====
-    const VALID_VIEWS = ['dashboard', 'calendar', 'orders', 'products', 'fabric', 'stock', 'customers', 'receipts', 'health', 'profile'];
+    const VALID_VIEWS = ['dashboard', 'calendar', 'orders', 'products', 'fabric', 'stock', 'customers', 'receipts', 'trash', 'health', 'profile'];
 
     function routeFor(view, id) {
       if (view === 'orderView') return '#/order/' + id;
@@ -1318,6 +1321,8 @@
           await loadOrderDetail(viewingOrderId);
         } else if (currentView === 'products') {
           await loadProductCatalog();
+        } else if (currentView === 'trash') {
+          await loadTrash();
         } else if (currentView === 'stock') {
           await loadStock();
         } else if (currentView === 'health') {
@@ -2182,7 +2187,7 @@ end $$;
     // ===== เช็กว่ามีเวอร์ชันใหม่ไหม =====
     // เบราว์เซอร์ชอบจำไฟล์เก่าไว้ (cache) ทำให้ไม่เห็นของที่เพิ่งอัปเดต
     // ตัวนี้จะแอบเทียบเวอร์ชันกับไฟล์บนเซิร์ฟเวอร์ แล้วขึ้นแถบให้กดอัปเดต
-    const APP_BUILD = '20260812-2359';
+    const APP_BUILD = '20260813-0014';
 
     async function checkForUpdate() {
       try {
@@ -2408,7 +2413,7 @@ end $$;
         <td data-label="ราคาขาย">${esc(priceLabel(p))}</td>
         <td data-label="จัดการ" class="row-actions">
           <button class="icon-btn icon-btn-edit edit-product" data-id="${p.id}" data-name="${esc(p.name)}" data-cat="${esc(p.category || '')}" data-unit="${esc(p.unit)}" data-mode="${p.pricing_mode}" data-tiers="${esc(tierText(p))}" data-price="${p.pricing_mode === 'per_area' ? (p.area_rate ?? '') : (p.unit_price ?? '')}" aria-label="แก้ไขสินค้า" title="แก้ไข">${icon('edit', 18)}</button>
-          <button class="icon-btn icon-btn-delete del-product" data-id="${p.id}" aria-label="ลบสินค้า" title="ลบ">${icon('trash', 18)}</button>
+          <button class="icon-btn icon-btn-delete del-product" data-id="${p.id}" data-name="${esc(p.name)}" aria-label="ลบสินค้า" title="ลบ">${icon('trash', 18)}</button>
         </td>
       </tr>`;
       const rows = [...catGroups.entries()].map(([cat, items]) => (
@@ -2453,9 +2458,9 @@ end $$;
       });
 
       app.querySelectorAll('.del-product').forEach(b => b.addEventListener('click', async () => {
-        if (!confirm('ลบสินค้านี้? (ออเดอร์เก่ายังเก็บราคาเดิมไว้ ไม่กระทบ)')) return;
-        const { error } = await sb.from('products').delete().eq('id', b.dataset.id);
-        if (error) { alert('ลบไม่สำเร็จ: ' + error.message); return; }
+        if (!confirm('ลบสินค้านี้? (กู้คืนได้ที่เมนูถังขยะ)')) return;
+        try { await trashDelete('products', b.dataset.id, { label: b.dataset.name || '' }); }
+        catch (e) { alert('ลบไม่สำเร็จ: ' + e.message); return; }
         await loadProductCatalog();
       }));
 
@@ -2496,6 +2501,154 @@ end $$;
           await loadProductCatalog();
         });
       }));
+    }
+
+    // ===== ถังขยะ (soft delete) =====
+    // ลบอะไรก็ตามในระบบ จะไม่หายทันที — ย้ายมาเก็บในตาราง trash พร้อมข้อมูลลูก
+    // กู้คืน = เอา payload ยัดกลับตารางเดิม (ใช้ id เดิม ทุกอย่างที่เคยผูกไว้จึงกลับมาเหมือนเดิม)
+    const TRASH_KINDS = {
+      orders:         { label: 'ออเดอร์',      view: 'orders',    children: [{ table: 'order_items', fk: 'order_id' }, { table: 'order_payments', fk: 'order_id' }] },
+      customers:      { label: 'ลูกค้า',       view: 'customers', children: [{ table: 'customer_addresses', fk: 'customer_id' }] },
+      pieces:         { label: 'ชิ้นงานผลิต',  view: 'fabric',    children: [] },
+      lots:           { label: 'ล็อตงาน',      view: 'fabric',    children: [{ table: 'pieces', fk: 'lot_id' }] },
+      products:       { label: 'สินค้า',       view: 'products',  children: [] },
+      stock_items:    { label: 'วัตถุดิบ',     view: 'stock',     children: [{ table: 'stock_moves', fk: 'item_id' }] },
+      product_orders: { label: 'ออเดอร์สินค้า', view: 'products',  children: [] },
+      receipts:       { label: 'ใบเสร็จ',      view: 'receipts',  children: [{ table: 'receipt_items', fk: 'receipt_id' }] },
+    };
+
+    /** ลบแบบกู้คืนได้ — เก็บแถวหลัก + แถวลูกลงถังขยะก่อน แล้วค่อยลบของจริง */
+    async function trashDelete(table, id, opts) {
+      opts = opts || {};
+      const cfg = TRASH_KINDS[table];
+      if (!cfg) throw new Error('ยังไม่รองรับถังขยะของตาราง ' + table);
+
+      const { data: row, error: e1 } = await sb.from(table).select('*').eq('id', id).single();
+      if (e1) throw new Error(e1.message);
+
+      const children = {};
+      for (const c of cfg.children) {
+        const { data } = await sb.from(c.table).select('*').eq(c.fk, id);
+        if (data && data.length) children[c.table] = data;
+      }
+
+      const { data: t, error: e2 } = await sb.from('trash').insert({
+        table_name: table,
+        row_id: id,
+        label: opts.label || row.name || row.order_no || '',
+        detail: opts.detail || '',
+        payload: { row, children },
+        deleted_by: (ME && ME.email) ? prettyLogin(ME.email) : null,
+      }).select('id').single();
+      if (e2) throw new Error('เก็บลงถังขยะไม่สำเร็จ: ' + e2.message);
+
+      const { error: e3 } = await sb.from(table).delete().eq('id', id);
+      if (e3) {
+        await sb.from('trash').delete().eq('id', t.id);   // ลบจริงไม่ผ่าน -> ถอนของในถังคืน จะได้ไม่ค้างซ้ำ
+        throw new Error(e3.message);
+      }
+    }
+
+    /** กู้คืน — ยัดแถวหลักกลับก่อน แล้วค่อยแถวลูก (ลูกต้องมีพ่อแม่ก่อนเสมอ) */
+    async function trashRestore(t) {
+      const row = t.payload && t.payload.row;
+      const children = (t.payload && t.payload.children) || {};
+      if (!row) throw new Error('ข้อมูลในถังเสียหาย กู้คืนไม่ได้');
+
+      const { error } = await sb.from(t.table_name).insert(row);
+      if (error) {
+        if (String(error.message).includes('duplicate')) throw new Error('มีข้อมูลนี้อยู่ในระบบแล้ว (อาจถูกกู้คืนไปก่อนหน้า)');
+        if (String(error.message).includes('foreign key')) throw new Error('กู้ไม่ได้ — ของที่เกี่ยวข้องถูกลบไปด้วย ให้กู้ตัวนั้นก่อน');
+        throw new Error(error.message);
+      }
+      for (const [tbl, rows] of Object.entries(children)) {
+        if (rows && rows.length) await sb.from(tbl).insert(rows);
+      }
+      await sb.from('trash').delete().eq('id', t.id);
+    }
+
+    async function loadTrash() {
+      const { data, error } = await sb.from('trash').select('*').order('deleted_at', { ascending: false });
+      if (error) throw error;
+      renderTrash(data || []);
+    }
+
+    function trashAgeText(iso) {
+      const days = Math.floor((Date.now() - new Date(iso).getTime()) / 86400000);
+      if (days <= 0) return 'วันนี้';
+      if (days === 1) return 'เมื่อวาน';
+      return days + ' วันก่อน';
+    }
+
+    function renderTrash(list) {
+      const app = document.getElementById('app');
+      app.innerHTML = '';
+      app.appendChild(buildPageHead('ถังขยะ', 'ของที่ลบไปจะมาพักที่นี่ กู้คืนได้ หรือลบถาวรเมื่อแน่ใจแล้ว'));
+
+      const bar = document.createElement('div');
+      bar.className = 'no-print';
+      bar.style.cssText = 'display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:14px';
+      bar.innerHTML = `<span class="hint">มีของในถัง <b>${list.length}</b> รายการ</span>
+        ${list.length ? `<button class="btn secondary btn-sm admin-only" id="trEmpty">${icon('trash', 15)}ล้างถังทั้งหมด</button>` : ''}`;
+      app.appendChild(bar);
+
+      if (!list.length) {
+        const empty = document.createElement('div');
+        empty.className = 'lot-card';
+        empty.innerHTML = '<div class="empty-cell" style="padding:28px">ถังขยะว่าง — ยังไม่มีอะไรถูกลบ</div>';
+        app.appendChild(empty);
+        return;
+      }
+
+      const card = document.createElement('div');
+      card.className = 'lot-card';
+      card.innerHTML = `<div class="table-wrap"><table>
+        <thead><tr><th>ประเภท</th><th>รายการ</th><th>ลบเมื่อ</th><th>ลบโดย</th><th></th></tr></thead>
+        <tbody>${list.map(t => {
+          const kind = TRASH_KINDS[t.table_name] || { label: t.table_name };
+          const nChild = Object.values((t.payload && t.payload.children) || {}).reduce((a, r) => a + r.length, 0);
+          return `<tr>
+            <td data-label="ประเภท"><span class="st st-prod">${esc(kind.label)}</span></td>
+            <td data-label="รายการ">${esc(t.label || '(ไม่มีชื่อ)')}
+              ${t.detail ? `<div class="hint">${esc(t.detail)}</div>` : ''}
+              ${nChild ? `<div class="hint">พ่วงข้อมูลย่อย ${nChild} รายการ</div>` : ''}</td>
+            <td data-label="ลบเมื่อ">${trashAgeText(t.deleted_at)}
+              <div class="hint">${new Date(t.deleted_at).toLocaleString('th-TH', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</div></td>
+            <td data-label="ลบโดย">${esc(t.deleted_by || '-')}</td>
+            <td data-label="" class="admin-only"><div class="field-row" style="justify-content:flex-end">
+              <button class="btn btn-sm tr-restore" data-id="${t.id}">${icon('back', 15)}กู้คืน</button>
+              <button class="icon-btn icon-btn-delete tr-purge" data-id="${t.id}" aria-label="ลบถาวร" title="ลบถาวร">${icon('trash', 18)}</button>
+            </div></td>
+          </tr>`;
+        }).join('')}</tbody></table></div>`;
+      app.appendChild(card);
+
+      const byId = id => list.find(x => x.id === id);
+
+      card.querySelectorAll('.tr-restore').forEach(b => b.addEventListener('click', async () => {
+        const t = byId(b.dataset.id);
+        b.disabled = true;
+        try {
+          await trashRestore(t);
+          await loadTrash();
+        } catch (e) { alert('กู้คืนไม่สำเร็จ: ' + e.message); b.disabled = false; }
+      }));
+
+      card.querySelectorAll('.tr-purge').forEach(b => b.addEventListener('click', async () => {
+        const t = byId(b.dataset.id);
+        if (!confirm('ลบ "' + (t.label || 'รายการนี้') + '" ถาวร?\nลบแล้วกู้คืนไม่ได้อีก')) return;
+        const { error } = await sb.from('trash').delete().eq('id', t.id);
+        if (error) { alert('ลบไม่สำเร็จ: ' + error.message); return; }
+        await loadTrash();
+      }));
+
+      const emptyBtn = bar.querySelector('#trEmpty');
+      if (emptyBtn) emptyBtn.addEventListener('click', async () => {
+        if (!confirm('ล้างถังขยะทั้งหมด ' + list.length + ' รายการ?\nลบแล้วกู้คืนไม่ได้อีก')) return;
+        const { error } = await sb.from('trash').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+        if (error) { alert('ล้างไม่สำเร็จ: ' + error.message); return; }
+        await loadTrash();
+      });
     }
 
     // ===== สต็อกวัตถุดิบ =====
@@ -2762,9 +2915,9 @@ end $$;
           await loadStock();
         });
         card.querySelector('.s-del').addEventListener('click', async () => {
-          if (!confirm('ลบ "' + it.name + '" ออกจากสต็อก? (ประวัติเบิก/รับเข้าจะหายไปด้วย)')) return;
-          const { error } = await sb.from('stock_items').delete().eq('id', it.id);
-          if (error) { alert('ลบไม่สำเร็จ: ' + error.message); return; }
+          if (!confirm('ลบ "' + it.name + '" ออกจากสต็อก? (กู้คืนได้ที่เมนูถังขยะ พร้อมประวัติเบิก/รับเข้า)')) return;
+          try { await trashDelete('stock_items', it.id, { label: it.name, detail: it.category + ' · เหลือ ' + fmtQty(stockRemain(it)) + ' ' + it.unit }); }
+          catch (e) { alert('ลบไม่สำเร็จ: ' + e.message); return; }
           await loadStock();
         });
       });
@@ -3603,9 +3756,9 @@ end $$;
         }
       });
       bar.querySelector('#oDel').addEventListener('click', async () => {
-        if (!confirm('ลบออเดอร์ ' + o.order_no + ' ?')) return;
-        const { error } = await sb.from('orders').delete().eq('id', o.id);
-        if (error) { alert('ลบไม่สำเร็จ: ' + error.message); return; }
+        if (!confirm('ลบออเดอร์ ' + o.order_no + ' ?\n(กู้คืนได้ที่เมนูถังขยะ)')) return;
+        try { await trashDelete('orders', o.id, { label: o.order_no, detail: o.customer || '' }); }
+        catch (e) { alert('ลบไม่สำเร็จ: ' + e.message); return; }
         currentView = 'orders'; boot();
       });
 
@@ -4622,9 +4775,9 @@ end $$;
 
       const del = panel.querySelector('#cDel');
       if (del) del.addEventListener('click', async () => {
-        if (!confirm('ลบลูกค้า "' + c.name + '" ?\nออเดอร์เก่ายังอยู่ครบ แค่ไม่ผูกกับลูกค้ารายนี้แล้ว')) return;
-        const { error } = await sb.from('customers').delete().eq('id', c.id);
-        if (error) { alert('ลบไม่สำเร็จ: ' + error.message); return; }
+        if (!confirm('ลบลูกค้า "' + c.name + '" ?\nออเดอร์เก่ายังอยู่ครบ แค่ไม่ผูกกับลูกค้ารายนี้แล้ว (กู้คืนได้ที่เมนูถังขยะ)')) return;
+        try { await trashDelete('customers', c.id, { label: c.name, detail: c.code || '' }); }
+        catch (e) { alert('ลบไม่สำเร็จ: ' + e.message); return; }
         currentView = 'customers'; boot();
       });
     }
@@ -4936,7 +5089,7 @@ end $$;
               <button class="icon-btn icon-btn-edit edit-order" data-id="${o.id}" data-name="${esc(o.name)}" data-customer="${esc(o.customer || '')}" data-qty="${o.quantity}" data-cost="${o.unit_cost}" data-sell="${o.unit_sell_price ?? ''}" aria-label="แก้ไขออเดอร์" title="แก้ไข">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
               </button>
-              <button class="icon-btn icon-btn-delete delete-order" data-id="${o.id}" aria-label="ลบออเดอร์" title="ลบ">
+              <button class="icon-btn icon-btn-delete delete-order" data-id="${o.id}" data-name="${esc(o.name)}" aria-label="ลบออเดอร์" title="ลบ">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>
               </button>
             </span>
@@ -5009,9 +5162,9 @@ end $$;
       app.querySelectorAll('.delete-order').forEach(btn => {
         btn.addEventListener('click', async (e) => {
           e.stopPropagation();
-          if (!confirm('ลบออเดอร์นี้?')) return;
-          const { error } = await sb.from('product_orders').delete().eq('id', btn.dataset.id);
-          if (error) { alert('ลบไม่สำเร็จ: ' + error.message); return; }
+          if (!confirm('ลบออเดอร์นี้? (กู้คืนได้ที่เมนูถังขยะ)')) return;
+          try { await trashDelete('product_orders', btn.dataset.id, { label: btn.dataset.name || 'ออเดอร์สินค้า' }); }
+          catch (e) { alert('ลบไม่สำเร็จ: ' + e.message); return; }
           await loadProducts(category);
         });
       });
@@ -5189,7 +5342,7 @@ end $$;
                 <button class="icon-btn icon-btn-edit edit-piece" data-id="${r.id}" data-label="${esc(r.label || '')}" data-width="${r.width_cm}" data-length="${r.length_cm}" data-type="${esc(r.item_type || 'ป้ายผ้า')}" data-price="${r.price}" aria-label="แก้ไขชิ้นงาน" title="แก้ไข">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
                 </button>
-                <button class="icon-btn icon-btn-delete delete-piece" data-id="${r.id}" aria-label="ลบชิ้นงาน" title="ลบ">
+                <button class="icon-btn icon-btn-delete delete-piece" data-id="${r.id}" data-name="${esc(r.label || 'ไม่ระบุชื่อ')}" data-size="${r.width_cm}x${r.length_cm} ซม." aria-label="ลบชิ้นงาน" title="ลบ">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>
                 </button>
               </span>
@@ -5659,10 +5812,9 @@ end $$;
       app.querySelectorAll('.delete-piece').forEach(btn => {
         btn.addEventListener('click', async (e) => {
           e.stopPropagation();
-          if (!confirm('ลบชิ้นงานนี้?')) return;
-          const id = btn.dataset.id;
-          const { error } = await sb.from('pieces').delete().eq('id', id);
-          if (error) { alert('ลบไม่สำเร็จ: ' + error.message); return; }
+          if (!confirm('ลบชิ้นงานนี้? (กู้คืนได้ที่เมนูถังขยะ)')) return;
+          try { await trashDelete('pieces', btn.dataset.id, { label: btn.dataset.name || 'ไม่ระบุชื่อ', detail: btn.dataset.size || '' }); }
+          catch (e) { alert('ลบไม่สำเร็จ: ' + e.message); return; }
           await loadAll();
         });
       });
