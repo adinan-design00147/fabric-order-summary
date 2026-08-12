@@ -1553,77 +1553,83 @@
       const { data: list, error } = await sb.from('app_users')
         .select('user_id,email,display_name,role,created_at').order('created_at');
 
-      // ---- เพิ่มผู้ใช้ใหม่ (เฉพาะ admin) ----
+      // ---- เพิ่มผู้ใช้ใหม่ (เฉพาะ admin) — สร้างบัญชีให้เลย ----
       if (isAdmin()) {
         const inv = document.createElement('div');
         inv.className = 'panel';
         inv.innerHTML = `
           <h2>${icon('plus', 17)}เพิ่มผู้ใช้เข้าระบบ</h2>
           <div class="form-grid">
-            <div class="field"><label for="ivEmail">อีเมลของคนที่จะให้เข้าใช้</label>
-              <input id="ivEmail" type="email" placeholder="name@example.com" autocomplete="off"></div>
-            <div class="field"><label for="ivRole">สิทธิ์ที่จะให้</label>
-              <select id="ivRole">
+            <div class="field"><label for="nuEmail">อีเมล (ใช้ล็อกอิน)</label>
+              <input id="nuEmail" type="email" placeholder="name@example.com" autocomplete="off"></div>
+            <div class="field"><label for="nuName">ชื่อเรียก</label>
+              <input id="nuName" placeholder="เช่น น้องแอน ฝ่ายผลิต" autocomplete="off"></div>
+            <div class="field"><label for="nuPass">รหัสผ่านชั่วคราว</label>
+              <input id="nuPass" type="text" placeholder="อย่างน้อย 8 ตัวอักษร" autocomplete="off"></div>
+            <div class="field"><label for="nuRole">สิทธิ์</label>
+              <select id="nuRole">
                 <option value="viewer">ดูอย่างเดียว — เปิดดูได้ แต่แก้ไขไม่ได้</option>
                 <option value="admin">ผู้ดูแล — แก้ไขได้ทุกอย่าง</option>
               </select></div>
           </div>
-          <div class="field"><label for="ivNote">ชื่อ/หมายเหตุ (ไม่บังคับ)</label><input id="ivNote" placeholder="เช่น น้องแอน ฝ่ายผลิต"></div>
-          <button class="btn" id="ivAdd">${icon('check', 15)}เพิ่มผู้ใช้</button>
-          <div class="msg" id="ivMsg"></div>
-          <div class="hint">
-            ใส่อีเมลไว้ล่วงหน้า → ส่งลิงก์เว็บให้เขา → เขากด "สมัครใช้งานครั้งแรก" ด้วยอีเมลนี้ (ตั้งรหัสผ่านเอง)
-            → ยืนยันอีเมล → เข้าระบบได้ทันทีด้วยสิทธิ์ที่คุณกำหนดไว้
+          <div class="field-row">
+            <button class="btn secondary btn-sm" id="nuGen">${icon('checkbox', 15)}สุ่มรหัสให้</button>
+            <button class="btn" id="nuAdd">${icon('check', 15)}สร้างบัญชีให้เลย</button>
           </div>
-          <div id="ivList"></div>
+          <div class="msg" id="nuMsg"></div>
+          <div class="hint">
+            สร้างเสร็จใช้งานได้ทันที ไม่ต้องให้เขาสมัครเองและไม่ต้องยืนยันอีเมล —
+            ส่ง <b>อีเมล + รหัสผ่านชั่วคราว</b> ให้เขา แล้วบอกให้เข้าไปเปลี่ยนรหัสเองที่เมนู "โปรไฟล์ผู้ใช้"
+          </div>
         `;
         app.appendChild(inv);
 
-        const drawInvites = async () => {
-          const { data } = await sb.from('user_invites')
-            .select('email,role,note,created_at,used_at').order('created_at', { ascending: false });
-          const pending = (data || []).filter(i => !i.used_at);
-          const box = inv.querySelector('#ivList');
-          if (!pending.length) { box.innerHTML = ''; return; }
-          box.innerHTML = `
-            <div class="hint" style="margin:14px 0 6px;font-weight:600">รอสมัคร (${pending.length})</div>
-            ${pending.map(i => `<div class="field-row" style="align-items:center;margin-bottom:6px">
-              <span style="font-weight:600">${esc(i.email)}</span>
-              <span class="st ${i.role === 'admin' ? 'st-paid' : 'st-prod'}">${i.role === 'admin' ? 'ผู้ดูแล' : 'ดูอย่างเดียว'}</span>
-              ${i.note ? `<span class="hint" style="margin:0">${esc(i.note)}</span>` : ''}
-              <button class="icon-btn icon-btn-delete iv-del" data-email="${esc(i.email)}" title="ยกเลิกคำเชิญ" aria-label="ยกเลิกคำเชิญ" style="margin-left:auto">${icon('trash', 18)}</button>
-            </div>`).join('')}
-          `;
-          box.querySelectorAll('.iv-del').forEach(b => b.addEventListener('click', async () => {
-            if (!confirm('ยกเลิกคำเชิญของ ' + b.dataset.email + ' ?')) return;
-            await sb.from('user_invites').delete().eq('email', b.dataset.email);
-            drawInvites();
-          }));
+        const genPass = () => {
+          const cs = 'abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+          const a = new Uint32Array(10);
+          crypto.getRandomValues(a);
+          return Array.from(a, n => cs[n % cs.length]).join('');
         };
-        drawInvites();
+        inv.querySelector('#nuGen').addEventListener('click', () => {
+          inv.querySelector('#nuPass').value = genPass();
+        });
 
-        inv.querySelector('#ivAdd').addEventListener('click', async () => {
-          const msg = inv.querySelector('#ivMsg');
-          const email = inv.querySelector('#ivEmail').value.trim().toLowerCase();
+        inv.querySelector('#nuAdd').addEventListener('click', async () => {
+          const msg = inv.querySelector('#nuMsg');
+          const email = inv.querySelector('#nuEmail').value.trim().toLowerCase();
+          const pass = inv.querySelector('#nuPass').value;
+          const nm = inv.querySelector('#nuName').value.trim();
+          const role = inv.querySelector('#nuRole').value;
           msg.textContent = ''; msg.className = 'msg';
           if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { msg.textContent = 'ใส่อีเมลให้ถูกต้องก่อน'; msg.className = 'msg error'; return; }
-          const exists = (list || []).find(u => (u.email || '').toLowerCase() === email);
-          if (exists) { msg.textContent = 'อีเมลนี้เข้าระบบอยู่แล้ว — เปลี่ยนสิทธิ์ได้ที่ตารางด้านล่าง'; msg.className = 'msg error'; return; }
-          const btn = inv.querySelector('#ivAdd');
-          btn.disabled = true;
-          const { error } = await sb.from('user_invites').upsert({
-            email,
-            role: inv.querySelector('#ivRole').value,
-            note: inv.querySelector('#ivNote').value.trim() || null,
-            invited_by: ME ? ME.id : null,
-            used_at: null,
-          }, { onConflict: 'email' });
-          btn.disabled = false;
-          if (error) { msg.textContent = 'เพิ่มไม่สำเร็จ: ' + error.message; msg.className = 'msg error'; return; }
-          inv.querySelector('#ivEmail').value = ''; inv.querySelector('#ivNote').value = '';
-          msg.innerHTML = 'เพิ่มแล้ว — ส่งลิงก์นี้ให้เขาสมัคร:<br><b>' + esc(location.href.split('#')[0]) + '</b>';
-          msg.className = 'msg ok';
-          drawInvites();
+          if (pass.length < 8) { msg.textContent = 'รหัสผ่านต้องยาวอย่างน้อย 8 ตัวอักษร (กด "สุ่มรหัสให้" ก็ได้)'; msg.className = 'msg error'; return; }
+
+          const btn = inv.querySelector('#nuAdd');
+          btn.disabled = true; msg.textContent = 'กำลังสร้างบัญชี...';
+          try {
+            const { data: { session } } = await sb.auth.getSession();
+            const res = await fetch(SUPABASE_URL + '/functions/v1/create-user', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': 'Bearer ' + (session ? session.access_token : ''),
+                'apikey': SUPABASE_ANON_KEY,
+              },
+              body: JSON.stringify({ email, password: pass, role, display_name: nm }),
+            });
+            const j = await res.json();
+            if (!res.ok || j.error) throw new Error(j.error || 'สร้างบัญชีไม่สำเร็จ');
+            msg.innerHTML = 'สร้างบัญชีเรียบร้อย — ส่งข้อมูลนี้ให้เขา:<br>' +
+              '<b>อีเมล:</b> ' + esc(email) + '<br><b>รหัสผ่าน:</b> ' + esc(pass) +
+              '<br>บอกให้เข้าไปเปลี่ยนรหัสที่เมนู "โปรไฟล์ผู้ใช้" หลังเข้าครั้งแรก';
+            msg.className = 'msg ok';
+            inv.querySelector('#nuEmail').value = '';
+            inv.querySelector('#nuName').value = '';
+            inv.querySelector('#nuPass').value = '';
+            await loadProfile();
+          } catch (e) {
+            msg.textContent = 'สร้างบัญชีไม่สำเร็จ: ' + e.message; msg.className = 'msg error';
+          } finally { btn.disabled = false; }
         });
       }
 
