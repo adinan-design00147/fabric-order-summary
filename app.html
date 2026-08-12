@@ -2182,14 +2182,14 @@ end $$;
     // ===== เช็กว่ามีเวอร์ชันใหม่ไหม =====
     // เบราว์เซอร์ชอบจำไฟล์เก่าไว้ (cache) ทำให้ไม่เห็นของที่เพิ่งอัปเดต
     // ตัวนี้จะแอบเทียบเวอร์ชันกับไฟล์บนเซิร์ฟเวอร์ แล้วขึ้นแถบให้กดอัปเดต
-    const APP_BUILD = '20260812-2358';
+    const APP_BUILD = '20260812-2359';
 
     async function checkForUpdate() {
       try {
         const res = await fetch('app.html?_=' + Date.now(), { cache: 'no-store' });
         if (!res.ok) return;
         const txt = await res.text();
-        const m = txt.match(/APP_BUILD = '20260812-2358']+)'/);
+        const m = txt.match(/APP_BUILD\s*=\s*'([^']+)'/);   // เขียนแบบนี้เพื่อไม่ให้ sed ตอน deploy มาแทนที่บรรทัดนี้
         if (!m || m[1] === APP_BUILD) return;
         showUpdateBar();
       } catch (e) { /* ออฟไลน์ก็ข้ามไป */ }
