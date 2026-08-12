@@ -464,6 +464,9 @@
 
   .rc-row { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); padding: var(--space-3) var(--space-4); background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: var(--space-2); cursor: pointer; font-family: inherit; width: 100%; text-align: left; }
   .rc-row:hover { border-color: var(--accent); }
+  .rc-wrap { display: flex; align-items: center; gap: var(--space-2); }
+  .rc-wrap .rc-row { flex: 1; margin-bottom: 0; }
+  .rc-wrap { margin-bottom: var(--space-2); }
   .rc-main { min-width: 0; }
   .rc-no { font-size: 14px; font-weight: 700; }
   .rc-sub { font-size: 11px; color: var(--sub); margin-top: 2px; }
@@ -2187,7 +2190,7 @@ end $$;
     // ===== เช็กว่ามีเวอร์ชันใหม่ไหม =====
     // เบราว์เซอร์ชอบจำไฟล์เก่าไว้ (cache) ทำให้ไม่เห็นของที่เพิ่งอัปเดต
     // ตัวนี้จะแอบเทียบเวอร์ชันกับไฟล์บนเซิร์ฟเวอร์ แล้วขึ้นแถบให้กดอัปเดต
-    const APP_BUILD = '20260813-0014';
+    const APP_BUILD = '20260813-0031';
 
     async function checkForUpdate() {
       try {
@@ -4147,7 +4150,7 @@ end $$;
       if (e3) throw new Error('อัปเดตสถานะจ่ายไม่สำเร็จ: ' + e3.message);
 
       await logActivity('receipt', rc.id, receipt_no, 'created',
-        `${items.length} ชิ้น · ${fmtBaht(round2(total))} บาท (จากต้นทุนผลิต)`);
+        `${items.length} ชิ้น · ${fmtBaht(round2(total))} บาท (จากงานผลิต)`);
       return rc.id;
     }
 
@@ -4168,7 +4171,7 @@ end $$;
 
       app.appendChild(buildSearchBox({
         placeholder: 'ค้นหา: เลขใบเสร็จ · ชื่อผู้รับ · หมายเหตุ · ยอดเงิน',
-        targets: () => [...app.querySelectorAll('.rc-row')],
+        targets: () => [...app.querySelectorAll('.rc-wrap')],
       }));
 
       if (!list.length) {
@@ -4189,19 +4192,43 @@ end $$;
       app.appendChild(sum);
 
       list.forEach(r => {
+        const wrap = document.createElement('div');
+        wrap.className = 'rc-wrap';
         const btn = document.createElement('a');
         btn.className = 'rc-row';
         btn.dataset.search = [r.receipt_no, r.recipient, r.note, r.total,
-          r.order_id ? 'จากออเดอร์' : 'จากต้นทุนผลิต'].filter(Boolean).join(' ').toLowerCase();
+          r.order_id ? 'จากออเดอร์' : 'จากงานผลิต'].filter(Boolean).join(' ').toLowerCase();
         btn.href = routeFor('receiptView', r.id);
         btn.innerHTML = `
           <span class="rc-main">
-            <span class="rc-no">${esc(r.receipt_no)} <span class="st ${r.order_id ? 'st-paid' : 'st-cancel'}">${r.order_id ? 'จากออเดอร์' : 'จากต้นทุนผลิต'}</span></span>
+            <span class="rc-no">${esc(r.receipt_no)} <span class="st ${r.order_id ? 'st-paid' : 'st-cancel'}">${r.order_id ? 'จากออเดอร์' : 'จากงานผลิต'}</span></span>
             <span class="rc-sub">${new Date(r.created_at).toLocaleString('th-TH')} · ${r.item_count} รายการ${r.recipient ? ' · ' + esc(r.recipient) : ''}</span>
           </span>
           <span class="rc-amt">${fmtBaht(round2(r.total))} บาท</span>
         `;
-        app.appendChild(btn);
+        wrap.appendChild(btn);
+
+        const del = document.createElement('button');
+        del.className = 'icon-btn icon-btn-delete rc-del';
+        del.type = 'button';
+        del.setAttribute('aria-label', 'ลบใบเสร็จ ' + r.receipt_no);
+        del.title = 'ลบใบเสร็จ';
+        del.innerHTML = icon('trash', 18);
+        del.addEventListener('click', async (e) => {
+          e.preventDefault(); e.stopPropagation();
+          if (!confirm('ลบใบเสร็จ ' + r.receipt_no + ' ?\n(กู้คืนได้ที่เมนูถังขยะ)')) return;
+          del.disabled = true;
+          try {
+            await trashDelete('receipts', r.id, {
+              label: r.receipt_no,
+              detail: (r.order_id ? 'จากออเดอร์' : 'จากงานผลิต') + ' · ' + fmtBaht(round2(r.total)) + ' บาท',
+            });
+            await loadReceipts();
+          } catch (err) { alert('ลบไม่สำเร็จ: ' + err.message); del.disabled = false; }
+        });
+        wrap.appendChild(del);
+
+        app.appendChild(wrap);
       });
     }
 
