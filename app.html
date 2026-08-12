@@ -2818,7 +2818,7 @@ end $$;
       if (!CUSTOMERS.length) { try { await fetchCustomers(); } catch (e) {} }
       document.getElementById('statusMsg').textContent = 'กำลังโหลด...';
       const [ordRes] = await Promise.all([
-        sb.from('orders').select('id,order_no,customer,channel,status,due_date,total,created_at')
+        sb.from('orders').select('id,order_no,customer,customer_id,channel,status,due_date,total,paid_amount,phone,address,cover_file_id,created_at')
           .order('created_at', { ascending: false }),
         fetchProducts(),
       ]);
