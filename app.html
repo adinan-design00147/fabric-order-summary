@@ -1193,7 +1193,7 @@
         sb.from('lots').select('id,name'),
         sb.from('pieces').select('id,lot_id,width_cm,length_cm,label,price,paid,item_type'),
         sb.from('product_orders').select('id,category,name,customer,quantity,unit_cost,paid,created_at'),
-        sb.from('orders').select('id,order_no,customer,channel,status,total,paid_amount,due_date,created_at'),
+        sb.from('orders').select('id,order_no,customer,customer_id,channel,status,total,paid_amount,due_date,created_at'),
       ]);
       if (lotsRes.error) throw lotsRes.error;
       if (piecesRes.error) throw piecesRes.error;
@@ -2545,6 +2545,7 @@ end $$;
     }
 
     async function loadOrders() {
+      if (!CUSTOMERS.length) { try { await fetchCustomers(); } catch (e) {} }
       document.getElementById('statusMsg').textContent = 'กำลังโหลด...';
       const [ordRes] = await Promise.all([
         sb.from('orders').select('id,order_no,customer,channel,status,due_date,total,created_at')
@@ -2655,6 +2656,13 @@ end $$;
       head.className = 'panel';
       head.innerHTML = `
         <div class="form-grid">
+          <div class="field">
+            <label for="oCustPick">เลือกลูกค้า</label>
+            <select id="oCustPick">
+              <option value="">— ลูกค้าใหม่ / พิมพ์ชื่อเอง —</option>
+              ${CUSTOMERS.map(c => `<option value="${c.id}" ${isEdit && editOrder.customer_id === c.id ? 'selected' : ''}>${esc(c.name)}${c.shop_name ? ' · ' + esc(c.shop_name) : ''}${c.phone ? ' · ' + esc(c.phone) : ''}</option>`).join('')}
+            </select>
+          </div>
           <div class="field"><label for="oCust">ชื่อลูกค้า</label><input id="oCust" placeholder="ไม่บังคับ" value="${isEdit ? esc(editOrder.customer || '') : ''}"></div>
           <div class="field">
             <label for="oChan">ช่องทาง</label>
@@ -2677,6 +2685,18 @@ end $$;
         </div>
       `;
       app.appendChild(head);
+
+      // เลือกลูกค้าจากสมุด -> เติมชื่อ/เบอร์/ที่อยู่ให้อัตโนมัติ
+      const custPick = head.querySelector('#oCustPick');
+      if (custPick) custPick.addEventListener('change', () => {
+        const c = CUSTOMERS.find(x => x.id === custPick.value);
+        if (!c) return;
+        head.querySelector('#oCust').value = c.name || '';
+        if (c.phone) head.querySelector('#oPhone').value = c.phone;
+        const addr = [c.address, c.province, c.postcode].filter(Boolean).join(' ');
+        if (addr) head.querySelector('#oAddr').value = addr;
+      });
+
 
       const itemsPanel = document.createElement('div');
       itemsPanel.className = 'panel';
@@ -2825,6 +2845,14 @@ end $$;
           const total = items.reduce((s, i) => s + i.line_total, 0);
           const headFields = {
             customer: head.querySelector('#oCust').value.trim() || null,
+            customer_id: (function () {
+              const picked = head.querySelector('#oCustPick') ? head.querySelector('#oCustPick').value : '';
+              if (picked) return picked;
+              // ไม่ได้เลือกจากลิสต์ -> ลองจับคู่จากชื่อที่พิมพ์
+              const nm = head.querySelector('#oCust').value.trim().toLowerCase();
+              const hit = nm ? CUSTOMERS.find(c => (c.name || '').toLowerCase() === nm) : null;
+              return hit ? hit.id : null;
+            })(),
             channel: head.querySelector('#oChan').value,
             due_date: head.querySelector('#oDue').value || null,
             note: head.querySelector('#oNote').value.trim() || null,
@@ -2878,6 +2906,7 @@ end $$;
 
     // ---- รายละเอียดออเดอร์ ----
     async function loadOrderDetail(id) {
+      if (!CUSTOMERS.length) { try { await fetchCustomers(); } catch (e) {} }
       document.getElementById('statusMsg').textContent = 'กำลังโหลด...';
       const [oRes, iRes] = await Promise.all([
         sb.from('orders').select('id,order_no,customer,channel,status,due_date,note,total,created_at,phone,address,payment_method,paid_amount').eq('id', id).single(),
@@ -3512,7 +3541,7 @@ end $$;
         sb.from('lots').select('id,name'),
         sb.from('pieces').select('id,lot_id,width_cm,length_cm,label,price,paid,item_type'),
         sb.from('product_orders').select('id,category,name,customer,quantity,unit_cost,paid,created_at'),
-        sb.from('orders').select('id,order_no,customer,channel,status,total,paid_amount,due_date,created_at'),
+        sb.from('orders').select('id,order_no,customer,customer_id,channel,status,total,paid_amount,due_date,created_at'),
       ]);
       if (lotsRes.error) throw lotsRes.error;
       if (piecesRes.error) throw piecesRes.error;
@@ -3811,6 +3840,25 @@ end $$;
       }
     }
 
+    // ===== สมุดลูกค้า =====
+    const CUSTOMER_TYPES = ['ทั่วไป', 'ตัวแทนจำหน่าย', 'ร้านค้าส่ง', 'ทีม/องค์กร'];
+    const CUSTOMER_STATUS = {
+      active:    { label: 'ใช้งานอยู่', cls: 'st-paid' },
+      inactive:  { label: 'ไม่เคลื่อนไหว', cls: 'st-prod' },
+      blacklist: { label: 'บัญชีดำ', cls: 'st-cancel' },
+    };
+    const CUSTOMER_COLS = 'id,code,name,shop_name,phone,phone2,line_id,facebook,instagram,email,' +
+      'address,province,postcode,default_size,fav_color,fabric_type,team_name,design_ref,' +
+      'customer_type,status,marketing_consent,note,first_order_at,created_at';
+    let CUSTOMERS = [];
+
+    async function fetchCustomers() {
+      const { data, error } = await sb.from('customers').select(CUSTOMER_COLS).order('name');
+      if (error) throw error;
+      CUSTOMERS = data || [];
+      return CUSTOMERS;
+    }
+
     async function loadGlobalCustomers() {
       document.getElementById('statusMsg').textContent = 'กำลังโหลด...';
       const { data: lots, error: e0 } = await sb.from('lots').select('id,name');
@@ -3820,10 +3868,123 @@ end $$;
       const { data: orders, error: e2 } = await sb.from('product_orders').select('category,customer,name,quantity,unit_sell_price,created_at');
       if (e2) throw e2;
       const { data: sales, error: e3 } = await sb.from('orders')
-        .select('id,order_no,customer,channel,status,total,paid_amount,phone,address,due_date,created_at');
+        .select('id,order_no,customer,customer_id,channel,status,total,paid_amount,phone,address,due_date,created_at');
       if (e3) throw e3;
+      await fetchCustomers();
       renderGlobalCustomers(lots, pieces, orders, sales);
       document.getElementById('statusMsg').textContent = 'อัปเดตล่าสุด: ' + new Date().toLocaleString('th-TH');
+    }
+
+    /** ฟอร์มเพิ่ม/แก้ไขลูกค้า (c = null คือเพิ่มใหม่) */
+    function openCustomerForm(c) {
+      const isEdit = !!c;
+      c = c || {};
+      const app = document.getElementById('app');
+      app.innerHTML = '';
+      app.appendChild(buildPageHead(isEdit ? 'แก้ไขลูกค้า' : 'เพิ่มลูกค้าใหม่',
+        isEdit ? esc(c.code || '') + ' · ' + esc(c.name || '') : 'กรอกเท่าที่มี ช่องที่ไม่รู้เว้นว่างได้'));
+
+      const v = (k) => esc(c[k] == null ? '' : String(c[k]));
+      const panel = document.createElement('div');
+      panel.className = 'panel';
+      panel.innerHTML = `
+        <h2>${icon('user', 17)}ข้อมูลติดต่อ</h2>
+        <div class="form-grid">
+          <div class="field"><label for="cName">ชื่อ-นามสกุล *</label><input id="cName" value="${v('name')}" placeholder="ชื่อผู้ติดต่อ"></div>
+          <div class="field"><label for="cShop">ชื่อร้าน / องค์กร</label><input id="cShop" value="${v('shop_name')}" placeholder="ไม่บังคับ"></div>
+          <div class="field"><label for="cPhone">เบอร์โทรหลัก</label><input id="cPhone" value="${v('phone')}" placeholder="08x-xxx-xxxx" inputmode="tel"></div>
+          <div class="field"><label for="cPhone2">เบอร์สำรอง</label><input id="cPhone2" value="${v('phone2')}" inputmode="tel"></div>
+          <div class="field"><label for="cLine">Line ID</label><input id="cLine" value="${v('line_id')}"></div>
+          <div class="field"><label for="cFb">Facebook</label><input id="cFb" value="${v('facebook')}"></div>
+          <div class="field"><label for="cIg">Instagram</label><input id="cIg" value="${v('instagram')}"></div>
+          <div class="field"><label for="cEmail">อีเมล</label><input id="cEmail" type="email" value="${v('email')}"></div>
+        </div>
+
+        <h2 style="margin-top:var(--space-5)">${icon('truck', 17)}ที่อยู่จัดส่ง</h2>
+        <div class="field"><label for="cAddr">ที่อยู่</label><input id="cAddr" value="${v('address')}" placeholder="บ้านเลขที่ ถนน ตำบล อำเภอ"></div>
+        <div class="form-grid">
+          <div class="field"><label for="cProv">จังหวัด</label><input id="cProv" value="${v('province')}"></div>
+          <div class="field"><label for="cPost">รหัสไปรษณีย์</label><input id="cPost" value="${v('postcode')}" inputmode="numeric"></div>
+        </div>
+
+        <h2 style="margin-top:var(--space-5)">${icon('thread', 17)}ข้อมูลงานที่ลูกค้าใช้ประจำ</h2>
+        <div class="form-grid">
+          <div class="field"><label for="cSize">ไซซ์/ขนาดที่ใช้ประจำ</label><input id="cSize" value="${v('default_size')}" placeholder="เช่น 65x85 ซม. หรือ อก 40 ยาว 70"></div>
+          <div class="field"><label for="cColor">สีที่ชอบ/ใช้ประจำ</label><input id="cColor" value="${v('fav_color')}"></div>
+          <div class="field"><label for="cFabric">ผ้า/วัสดุที่เคยใช้</label><input id="cFabric" value="${v('fabric_type')}"></div>
+          <div class="field"><label for="cTeam">ทีม/องค์กรที่สังกัด</label><input id="cTeam" value="${v('team_name')}"></div>
+        </div>
+        <div class="field"><label for="cDesign">ลิงก์ไฟล์ดีไซน์ / โฟลเดอร์รูป</label><input id="cDesign" value="${v('design_ref')}" placeholder="วางลิงก์ Google Drive ได้"></div>
+
+        <h2 style="margin-top:var(--space-5)">${icon('clipboard', 17)}การจัดกลุ่ม</h2>
+        <div class="form-grid">
+          <div class="field"><label for="cType">ประเภทลูกค้า</label>
+            <select id="cType">${CUSTOMER_TYPES.map(t => `<option ${c.customer_type === t ? 'selected' : ''}>${esc(t)}</option>`).join('')}</select></div>
+          <div class="field"><label for="cStatus">สถานะ</label>
+            <select id="cStatus">${Object.entries(CUSTOMER_STATUS).map(([k, m]) =>
+              `<option value="${k}" ${c.status === k ? 'selected' : ''}>${esc(m.label)}</option>`).join('')}</select></div>
+          <div class="field"><label for="cFirst">เป็นลูกค้าตั้งแต่</label><input id="cFirst" type="date" value="${v('first_order_at')}"></div>
+        </div>
+        <div class="field"><label for="cNote">หมายเหตุพิเศษ</label>
+          <input id="cNote" value="${v('note')}" placeholder='เช่น "ไซซ์ L ใหญ่กว่าปกติ", "โทรก่อนส่ง"'></div>
+        <label class="pick-label" style="display:flex;align-items:center;gap:8px;margin-top:10px;cursor:pointer">
+          <input type="checkbox" id="cConsent" ${c.marketing_consent ? 'checked' : ''}>
+          <span>ยินยอมรับข่าวสาร/โปรโมชั่น</span>
+        </label>
+
+        <div class="field-row" style="margin-top:var(--space-4)">
+          <button class="btn" id="cSave">${icon('check', 15)}${isEdit ? 'บันทึกการแก้ไข' : 'เพิ่มลูกค้า'}</button>
+          <button class="btn secondary" id="cCancel">${icon('close', 15)}ยกเลิก</button>
+          ${isEdit ? `<button class="btn secondary" id="cDel" style="margin-left:auto">${icon('trash', 15)}ลบลูกค้า</button>` : ''}
+        </div>
+        <div class="msg" id="cMsg"></div>
+        <div class="hint">เบอร์โทรหลักใช้กันข้อมูลซ้ำ — ถ้าเบอร์ตรงกับลูกค้าที่มีอยู่แล้ว ระบบจะเตือน</div>
+      `;
+      app.appendChild(panel);
+
+      panel.querySelector('#cCancel').addEventListener('click', () => { currentView = 'customers'; boot(); });
+
+      panel.querySelector('#cSave').addEventListener('click', async () => {
+        const msg = panel.querySelector('#cMsg');
+        const g = (id) => panel.querySelector(id).value.trim();
+        const name = g('#cName');
+        msg.textContent = ''; msg.className = 'msg';
+        if (!name) { msg.textContent = 'กรอกชื่อลูกค้าก่อน'; msg.className = 'msg error'; return; }
+        const row = {
+          name, shop_name: g('#cShop') || null,
+          phone: g('#cPhone') || null, phone2: g('#cPhone2') || null,
+          line_id: g('#cLine') || null, facebook: g('#cFb') || null, instagram: g('#cIg') || null,
+          email: g('#cEmail') || null,
+          address: g('#cAddr') || null, province: g('#cProv') || null, postcode: g('#cPost') || null,
+          default_size: g('#cSize') || null, fav_color: g('#cColor') || null,
+          fabric_type: g('#cFabric') || null, team_name: g('#cTeam') || null, design_ref: g('#cDesign') || null,
+          customer_type: g('#cType'), status: g('#cStatus'),
+          first_order_at: g('#cFirst') || null, note: g('#cNote') || null,
+          marketing_consent: panel.querySelector('#cConsent').checked,
+        };
+        const btn = panel.querySelector('#cSave');
+        btn.disabled = true;
+        const res = isEdit
+          ? await sb.from('customers').update(row).eq('id', c.id)
+          : await sb.from('customers').insert(row);
+        btn.disabled = false;
+        if (res.error) {
+          const dup = /duplicate key|customers_phone_uniq/i.test(res.error.message);
+          msg.textContent = dup ? 'เบอร์นี้มีลูกค้าอยู่แล้วในระบบ — ค้นหาเบอร์นี้ในหน้าลูกค้าเพื่อแก้ข้อมูลเดิมแทน'
+                                : 'บันทึกไม่สำเร็จ: ' + res.error.message;
+          msg.className = 'msg error';
+          return;
+        }
+        currentView = 'customers'; boot();
+      });
+
+      const del = panel.querySelector('#cDel');
+      if (del) del.addEventListener('click', async () => {
+        if (!confirm('ลบลูกค้า "' + c.name + '" ?\nออเดอร์เก่ายังอยู่ครบ แค่ไม่ผูกกับลูกค้ารายนี้แล้ว')) return;
+        const { error } = await sb.from('customers').delete().eq('id', c.id);
+        if (error) { alert('ลบไม่สำเร็จ: ' + error.message); return; }
+        currentView = 'customers'; boot();
+      });
     }
 
     function renderGlobalCustomers(lots, pieces, orders, sales) {
@@ -3869,11 +4030,106 @@ end $$;
         return b.total - a.total;
       });
 
+      // ---- ปุ่มเพิ่มลูกค้า ----
+      const addBar = document.createElement('div');
+      addBar.className = 'no-print';
+      addBar.style.marginBottom = 'var(--space-3)';
+      addBar.innerHTML = `<button class="btn" id="cNew">${icon('plus', 16)}เพิ่มลูกค้าใหม่</button>`;
+      app.insertBefore(addBar, searchWrap);
+      addBar.querySelector('#cNew').addEventListener('click', () => openCustomerForm(null));
+
+      // ---- สมุดลูกค้า (ตาราง customers) ----
+      const byId = {};
+      CUSTOMERS.forEach(c => { byId[c.id] = c; });
+      const statOf = (c) => {
+        const os = sales.filter(x => x.customer_id === c.id && x.status !== 'cancelled');
+        const total = os.reduce((t, o) => t + Number(o.total), 0);
+        const paid = os.reduce((t, o) => t + Number(o.paid_amount || 0), 0);
+        return { orders: os, total, outstanding: Math.max(0, total - paid) };
+      };
+
+      if (CUSTOMERS.length) {
+        const hb = document.createElement('h2');
+        hb.className = 'section-title';
+        hb.style.marginTop = '0';
+        hb.innerHTML = icon('user', 17) + 'สมุดลูกค้า (' + CUSTOMERS.length + ')';
+        app.appendChild(hb);
+
+        CUSTOMERS.forEach(c => {
+          const st = statOf(c);
+          const sm = CUSTOMER_STATUS[c.status] || CUSTOMER_STATUS.active;
+          const card = document.createElement('div');
+          card.className = 'lot-card cust-card';
+          card.dataset.search = [c.code, c.name, c.shop_name, c.phone, c.phone2, c.line_id, c.facebook,
+            c.instagram, c.email, c.address, c.province, c.postcode, c.team_name, c.default_size,
+            c.fav_color, c.fabric_type, c.customer_type, c.note,
+            st.orders.map(o => o.order_no).join(' ')].filter(Boolean).join(' ').toLowerCase();
+          const line = (label, val) => val ? `<div><span style="color:var(--sub)">${label}</span> ${esc(val)}</div>` : '';
+          card.innerHTML = `
+            <div class="lot-head cust-toggle" role="button" tabindex="0" aria-expanded="false">
+              <span>${icon('back', 14)}${esc(c.name)}${c.shop_name ? ' · ' + esc(c.shop_name) : ''}
+                <span class="st ${sm.cls}">${esc(sm.label)}</span>
+                ${c.customer_type !== 'ทั่วไป' ? `<span class="st st-prod">${esc(c.customer_type)}</span>` : ''}</span>
+              <span class="lot-head-right">
+                <span class="lot-total">${fmtBaht(round2(st.total))} บาท</span>
+                <span class="lot-price">${esc(c.code || '')} · ${st.orders.length} ออเดอร์${c.phone ? ' · ' + esc(c.phone) : ''}</span>
+                ${st.outstanding > 0 ? `<span class="lot-buffer" style="color:var(--warn-text)">ค้าง ${fmtBaht(round2(st.outstanding))}</span>` : ''}
+              </span>
+            </div>
+            <div class="cust-body" hidden>
+              <div style="padding:var(--space-4);display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:8px;font-size:13px;border-bottom:1px solid var(--border)">
+                ${line('โทร', c.phone)}${line('สำรอง', c.phone2)}${line('LINE', c.line_id)}
+                ${line('Facebook', c.facebook)}${line('IG', c.instagram)}${line('อีเมล', c.email)}
+                ${line('ที่อยู่', [c.address, c.province, c.postcode].filter(Boolean).join(' '))}
+                ${line('ไซซ์ประจำ', c.default_size)}${line('สีที่ชอบ', c.fav_color)}
+                ${line('ผ้า/วัสดุ', c.fabric_type)}${line('ทีม/องค์กร', c.team_name)}
+                ${c.design_ref ? `<div><span style="color:var(--sub)">ไฟล์ดีไซน์</span> <a href="${esc(c.design_ref)}" target="_blank" rel="noopener" style="color:var(--accent)">เปิดลิงก์</a></div>` : ''}
+                ${line('เป็นลูกค้าตั้งแต่', c.first_order_at ? new Date(c.first_order_at).toLocaleDateString('th-TH') : '')}
+                ${c.marketing_consent ? '<div><span class="st st-paid">ยินยอมรับข่าวสาร</span></div>' : ''}
+              </div>
+              ${c.note ? `<div class="info-note" style="margin:var(--space-3) var(--space-4)">${icon('pin', 14)} ${esc(c.note)}</div>` : ''}
+              ${st.orders.length ? `<div class="table-wrap"><table>
+                <thead><tr><th>เลขที่</th><th>วันที่</th><th>สถานะ</th><th>ยอด</th><th>ค้าง</th></tr></thead>
+                <tbody>${st.orders.map(o => {
+                  const os = ORDER_STATUS[o.status] || ORDER_STATUS.new;
+                  const bal = Math.max(0, Number(o.total) - Number(o.paid_amount || 0));
+                  return `<tr>
+                    <td data-label="เลขที่"><a href="${routeFor('orderView', o.id)}" style="color:var(--accent);font-weight:600;text-decoration:none">${esc(o.order_no)}</a></td>
+                    <td data-label="วันที่">${new Date(o.created_at).toLocaleDateString('th-TH')}</td>
+                    <td data-label="สถานะ"><span class="st ${os.cls}">${esc(os.label)}</span></td>
+                    <td data-label="ยอด">${fmtBaht(round2(o.total))}</td>
+                    <td data-label="ค้าง">${bal > 0 ? fmtBaht(round2(bal)) : '—'}</td>
+                  </tr>`;
+                }).join('')}</tbody></table></div>`
+                : '<div class="empty-cell" style="padding:14px">ยังไม่มีออเดอร์</div>'}
+              <div class="field-row no-print" style="padding:var(--space-3) var(--space-4)">
+                <button class="btn secondary btn-sm edit-cust" data-id="${c.id}">${icon('edit', 15)}แก้ไขข้อมูลลูกค้า</button>
+              </div>
+            </div>`;
+          app.appendChild(card);
+        });
+
+        app.querySelectorAll('.edit-cust').forEach(b => b.addEventListener('click', (e) => {
+          e.stopPropagation();
+          openCustomerForm(CUSTOMERS.find(x => x.id === b.dataset.id));
+        }));
+      }
+
+      // ---- ออเดอร์ที่ยังไม่ผูกกับสมุดลูกค้า ----
+      const unlinked = sales.filter(o => !o.customer_id && (o.customer || '').trim());
+      if (unlinked.length) {
+        const warn = document.createElement('div');
+        warn.className = 'info-note no-print';
+        warn.innerHTML = `${icon('pin', 14)} มีออเดอร์ ${unlinked.length} ใบที่ยังไม่ผูกกับสมุดลูกค้า
+          (${unlinked.slice(0, 5).map(o => esc(o.order_no)).join(', ')}${unlinked.length > 5 ? '...' : ''}) —
+          สร้างลูกค้าชื่อเดียวกันแล้วระบบจะผูกให้อัตโนมัติตอนแก้ออเดอร์`;
+        app.appendChild(warn);
+      }
+
       if (buyerList.length) {
         const h = document.createElement('h2');
         h.className = 'section-title';
-        h.style.marginTop = '0';
-        h.innerHTML = icon('cash', 17) + 'ลูกค้าที่สั่งซื้อ (จากออเดอร์)';
+        h.innerHTML = icon('cash', 17) + 'สรุปตามชื่อในออเดอร์ (รวมออเดอร์ที่ยังไม่ผูกลูกค้า)';
         app.appendChild(h);
 
         const totAll = buyerList.reduce((s, b) => s + b.total, 0);
