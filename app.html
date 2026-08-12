@@ -4,6 +4,15 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Haifa Design</title>
+<!-- ติดตั้งเป็นแอปบนหน้าจอมือถือได้ (Add to Home Screen) -->
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/icon-180.png">
+<link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+<meta name="theme-color" content="#1f2430">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Haifa Design">
+<meta name="mobile-web-app-capable" content="yes">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -1541,12 +1550,87 @@
         msg.textContent = 'เปลี่ยนรหัสผ่านเรียบร้อย ครั้งหน้าใช้รหัสใหม่'; msg.className = 'msg ok';
       });
 
+      const { data: list, error } = await sb.from('app_users')
+        .select('user_id,email,display_name,role,created_at').order('created_at');
+
+      // ---- เพิ่มผู้ใช้ใหม่ (เฉพาะ admin) ----
+      if (isAdmin()) {
+        const inv = document.createElement('div');
+        inv.className = 'panel';
+        inv.innerHTML = `
+          <h2>${icon('plus', 17)}เพิ่มผู้ใช้เข้าระบบ</h2>
+          <div class="form-grid">
+            <div class="field"><label for="ivEmail">อีเมลของคนที่จะให้เข้าใช้</label>
+              <input id="ivEmail" type="email" placeholder="name@example.com" autocomplete="off"></div>
+            <div class="field"><label for="ivRole">สิทธิ์ที่จะให้</label>
+              <select id="ivRole">
+                <option value="viewer">ดูอย่างเดียว — เปิดดูได้ แต่แก้ไขไม่ได้</option>
+                <option value="admin">ผู้ดูแล — แก้ไขได้ทุกอย่าง</option>
+              </select></div>
+          </div>
+          <div class="field"><label for="ivNote">ชื่อ/หมายเหตุ (ไม่บังคับ)</label><input id="ivNote" placeholder="เช่น น้องแอน ฝ่ายผลิต"></div>
+          <button class="btn" id="ivAdd">${icon('check', 15)}เพิ่มผู้ใช้</button>
+          <div class="msg" id="ivMsg"></div>
+          <div class="hint">
+            ใส่อีเมลไว้ล่วงหน้า → ส่งลิงก์เว็บให้เขา → เขากด "สมัครใช้งานครั้งแรก" ด้วยอีเมลนี้ (ตั้งรหัสผ่านเอง)
+            → ยืนยันอีเมล → เข้าระบบได้ทันทีด้วยสิทธิ์ที่คุณกำหนดไว้
+          </div>
+          <div id="ivList"></div>
+        `;
+        app.appendChild(inv);
+
+        const drawInvites = async () => {
+          const { data } = await sb.from('user_invites')
+            .select('email,role,note,created_at,used_at').order('created_at', { ascending: false });
+          const pending = (data || []).filter(i => !i.used_at);
+          const box = inv.querySelector('#ivList');
+          if (!pending.length) { box.innerHTML = ''; return; }
+          box.innerHTML = `
+            <div class="hint" style="margin:14px 0 6px;font-weight:600">รอสมัคร (${pending.length})</div>
+            ${pending.map(i => `<div class="field-row" style="align-items:center;margin-bottom:6px">
+              <span style="font-weight:600">${esc(i.email)}</span>
+              <span class="st ${i.role === 'admin' ? 'st-paid' : 'st-prod'}">${i.role === 'admin' ? 'ผู้ดูแล' : 'ดูอย่างเดียว'}</span>
+              ${i.note ? `<span class="hint" style="margin:0">${esc(i.note)}</span>` : ''}
+              <button class="icon-btn icon-btn-delete iv-del" data-email="${esc(i.email)}" title="ยกเลิกคำเชิญ" aria-label="ยกเลิกคำเชิญ" style="margin-left:auto">${icon('trash', 18)}</button>
+            </div>`).join('')}
+          `;
+          box.querySelectorAll('.iv-del').forEach(b => b.addEventListener('click', async () => {
+            if (!confirm('ยกเลิกคำเชิญของ ' + b.dataset.email + ' ?')) return;
+            await sb.from('user_invites').delete().eq('email', b.dataset.email);
+            drawInvites();
+          }));
+        };
+        drawInvites();
+
+        inv.querySelector('#ivAdd').addEventListener('click', async () => {
+          const msg = inv.querySelector('#ivMsg');
+          const email = inv.querySelector('#ivEmail').value.trim().toLowerCase();
+          msg.textContent = ''; msg.className = 'msg';
+          if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { msg.textContent = 'ใส่อีเมลให้ถูกต้องก่อน'; msg.className = 'msg error'; return; }
+          const exists = (list || []).find(u => (u.email || '').toLowerCase() === email);
+          if (exists) { msg.textContent = 'อีเมลนี้เข้าระบบอยู่แล้ว — เปลี่ยนสิทธิ์ได้ที่ตารางด้านล่าง'; msg.className = 'msg error'; return; }
+          const btn = inv.querySelector('#ivAdd');
+          btn.disabled = true;
+          const { error } = await sb.from('user_invites').upsert({
+            email,
+            role: inv.querySelector('#ivRole').value,
+            note: inv.querySelector('#ivNote').value.trim() || null,
+            invited_by: ME ? ME.id : null,
+            used_at: null,
+          }, { onConflict: 'email' });
+          btn.disabled = false;
+          if (error) { msg.textContent = 'เพิ่มไม่สำเร็จ: ' + error.message; msg.className = 'msg error'; return; }
+          inv.querySelector('#ivEmail').value = ''; inv.querySelector('#ivNote').value = '';
+          msg.innerHTML = 'เพิ่มแล้ว — ส่งลิงก์นี้ให้เขาสมัคร:<br><b>' + esc(location.href.split('#')[0]) + '</b>';
+          msg.className = 'msg ok';
+          drawInvites();
+        });
+      }
+
       // ---- ผู้ใช้ทั้งหมด ----
       const users = document.createElement('div');
       users.className = 'lot-card';
       app.appendChild(users);
-      const { data: list, error } = await sb.from('app_users')
-        .select('user_id,email,display_name,role,created_at').order('created_at');
       if (error) { users.innerHTML = '<div class="msg error" style="padding:16px">โหลดรายชื่อไม่สำเร็จ: ' + esc(error.message) + '</div>'; return; }
 
       users.innerHTML = `
