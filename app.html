@@ -4492,7 +4492,7 @@ end $$;
           </div>
           <div class="lot-actions">
             ${hasUnpaid ? `<button class="btn secondary btn-sm mark-lot-paid" data-lot="${lot.id}">${icon('check', 15)}จ่ายครบล็อตนี้</button>` : ''}
-            <button class="btn secondary btn-sm toggle-gallery">${icon('image', 15)}รูปงาน</button>
+            <button class="btn secondary btn-sm toggle-gallery" data-lot="${esc(lot.name)}">${icon('image', 15)}<span class="gal-label">รูปงาน</span></button>
             ${rows.length ? `<button class="btn secondary btn-sm pick-all">${icon('checkbox', 15)}เลือกทั้งล็อต</button>` : ''}
           </div>
           <div class="table-wrap">
@@ -4508,7 +4508,9 @@ end $$;
         let loaded = false;
         galBtn.addEventListener('click', () => {
           gallery.hidden = !gallery.hidden;
-          galBtn.innerHTML = gallery.hidden ? icon('image', 15) + 'รูปงาน' : icon('eyeOff', 15) + 'ซ่อนรูป';
+          const n = galBtn.dataset.count ? ' (' + galBtn.dataset.count + ')' : '';
+          galBtn.innerHTML = (gallery.hidden ? icon('image', 15) : icon('eyeOff', 15)) +
+            '<span class="gal-label">' + (gallery.hidden ? 'รูปงาน' + n : 'ซ่อนรูป') + '</span>';
           if (!gallery.hidden && !loaded) { loaded = true; gallery.__load(); }
         });
 
@@ -4525,8 +4527,18 @@ end $$;
           const res = await fetch(DRIVE_API_URL + '?action=counts&root=fabric');
           const j = await res.json();
           if (!j.ok) return;
+          // เติมจำนวนรูปบนปุ่ม "รูปงาน" ของแต่ละล็อต จะได้รู้ว่ามีรูปรออยู่กี่รูป
+          const counts = j.counts || {};
+          app.querySelectorAll('.toggle-gallery').forEach(btn => {
+            const n = counts[normalizeLotName(btn.dataset.lot || '')] || 0;
+            if (!n) return;
+            btn.dataset.count = n;
+            const lbl = btn.querySelector('.gal-label');
+            if (lbl) lbl.textContent = 'รูปงาน (' + n + ')';
+          });
+
           const known = new Set(lots.map(l => normalizeLotName(l.name)));
-          const missing = Object.entries(j.counts || {})
+          const missing = Object.entries(counts)
             .filter(([folder, n]) => n > 0 && !known.has(normalizeLotName(folder)))
             .sort((a, b) => lotSortKey(b[0]) - lotSortKey(a[0]));
           if (!missing.length) return;
