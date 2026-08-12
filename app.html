@@ -921,10 +921,10 @@
       { key: 'dashboard', label: 'แดชบอร์ด', icon: 'dashboard' },
       { key: 'calendar',  label: 'ปฏิทิน',   icon: 'calendar' },
       { sep: true },
-      { key: 'orders',    label: 'ออเดอร์',      icon: 'clipboard' },
+      { key: 'orders',    label: 'My Job',       icon: 'clipboard' },
       { key: 'products',  label: 'สินค้า & ราคา', icon: 'price' },
       { sep: true },
-      { key: 'fabric',    label: 'ต้นทุนผลิต',  icon: 'factory' },
+      { key: 'fabric',    label: 'งานผลิต',     icon: 'factory' },
       { key: 'stock',     label: 'สต็อกของ',   icon: 'box' },
       { sep: true },
       { key: 'customers', label: 'ลูกค้า',     icon: 'user' },
@@ -955,10 +955,10 @@
       if (key === 'customers') return { label: 'ข้อมูลลูกค้า', icon: 'user' };
       if (key === 'receipts') return { label: 'ใบเสร็จ', icon: 'receipt' };
       if (key === 'receiptView') return { label: 'ใบเสร็จ', icon: 'receipt' };
-      if (key === 'orders') return { label: 'ออเดอร์', icon: 'clipboard' };
-      if (key === 'orderView') return { label: 'ออเดอร์', icon: 'clipboard' };
+      if (key === 'orders') return { label: 'My Job', icon: 'clipboard' };
+      if (key === 'orderView') return { label: 'My Job', icon: 'clipboard' };
       if (key === 'products') return { label: 'สินค้า & ราคา', icon: 'price' };
-      if (key === 'fabric') return { label: 'ต้นทุนผลิต', icon: 'factory' };
+      if (key === 'fabric') return { label: 'งานผลิต', icon: 'factory' };
       if (key === 'stock') return { label: 'สต็อกของ', icon: 'box' };
       if (key === 'health') return { label: 'ตรวจระบบ & สำรองข้อมูล', icon: 'check' };
       if (key === 'profile') return { label: 'โปรไฟล์ผู้ใช้', icon: 'user' };
@@ -1025,7 +1025,7 @@
       const moreActive = MOBILE_MORE.includes(currentView);
       bottom.innerHTML = MOBILE_NAV.map(k => {
         const m = viewMeta(k);
-        const label = k === 'fabric' ? 'ต้นทุนผลิต' : m.label;
+        const label = k === 'fabric' ? 'งานผลิต' : m.label;
         return `<a class="nav-item ${currentView === k ? 'active' : ''}" href="${routeFor(k)}" data-key="${k}">
                   <span class="nav-ico">${icon(m.icon, 21)}</span><span>${esc(label)}</span>
                 </a>`;
@@ -2560,7 +2560,7 @@ end $$;
     function renderOrders(list) {
       const app = document.getElementById('app');
       app.innerHTML = '';
-      app.appendChild(buildPageHead('ออเดอร์', 'รับออเดอร์ลูกค้าจากทุกช่องทาง'));
+      app.appendChild(buildPageHead('My Job', 'งานของร้าน — รับออเดอร์ลูกค้าจากทุกช่องทาง'));
 
       const bar = document.createElement('div');
       bar.style.cssText = 'display:flex;gap:var(--space-2);flex-wrap:wrap;margin-bottom:var(--space-4)';
@@ -2633,6 +2633,8 @@ end $$;
 
     // ---- ฟอร์มสร้างออเดอร์ ----
     function openOrderForm(editOrder, editItems) {
+      // กันเคส id หลุด (เช่นเปิดฟอร์มค้างไว้แล้วหน้าถูก re-render) — ใช้ id จาก URL เป็นตัวสำรอง
+      const editId = editOrder ? (editOrder.id || viewingOrderId || null) : null;
       const isEdit = !!editOrder;
       const app = document.getElementById('app');
       app.innerHTML = '';
@@ -2864,12 +2866,13 @@ end $$;
 
           let orderId, orderNo;
           if (isEdit) {
-            const { error: e1 } = await sb.from('orders').update(headFields).eq('id', editOrder.id);
+            if (!editId) throw new Error('หาเลขอ้างอิงออเดอร์ไม่เจอ — กดปุ่ม "รายการออเดอร์" แล้วเปิดออเดอร์ใหม่อีกครั้ง ข้อมูลเดิมยังอยู่ครบ');
+            const { error: e1 } = await sb.from('orders').update(headFields).eq('id', editId);
             if (e1) throw new Error(e1.message);
             // เขียนรายการใหม่ทั้งชุด (ง่ายและกันข้อมูลค้าง)
-            const { error: eDel } = await sb.from('order_items').delete().eq('order_id', editOrder.id);
+            const { error: eDel } = await sb.from('order_items').delete().eq('order_id', editId);
             if (eDel) throw new Error(eDel.message);
-            orderId = editOrder.id;
+            orderId = editId;
             orderNo = editOrder.order_no;
           } else {
             const res = await insertWithDocNo('orders', nextOrderNo,
@@ -4378,7 +4381,7 @@ end $$;
       if (activeTab === 'customer') activeTab = 'daily';
       const app = document.getElementById('app');
       app.innerHTML = '';
-      app.appendChild(buildPageHead('ต้นทุนผลิต', 'งานที่ส่งผลิตกับร้านอื่น — ป้ายผ้า โฟมบอร์ด สติกเกอร์ และยอดที่ต้องจ่ายร้านผลิต'));
+      app.appendChild(buildPageHead('งานผลิต', 'งานที่ส่งผลิตกับร้านอื่น — ป้ายผ้า โฟมบอร์ด สติกเกอร์ และยอดที่ต้องจ่ายร้านผลิต'));
 
       let totalPieces = 0, grandTotalYard = 0, grandTotalPrice = 0;
       const lotBlocks = lots.map(lot => {
@@ -4513,6 +4516,45 @@ end $$;
       });
 
       app.appendChild(dailyEl);
+
+      // ---- โฟลเดอร์รูปในไดรฟ์ที่ยังไม่มีล็อตในระบบ ----
+      // (อัปรูปเข้าไดรฟ์แล้วแต่ยังไม่ได้สร้างล็อต -> รูปจะไม่โผล่ที่ไหนเลย)
+      (async () => {
+        if (!DRIVE_API_URL) return;
+        try {
+          const res = await fetch(DRIVE_API_URL + '?action=counts&root=fabric');
+          const j = await res.json();
+          if (!j.ok) return;
+          const known = new Set(lots.map(l => normalizeLotName(l.name)));
+          const missing = Object.entries(j.counts || {})
+            .filter(([folder, n]) => n > 0 && !known.has(normalizeLotName(folder)))
+            .sort((a, b) => lotSortKey(b[0]) - lotSortKey(a[0]));
+          if (!missing.length) return;
+          const card = document.createElement('div');
+          card.className = 'panel no-print';
+          card.innerHTML = `
+            <h2>${icon('image', 17)}รูปในไดรฟ์ที่ยังไม่มีล็อตในระบบ</h2>
+            <div class="hint" style="margin-bottom:10px">
+              มีโฟลเดอร์รูปในไดรฟ์ที่ยังไม่มีล็อตในระบบ เลยไม่มีที่ให้รูปแสดง — กดสร้างล็อตแล้วรูปจะเข้ามาเอง
+            </div>
+            ${missing.map(([folder, n]) => `
+              <div class="field-row" style="align-items:center;margin-bottom:8px">
+                <span style="font-weight:600;min-width:110px">${esc(folder)}</span>
+                <span class="hint" style="margin:0">${n} รูป</span>
+                <button class="btn btn-sm make-lot" data-lot="${esc(folder)}" style="margin-left:auto">
+                  ${icon('plus', 15)}สร้างล็อตนี้
+                </button>
+              </div>`).join('')}
+          `;
+          dailyEl.appendChild(card);
+          card.querySelectorAll('.make-lot').forEach(b => b.addEventListener('click', async () => {
+            b.disabled = true; b.textContent = 'กำลังสร้าง...';
+            const { error } = await sb.from('lots').insert({ name: b.dataset.lot });
+            if (error) { alert('สร้างล็อตไม่สำเร็จ: ' + error.message); b.disabled = false; return; }
+            await loadAll();
+          }));
+        } catch (e) { /* ไดรฟ์ล่มไม่ควรทำให้หน้าพัง */ }
+      })();
 
       searchWrap.querySelector('#lotSearch').addEventListener('input', (e) => {
         const q = e.target.value.trim().toLowerCase();
