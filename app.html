@@ -2650,6 +2650,49 @@ end $$;
     }
 
     // ---- ฟอร์มสร้างออเดอร์ ----
+    /**
+     * หาลูกค้าจากชื่อ/เบอร์ ถ้าไม่มีก็สร้างให้เลย — ใช้ตอนบันทึกออเดอร์
+     * จะได้ไม่ต้องไปสร้างลูกค้าก่อนทุกครั้ง และไม่มีออเดอร์ที่ลอยไม่ผูกกับใคร
+     * คืน customer_id หรือ null (ถ้าไม่ได้กรอกชื่อเลย)
+     */
+    async function resolveCustomerId({ pickedId, name, phone, address }) {
+      if (pickedId) return pickedId;
+      const nm = (name || '').trim();
+      const ph = (phone || '').trim();
+      if (!nm && !ph) return null;
+
+      if (!CUSTOMERS.length) { try { await fetchCustomers(); } catch (e) {} }
+      // 1) เบอร์ตรงกันถือว่าคนเดียวกัน (เบอร์เป็น unique ในฐานข้อมูล)
+      if (ph) {
+        const byPhone = CUSTOMERS.find(c => (c.phone || '').trim() === ph);
+        if (byPhone) return byPhone.id;
+      }
+      // 2) ชื่อตรงกันแบบไม่สนตัวพิมพ์
+      if (nm) {
+        const byName = CUSTOMERS.find(c => (c.name || '').trim().toLowerCase() === nm.toLowerCase());
+        if (byName) return byName.id;
+      }
+      if (!nm) return null;
+
+      // 3) ไม่มีในสมุด -> สร้างใหม่ให้อัตโนมัติ
+      const { data, error } = await sb.from('customers').insert({
+        name: nm,
+        phone: ph || null,
+        address: (address || '').trim() || null,
+        first_order_at: new Date().toISOString().slice(0, 10),
+      }).select('id').single();
+      if (error) {
+        // เบอร์ซ้ำ (แข่งกันสร้างพร้อมกัน) -> ดึงของเดิมมาใช้
+        if (ph) {
+          const { data: again } = await sb.from('customers').select('id').eq('phone', ph).maybeSingle();
+          if (again) return again.id;
+        }
+        throw new Error('สร้างลูกค้าไม่สำเร็จ: ' + error.message);
+      }
+      await fetchCustomers();
+      return data.id;
+    }
+
     function openOrderForm(editOrder, editItems) {
       // รับเฉพาะ "ข้อมูลออเดอร์" จริงๆ เท่านั้น (กันเผลอส่ง event object เข้ามาแล้วกลายเป็นโหมดแก้ไข)
       if (editOrder && !(editOrder.id || editOrder.order_no)) { editOrder = null; editItems = null; }
@@ -2704,6 +2747,10 @@ end $$;
         <div class="field" style="margin-top:var(--space-3)">
           <label for="oAddr">ที่อยู่จัดส่ง (เพิ่มทีหลังได้)</label>
           <input id="oAddr" placeholder="บ้านเลขที่ ถนน ตำบล อำเภอ จังหวัด รหัสไปรษณีย์" value="${isEdit ? esc(editOrder.address || '') : ''}">
+        </div>
+        <div class="hint" style="margin-top:8px">
+          ลูกค้าเก่า → เลือกจากลิสต์ (ชื่อ/เบอร์/ที่อยู่เติมให้เอง) ·
+          ลูกค้าใหม่ → พิมพ์ชื่อได้เลย ระบบจะเพิ่มเข้าสมุดลูกค้าให้อัตโนมัติตอนบันทึก
         </div>
       `;
       app.appendChild(head);
@@ -2865,16 +2912,16 @@ end $$;
         btn.disabled = true; btn.textContent = 'กำลังบันทึก...';
         try {
           const total = items.reduce((s, i) => s + i.line_total, 0);
+          // ลูกค้าเก่า -> ผูกกับรายเดิม · ลูกค้าใหม่ -> สร้างเข้าสมุดให้เลย
+          const custId = await resolveCustomerId({
+            pickedId: head.querySelector('#oCustPick') ? head.querySelector('#oCustPick').value : '',
+            name: head.querySelector('#oCust').value,
+            phone: head.querySelector('#oPhone').value,
+            address: head.querySelector('#oAddr').value,
+          });
           const headFields = {
             customer: head.querySelector('#oCust').value.trim() || null,
-            customer_id: (function () {
-              const picked = head.querySelector('#oCustPick') ? head.querySelector('#oCustPick').value : '';
-              if (picked) return picked;
-              // ไม่ได้เลือกจากลิสต์ -> ลองจับคู่จากชื่อที่พิมพ์
-              const nm = head.querySelector('#oCust').value.trim().toLowerCase();
-              const hit = nm ? CUSTOMERS.find(c => (c.name || '').toLowerCase() === nm) : null;
-              return hit ? hit.id : null;
-            })(),
+            customer_id: custId,
             channel: head.querySelector('#oChan').value,
             due_date: head.querySelector('#oDue').value || null,
             note: head.querySelector('#oNote').value.trim() || null,
@@ -4126,10 +4173,26 @@ end $$;
       if (unlinked.length) {
         const warn = document.createElement('div');
         warn.className = 'info-note no-print';
-        warn.innerHTML = `${icon('pin', 14)} มีออเดอร์ ${unlinked.length} ใบที่ยังไม่ผูกกับสมุดลูกค้า
-          (${unlinked.slice(0, 5).map(o => esc(o.order_no)).join(', ')}${unlinked.length > 5 ? '...' : ''}) —
-          เปิดออเดอร์แล้วเลือกลูกค้าจากลิสต์ ระบบจะผูกให้`;
+        warn.innerHTML = `<div>${icon('pin', 14)} มีออเดอร์ ${unlinked.length} ใบที่ยังไม่ผูกกับสมุดลูกค้า
+          (${unlinked.slice(0, 5).map(o => esc(o.order_no)).join(', ')}${unlinked.length > 5 ? '...' : ''})</div>
+          <button class="btn btn-sm" id="linkAll" style="margin-top:10px">${icon('check', 15)}ผูกให้อัตโนมัติจากชื่อในออเดอร์</button>`;
         app.appendChild(warn);
+        warn.querySelector('#linkAll').addEventListener('click', async () => {
+          const b = warn.querySelector('#linkAll');
+          b.disabled = true; b.textContent = 'กำลังผูก...';
+          try {
+            for (const o of unlinked) {
+              const cid = await resolveCustomerId({
+                pickedId: '', name: o.customer, phone: o.phone, address: o.address,
+              });
+              if (cid) await sb.from('orders').update({ customer_id: cid }).eq('id', o.id);
+            }
+            await loadGlobalCustomers();
+          } catch (e) {
+            alert('ผูกไม่สำเร็จ: ' + e.message);
+            b.disabled = false; b.innerHTML = icon('check', 15) + 'ผูกให้อัตโนมัติจากชื่อในออเดอร์';
+          }
+        });
       }
 
       wireCustomerCards(app, searchMsg);
