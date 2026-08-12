@@ -2587,7 +2587,7 @@ end $$;
         <button class="btn secondary" id="goProducts">${icon('price', 16)}จัดการสินค้า & ราคา</button>
       `;
       app.appendChild(bar);
-      bar.querySelector('#newOrder').addEventListener('click', openOrderForm);
+      bar.querySelector('#newOrder').addEventListener('click', () => openOrderForm());
       bar.querySelector('#goProducts').addEventListener('click', () => { currentView = 'products'; boot(); });
 
       const open = list.filter(o => o.status !== 'paid' && o.status !== 'cancelled');
@@ -2651,7 +2651,9 @@ end $$;
 
     // ---- ฟอร์มสร้างออเดอร์ ----
     function openOrderForm(editOrder, editItems) {
-      // กันเคส id หลุด (เช่นเปิดฟอร์มค้างไว้แล้วหน้าถูก re-render) — ใช้ id จาก URL เป็นตัวสำรอง
+      // รับเฉพาะ "ข้อมูลออเดอร์" จริงๆ เท่านั้น (กันเผลอส่ง event object เข้ามาแล้วกลายเป็นโหมดแก้ไข)
+      if (editOrder && !(editOrder.id || editOrder.order_no)) { editOrder = null; editItems = null; }
+      // กันเคส id หลุด (เปิดฟอร์มค้างไว้แล้วหน้าถูก re-render) — ใช้ id จาก URL เป็นตัวสำรอง
       const editId = editOrder ? (editOrder.id || viewingOrderId || null) : null;
       const isEdit = !!editOrder;
       const app = document.getElementById('app');
