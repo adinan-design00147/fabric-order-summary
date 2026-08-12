@@ -1074,7 +1074,8 @@
     let SETTINGS = null;
     let lastSelectedLotId = null;
     let activeTab = 'daily';
-    let currentView = 'dashboard';
+    const HOME_VIEW = 'orders';        // หน้าแรกหลังเข้าระบบ = My Job
+    let currentView = HOME_VIEW;
     let dashCharts = [];
 
     const PRODUCT_CATEGORIES = {
@@ -1164,11 +1165,11 @@
 
     function applyHash() {
       const raw = (location.hash || '').replace(/^#\/?/, '');
-      if (!raw) { currentView = 'dashboard'; return; }
+      if (!raw) { currentView = HOME_VIEW; return; }
       const [seg, id] = raw.split('/');
       if (seg === 'order' && id) { currentView = 'orderView'; viewingOrderId = id; return; }
       if (seg === 'receipt' && id) { currentView = 'receiptView'; viewingReceiptId = id; return; }
-      currentView = VALID_VIEWS.includes(seg) ? seg : 'dashboard';
+      currentView = VALID_VIEWS.includes(seg) ? seg : HOME_VIEW;
     }
 
     window.addEventListener('hashchange', () => {
@@ -2316,7 +2317,7 @@ end $$;
     // ===== เช็กว่ามีเวอร์ชันใหม่ไหม =====
     // เบราว์เซอร์ชอบจำไฟล์เก่าไว้ (cache) ทำให้ไม่เห็นของที่เพิ่งอัปเดต
     // ตัวนี้จะแอบเทียบเวอร์ชันกับไฟล์บนเซิร์ฟเวอร์ แล้วขึ้นแถบให้กดอัปเดต
-    const APP_BUILD = '20260813-0046';
+    const APP_BUILD = '20260813-0052';
 
     async function checkForUpdate() {
       try {
@@ -6294,11 +6295,11 @@ end $$;
       applyRoleUI();
       showAuthScreen(false);
       if (opts && opts.fresh) {
-        // เพิ่งล็อกอิน -> เริ่มที่แดชบอร์ดเสมอ (ไม่ค้างอยู่หน้าเดิมก่อนออกจากระบบ)
-        currentView = 'dashboard';
+        // เพิ่งล็อกอิน -> เริ่มที่ My Job เสมอ (ไม่ค้างอยู่หน้าเดิมก่อนออกจากระบบ)
+        currentView = HOME_VIEW;
         viewingOrderId = null; viewingReceiptId = null;
         suppressHash = true;
-        location.hash = '#/dashboard';
+        location.hash = '#/' + HOME_VIEW;
         setTimeout(() => { suppressHash = false; }, 150);
       } else {
         applyHash();   // เปิดลิงก์ตรงมา (เช่น #/order/xxx) ให้ไปหน้านั้นตามเดิม
