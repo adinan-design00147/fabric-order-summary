@@ -420,6 +420,22 @@
   .update-bar .btn { background: #fff !important; color: #1f2430 !important; border-color: #fff !important; }
   @media (max-width: 640px) { .update-bar { bottom: 78px; left: 12px; right: 12px; transform: none; justify-content: space-between; } }
 
+  .alert-grid { display: grid; gap: var(--space-3); grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); margin-bottom: var(--space-5); }
+  .alert-card { display: flex; align-items: center; gap: 12px; padding: 14px 16px; border-radius: var(--radius);
+                border: 1px solid var(--border); background: var(--card); text-decoration: none; color: inherit; border-left-width: 4px; }
+  .alert-card:hover { border-color: var(--accent); }
+  .alert-card.danger { border-left-color: #b42318; }
+  .alert-card.warn   { border-left-color: #b8862b; }
+  .alert-card.info   { border-left-color: #3454d1; }
+  .alert-card.danger .alert-ico, .alert-card.danger .alert-num { color: #b42318; }
+  .alert-card.warn .alert-ico,   .alert-card.warn .alert-num   { color: #b8862b; }
+  .alert-card.info .alert-ico,   .alert-card.info .alert-num   { color: #3454d1; }
+  .alert-body { display: flex; flex-direction: column; gap: 1px; min-width: 0; flex: 1; }
+  .alert-num { font-size: 20px; font-weight: 700; line-height: 1.1; }
+  .alert-lbl { font-size: 13px; font-weight: 600; }
+  .alert-sub { font-size: 11.5px; color: var(--sub); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .alert-go { color: var(--sub); flex-shrink: 0; }
+
   /* หน้าจอเข้าสู่ระบบ */
   #authScreen { position: fixed; inset: 0; z-index: 200; background: var(--bg); display: flex; align-items: center; justify-content: center; padding: var(--space-4); }
   /* ต้องมี !important เพราะ display:flex ด้านบนชนะ attribute hidden ของเบราว์เซอร์ */
@@ -1344,25 +1360,75 @@
     async function loadDashboard() {
       document.getElementById('statusMsg').textContent = 'กำลังโหลด...';
       SETTINGS = await loadSettings();
-      const [lotsRes, piecesRes, ordersRes, salesRes] = await Promise.all([
+      const [lotsRes, piecesRes, ordersRes, salesRes, stockRes] = await Promise.all([
         sb.from('lots').select('id,name'),
-        sb.from('pieces').select('id,lot_id,width_cm,length_cm,label,price,paid,item_type,printed,printed_at,stock_move_id'),
+        sb.from('pieces').select('id,lot_id,width_cm,length_cm,label,price,sell_price,paid,item_type,printed,printed_at,stock_move_id'),
         sb.from('product_orders').select('id,category,name,customer,quantity,unit_cost,paid,created_at'),
         sb.from('orders').select('id,order_no,customer,customer_id,channel,status,total,paid_amount,due_date,created_at,cover_file_id,phone'),
+        sb.from('stock_items').select('id,name,category,unit,total_qty,used_qty,threshold_pct,threshold_qty').eq('active', true),
       ]);
       if (lotsRes.error) throw lotsRes.error;
       if (piecesRes.error) throw piecesRes.error;
       if (ordersRes.error) throw ordersRes.error;
       if (salesRes.error) throw salesRes.error;
-      renderDashboard(lotsRes.data, piecesRes.data, ordersRes.data, salesRes.data);
+      renderDashboard(lotsRes.data, piecesRes.data, ordersRes.data, salesRes.data, stockRes.data || []);
       document.getElementById('statusMsg').textContent = 'อัปเดตล่าสุด: ' + new Date().toLocaleString('th-TH');
     }
 
-    function renderDashboard(lots, pieces, orders, sales) {
+    function renderDashboard(lots, pieces, orders, sales, stock) {
       sales = sales || [];
+      stock = stock || [];
       const app = document.getElementById('app');
       app.innerHTML = '';
       app.appendChild(buildPageHead('แดชบอร์ด', 'ภาพรวมทั้งร้าน — ฝั่งขายและฝั่งต้นทุนผลิต'));
+
+      // ===== ต้องรีบทำ (รวมของค้างจากทุกเมนูมาไว้บนสุด) =====
+      const today0 = new Date(new Date().toDateString());
+      const overdue = sales.filter(s => {
+        if (!s.due_date || s.status === 'paid' || s.status === 'cancelled') return false;
+        return new Date(s.due_date) < today0;
+      });
+      const lowStock = stock.filter(i => stockStatus(i).key !== 'ok');
+      const notPrinted = pieces.filter(p => !p.printed && isFabricPiece(p));
+      const notPrintedYard = round4(notPrinted.reduce((a, p) => a + pieceYard(p, SETTINGS), 0));
+
+      const alerts = [];
+      if (overdue.length) alerts.push({
+        cls: 'danger', ico: 'truck', num: overdue.length, lbl: 'ออเดอร์เลยกำหนดส่งแล้ว',
+        sub: overdue.slice(0, 3).map(o => o.order_no + (o.customer ? ' · ' + o.customer : '')).join(' · '),
+        href: routeFor('orders'),
+      });
+      if (lowStock.length) alerts.push({
+        cls: 'warn', ico: 'box', num: lowStock.length, lbl: 'วัตถุดิบใกล้หมด / ต้องสั่งเพิ่ม',
+        sub: lowStock.map(i => i.name + ' เหลือ ' + fmtQty(stockRemain(i)) + ' ' + i.unit).join(' · '),
+        href: routeFor('stock'),
+      });
+      if (notPrinted.length) alerts.push({
+        cls: 'info', ico: 'factory', num: notPrinted.length, lbl: 'ชิ้นงานที่ยังไม่ได้ปริ้น',
+        sub: 'ต้องเตรียมผ้าอีก ' + notPrintedYard.toFixed(2) + ' หลา',
+        href: routeFor('fabric'),
+      });
+
+      if (alerts.length) {
+        const alertHead = document.createElement('h2');
+        alertHead.className = 'section-title';
+        alertHead.style.marginTop = '0';
+        alertHead.innerHTML = icon('clock', 17) + 'ต้องรีบทำ';
+        app.appendChild(alertHead);
+
+        const alertGrid = document.createElement('div');
+        alertGrid.className = 'alert-grid';
+        alertGrid.innerHTML = alerts.map(a => `<a class="alert-card ${a.cls}" href="${a.href}">
+          <span class="alert-ico">${icon(a.ico, 20)}</span>
+          <span class="alert-body">
+            <span class="alert-num">${a.num}</span>
+            <span class="alert-lbl">${esc(a.lbl)}</span>
+            <span class="alert-sub">${esc(a.sub)}</span>
+          </span>
+          <span class="alert-go">${icon('chevron', 18)}</span>
+        </a>`).join('');
+        app.appendChild(alertGrid);
+      }
 
       // ===== ฝั่งขาย (ออเดอร์) =====
       const now2 = new Date();
@@ -1441,6 +1507,56 @@
         `;
         app.appendChild(chRow);
         setTimeout(() => drawChannelChart(byChannel), 30);
+
+        // ---- ยอดขาย 6 เดือนย้อนหลัง + ลูกค้าซื้อเยอะสุด ----
+        const months = [];
+        for (let i = 5; i >= 0; i--) {
+          const d = new Date(now2.getFullYear(), now2.getMonth() - i, 1);
+          months.push({
+            y: d.getFullYear(), m: d.getMonth(),
+            label: d.toLocaleDateString('th-TH', { month: 'short' }) + ' ' + String((d.getFullYear() + 543) % 100),
+            total: 0,
+          });
+        }
+        const liveSales = sales.filter(s => s.status !== 'cancelled');
+        liveSales.forEach(s => {
+          const d = new Date(s.created_at);
+          const hit = months.find(x => x.y === d.getFullYear() && x.m === d.getMonth());
+          if (hit) hit.total += Number(s.total);
+        });
+
+        const byCust = {};
+        liveSales.forEach(s => {
+          const k = (s.customer || 'ไม่ระบุชื่อ').trim();
+          if (!byCust[k]) byCust[k] = { total: 0, n: 0, due: 0 };
+          byCust[k].total += Number(s.total);
+          byCust[k].n += 1;
+          byCust[k].due += Math.max(0, Number(s.total) - Number(s.paid_amount || 0));
+        });
+        const topCust = Object.entries(byCust).sort((a, b) => b[1].total - a[1].total).slice(0, 5);
+
+        const row6 = document.createElement('div');
+        row6.className = 'dash-row thirds';
+        row6.innerHTML = `
+          <div class="panel-card">
+            <h3>ยอดขาย 6 เดือนย้อนหลัง</h3>
+            <div class="panel-sub">ไม่นับออเดอร์ที่ยกเลิก (บาท)</div>
+            <div class="chart-box"><canvas id="chartMonths"></canvas></div>
+          </div>
+          <div class="panel-card">
+            <h3>ลูกค้าซื้อเยอะสุด</h3>
+            <div class="panel-sub">5 อันดับแรกจากยอดสะสม</div>
+            <div class="mini-list">${topCust.length ? topCust.map(([name, v], i) => `<div class="mini-row">
+              <div class="mini-main">
+                <div class="mini-title">${i + 1}. ${esc(name)}</div>
+                <div class="mini-meta">${v.n} ออเดอร์${v.due > 0 ? ' · ค้าง ' + fmtBaht(round2(v.due)) : ''}</div>
+              </div>
+              <div class="mini-amt">${fmtBaht(round2(v.total))}</div>
+            </div>`).join('') : '<div class="mini-empty">ยังไม่มีข้อมูลลูกค้า</div>'}</div>
+          </div>
+        `;
+        app.appendChild(row6);
+        setTimeout(() => drawMonthsChart(months), 30);
       }
 
       const costHead = document.createElement('h2');
@@ -1462,6 +1578,12 @@
       const unpaid = all.filter(r => !r.paid);
       const totalYard = round4(all.reduce((s, r) => s + r.yard, 0));
       const bufferYard = round4(totalYard * SETTINGS.buffer_rate);
+
+      // กำไรฝั่งงานผลิต: นับเฉพาะชิ้นที่กรอก "ราคาขาย" ไว้ (ชิ้นที่ไม่กรอก = ไม่รู้ราคาขาย จึงข้าม)
+      const lotDateById = {};
+      lots.forEach(l => { lotDateById[l.id] = parseLotDate(l.name); });
+      const sellPieces = pieces.filter(p => p.sell_price != null && inMonth(lotDateById[p.lot_id], 0));
+      const profitMonth = sellPieces.reduce((a, p) => a + (Number(p.sell_price) - Number(p.price)), 0);
 
       const thisSum = sum(thisMonth), lastSum = sum(lastMonth);
       const pct = lastSum > 0 ? Math.round(((thisSum - lastSum) / lastSum) * 100) : null;
@@ -1486,6 +1608,10 @@
         <div class="kpi">
           <div class="kpi-top"><span class="kpi-ico">${icon('layers', 17)}</span><span class="kpi-trend flat">+5%</span></div>
           <div><div class="kpi-num">${bufferYard.toFixed(2)}</div><div class="kpi-lbl">ผ้าที่ต้องสั่ง (หลา)</div></div>
+        </div>
+        <div class="kpi">
+          <div class="kpi-top"><span class="kpi-ico">${icon('chart', 17)}</span><span class="kpi-trend ${profitMonth > 0 ? 'up' : 'flat'}">${sellPieces.length} ชิ้นที่ใส่ราคาขาย</span></div>
+          <div><div class="kpi-num">${fmtBaht(round2(profitMonth))}</div><div class="kpi-lbl">กำไรเดือนนี้ (ขาย − ต้นทุน)</div></div>
         </div>
       `;
       app.appendChild(kpi);
@@ -2190,7 +2316,7 @@ end $$;
     // ===== เช็กว่ามีเวอร์ชันใหม่ไหม =====
     // เบราว์เซอร์ชอบจำไฟล์เก่าไว้ (cache) ทำให้ไม่เห็นของที่เพิ่งอัปเดต
     // ตัวนี้จะแอบเทียบเวอร์ชันกับไฟล์บนเซิร์ฟเวอร์ แล้วขึ้นแถบให้กดอัปเดต
-    const APP_BUILD = '20260813-0031';
+    const APP_BUILD = '20260813-0046';
 
     async function checkForUpdate() {
       try {
@@ -4576,6 +4702,28 @@ end $$;
         options: {
           responsive: true, maintainAspectRatio: false, cutout: '62%',
           plugins: { legend: { position: 'bottom', labels: { boxWidth: 10, padding: 12, font: { size: 11 } } } },
+        },
+      }));
+    }
+
+    function drawMonthsChart(months) {
+      if (typeof Chart === 'undefined') return;
+      const el = document.getElementById('chartMonths');
+      if (!el) return;
+      const css = getComputedStyle(document.documentElement);
+      dashCharts.push(new Chart(el, {
+        type: 'bar',
+        data: {
+          labels: months.map(m => m.label),
+          datasets: [{ data: months.map(m => round2(m.total)), backgroundColor: '#3454d1', borderRadius: 6, maxBarThickness: 44 }],
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          plugins: { legend: { display: false } },
+          scales: {
+            y: { beginAtZero: true, ticks: { callback: v => fmtBaht(v), font: { size: 11 } }, grid: { color: css.getPropertyValue('--border').trim() || '#eee' } },
+            x: { grid: { display: false }, ticks: { font: { size: 11 } } },
+          },
         },
       }));
     }
