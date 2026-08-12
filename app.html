@@ -994,11 +994,20 @@
       return isFabricPiece(r) ? calcPiece(r.width_cm, r.length_cm, settings).yardPerPiece : 0;
     }
 
+    /**
+     * ผ้าที่ต้องเตรียมต่อ 1 ชิ้น
+     * ผ้าดิบมาเป็นม้วน หน้ากว้างคงที่ -> ตัดงานหนึ่งชิ้นกินผ้าตาม "ด้านที่ยาวกว่า" ไม่ใช่พื้นที่
+     *   50 x 200 -> ใช้ 200 ซม. · 65 x 85 -> ใช้ 85 ซม.
+     * แล้วเผื่อหดตาม shrink_rate ก่อนแปลงเป็นหลา (1 หลา = 91.44 ซม.)
+     * ราคายังคิดจากพื้นที่เหมือนเดิม (กว้าง x ยาว x เรต) — คนละเรื่องกับการเตรียมผ้า
+     */
     function calcPiece(widthCm, lengthCm, settings) {
-      const shrinkLength = round2(lengthCm * settings.shrink_rate);
-      const yardPerPiece = round4((widthCm * shrinkLength) / settings.yard_area_cm2);
+      const longSide = Math.max(Number(widthCm) || 0, Number(lengthCm) || 0);
+      const shrinkLength = round2(longSide * settings.shrink_rate);
+      const yardCm = settings.yard_cm || 91.44;
+      const yardPerPiece = round4(shrinkLength / yardCm);
       const price = Math.round(widthCm * lengthCm * settings.price_rate);
-      return { shrinkLength, yardPerPiece, price };
+      return { shrinkLength, yardPerPiece, price, longSide };
     }
     function lotSortKey(name) {
       const m = name.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
@@ -1776,7 +1785,10 @@
       try {
         const st = SETTINGS || await loadSettings();
         const c = calcPiece(50, 200, st);
-        add('สูตรผ้า: 50x200 ซม. = 1.32 หลา', approx(c.yardPerPiece, 1.3155, 0.005), c.yardPerPiece.toFixed(4) + ' หลา');
+        const c2 = calcPiece(65, 85, st);
+        add('ผ้า 50x200 = 2.41 หลา (ใช้ด้านยาว 200)', approx(c.yardPerPiece, 2.4060, 0.01), c.yardPerPiece.toFixed(4) + ' หลา');
+        add('ผ้า 65x85 = 1.02 หลา (ใช้ด้านยาว 85)', approx(c2.yardPerPiece, 1.0225, 0.01), c2.yardPerPiece.toFixed(4) + ' หลา');
+        add('ด้านกว้างกว่ายาวก็ใช้ด้านที่ยาวกว่า', calcPiece(200, 50, st).yardPerPiece === c.yardPerPiece, 'สลับด้านแล้วได้เท่ากัน');
         add('สูตรราคา: 50x200 = 80 บาท', c.price === 80, c.price + ' บาท');
         add('ราคาต้องเป็นเลขเต็มเสมอ', Number.isInteger(calcPiece(65, 85, st).price), calcPiece(65, 85, st).price + '');
         add('ค่าเผื่อหด 10% / เผื่อซื้อ 5%', Number(st.shrink_rate) === 1.1 && Number(st.buffer_rate) === 1.05,
@@ -5609,7 +5621,7 @@ end $$;
         </div>
         <button id="addPieceBtn" class="btn secondary block">+ เพิ่มชิ้นงาน</button>
         <div class="msg" id="pieceMsg"></div>
-        <div class="hint" id="pieceHint">ราคาต่อชิ้นคำนวณอัตโนมัติ = กว้าง x ยาว x ${SETTINGS.price_rate} บาท/ตร.ซม.</div>
+        <div class="hint" id="pieceHint">ราคา = กว้าง x ยาว x ${SETTINGS.price_rate} บาท/ตร.ซม. · ผ้าที่ต้องเตรียม = ด้านที่ยาวกว่า + เผื่อหด ${Math.round((SETTINGS.shrink_rate - 1) * 100)}%</div>
       `;
       piecePanel.querySelector('#pieceLot').addEventListener('change', (e) => {
         lastSelectedLotId = e.target.value;
@@ -5620,7 +5632,7 @@ end $$;
         const fabric = typeSel.value === 'ป้ายผ้า';
         piecePanel.querySelector('#pieceCostField').style.display = fabric ? 'none' : '';
         piecePanel.querySelector('#pieceHint').textContent = fabric
-          ? 'ราคาต่อชิ้นคำนวณอัตโนมัติ = กว้าง x ยาว x ' + SETTINGS.price_rate + ' บาท/ตร.ซม.'
+          ? 'ราคา = กว้าง x ยาว x ' + SETTINGS.price_rate + ' บาท/ตร.ซม. · ผ้าที่ต้องเตรียม = ด้านที่ยาวกว่า + เผื่อหด ' + Math.round((SETTINGS.shrink_rate - 1) * 100) + '%'
           : 'งาน' + typeSel.value + ' ไม่คิดผ้า — กรอกต้นทุนที่ร้านผลิตคิดมาเอง (ขนาดใส่หรือไม่ใส่ก็ได้)';
       }
       typeSel.addEventListener('change', syncPieceType);
