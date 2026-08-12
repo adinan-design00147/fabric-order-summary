@@ -426,6 +426,13 @@
   .auth-note { margin-top: var(--space-3); font-size: 12px; color: var(--sub); line-height: 1.6; }
   .logout-btn { width: 100%; margin-top: var(--space-3); }
 
+  .print-badge { display: inline-flex; align-items: center; justify-content: center; min-height: 34px;
+                 padding: 5px 12px; border-radius: 999px; font-size: 12px; font-weight: 600; cursor: pointer;
+                 background: var(--accent-soft); color: var(--accent); user-select: none; }
+  .print-badge:hover { filter: brightness(0.96); }
+  .print-badge.printed { background: var(--ok-bg); color: var(--ok-text); }
+  body.role-viewer .print-badge, body.role-viewer .print-lot { pointer-events: none; opacity: .6; }
+
   /* สต็อกวัตถุดิบ */
   .stock-bar { height: 12px; background: var(--accent-soft); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
   .stock-bar > div { height: 100%; border-radius: 8px 0 0 8px; transition: width .3s ease; }
@@ -1325,7 +1332,7 @@
       SETTINGS = await loadSettings();
       const [lotsRes, piecesRes, ordersRes, salesRes] = await Promise.all([
         sb.from('lots').select('id,name'),
-        sb.from('pieces').select('id,lot_id,width_cm,length_cm,label,price,paid,item_type'),
+        sb.from('pieces').select('id,lot_id,width_cm,length_cm,label,price,paid,item_type,printed,printed_at,stock_move_id'),
         sb.from('product_orders').select('id,category,name,customer,quantity,unit_cost,paid,created_at'),
         sb.from('orders').select('id,order_no,customer,customer_id,channel,status,total,paid_amount,due_date,created_at,cover_file_id,phone'),
       ]);
@@ -2480,7 +2487,7 @@ end $$;
 
     async function fetchStock() {
       const { data, error } = await sb.from('stock_items')
-        .select('id,name,category,unit,total_qty,used_qty,threshold_pct,note,created_at')
+        .select('id,name,category,unit,total_qty,used_qty,threshold_pct,note,created_at,is_default_fabric')
         .eq('active', true).order('category').order('created_at');
       if (error) throw error;
       STOCK = data;
@@ -2665,6 +2672,10 @@ end $$;
             <div class="threshold-row">เตือนเมื่อเหลือต่ำกว่า
               <input class="s-th" type="number" min="0" max="100" step="1" value="${Number(it.threshold_pct)}" aria-label="จุดเตือน %"> %
             </div>
+            ${it.category === 'ผ้าดิบ' ? `<label class="threshold-row" style="cursor:pointer">
+              <input type="checkbox" class="s-default" ${it.is_default_fabric ? 'checked' : ''}>
+              <span>ใช้เป็น<b>ผ้าหลัก</b> — เวลากดปริ้นงานในเมนูงานผลิต ระบบจะตัดผ้าจากรายการนี้</span>
+            </label>` : ''}
             ${itemMoves.length ? `<details class="stock-log"><summary>ประวัติล่าสุด (${itemMoves.length})</summary>
               ${itemMoves.map(m => `<div class="log-line">
                 <span class="st ${m.kind === 'in' ? 'st-paid' : 'st-cancel'}">${m.kind === 'in' ? 'รับเข้า' : 'เบิกใช้'}</span>
@@ -2689,6 +2700,14 @@ end $$;
         };
         card.querySelector('.s-out').addEventListener('click', () => run('out'));
         card.querySelector('.s-in').addEventListener('click', () => run('in'));
+        const defBox = card.querySelector('.s-default');
+        if (defBox) defBox.addEventListener('change', async () => {
+          // ผ้าหลักมีได้ทีละรายการเดียว
+          await sb.from('stock_items').update({ is_default_fabric: false }).eq('is_default_fabric', true);
+          if (defBox.checked) await sb.from('stock_items').update({ is_default_fabric: true }).eq('id', it.id);
+          await loadStock();
+        });
+
         card.querySelector('.s-th').addEventListener('change', async (e) => {
           await sb.from('stock_items').update({ threshold_pct: parseFloat(e.target.value) || 0 }).eq('id', it.id);
           await loadStock();
@@ -4119,7 +4138,7 @@ end $$;
       SETTINGS = await loadSettings();
       const [lotsRes, piecesRes, ordersRes, salesRes] = await Promise.all([
         sb.from('lots').select('id,name'),
-        sb.from('pieces').select('id,lot_id,width_cm,length_cm,label,price,paid,item_type'),
+        sb.from('pieces').select('id,lot_id,width_cm,length_cm,label,price,paid,item_type,printed,printed_at,stock_move_id'),
         sb.from('product_orders').select('id,category,name,customer,quantity,unit_cost,paid,created_at'),
         sb.from('orders').select('id,order_no,customer,customer_id,channel,status,total,paid_amount,due_date,created_at,cover_file_id,phone'),
       ]);
@@ -4957,13 +4976,66 @@ end $$;
       return s;
     }
 
+    /** ผ้าหลักที่ใช้ตัดสต็อกเวลาปริ้นงาน (ตั้งได้ในเมนูสต็อกของ) */
+    async function getDefaultFabric() {
+      const { data } = await sb.from('stock_items')
+        .select('id,name,unit,total_qty,used_qty,threshold_pct,is_default_fabric')
+        .eq('active', true).eq('category', 'ผ้าดิบ').order('is_default_fabric', { ascending: false }).order('created_at');
+      if (!data || !data.length) return null;
+      return data.find(x => x.is_default_fabric) || data[0];
+    }
+
+    /**
+     * ปริ้นงาน = ตัดผ้าออกจากสต็อกตามจำนวนหลาของชิ้นนั้น
+     * ยกเลิกปริ้น = คืนผ้ากลับเข้าสต็อก (ลบรายการเบิกเดิมทิ้ง)
+     */
+    async function setPiecePrinted(piece, printed, lotName) {
+      if (printed) {
+        const yards = round4(pieceYard(piece, SETTINGS));
+        let moveId = null;
+        if (yards > 0) {
+          const fabric = await getDefaultFabric();
+          if (!fabric) throw new Error('ยังไม่มีผ้าดิบในสต็อก — ไปเพิ่มที่เมนู "สต็อกของ" ก่อน');
+          await stockMove(fabric, 'out', yards,
+            'ปริ้นงาน ' + (piece.label || 'ไม่ระบุชื่อ') + ' · ' + piece.width_cm + 'x' + piece.length_cm +
+            (lotName ? ' · ล็อต ' + lotName : ''));
+          const { data: mv } = await sb.from('stock_moves').select('id')
+            .eq('item_id', fabric.id).order('created_at', { ascending: false }).limit(1);
+          moveId = mv && mv.length ? mv[0].id : null;
+        }
+        const { error } = await sb.from('pieces')
+          .update({ printed: true, printed_at: new Date().toISOString(), stock_move_id: moveId })
+          .eq('id', piece.id);
+        if (error) throw new Error(error.message);
+        return yards;
+      }
+
+      // ---- ยกเลิกปริ้น: คืนผ้า ----
+      if (piece.stock_move_id) {
+        const { data: mv } = await sb.from('stock_moves').select('id,item_id,qty').eq('id', piece.stock_move_id).maybeSingle();
+        if (mv) {
+          const { data: item } = await sb.from('stock_items').select('id,total_qty,used_qty').eq('id', mv.item_id).maybeSingle();
+          if (item) {
+            await sb.from('stock_items')
+              .update({ used_qty: Math.max(0, Number(item.used_qty) - Number(mv.qty)) })
+              .eq('id', item.id);
+          }
+          await sb.from('stock_moves').delete().eq('id', mv.id);
+        }
+      }
+      const { error } = await sb.from('pieces')
+        .update({ printed: false, printed_at: null, stock_move_id: null }).eq('id', piece.id);
+      if (error) throw new Error(error.message);
+      return 0;
+    }
+
     async function loadAll() {
       document.getElementById('statusMsg').textContent = 'กำลังโหลด...';
       SETTINGS = await loadSettings();
 
       const { data: lots, error: e1 } = await sb.from('lots').select('id,name,lot_date,created_at');
       if (e1) throw e1;
-      const { data: pieces, error: e2 } = await sb.from('pieces').select('id,lot_id,width_cm,length_cm,label,price,paid,item_type');
+      const { data: pieces, error: e2 } = await sb.from('pieces').select('id,lot_id,width_cm,length_cm,label,price,paid,item_type,printed,printed_at,stock_move_id');
       if (e2) throw e2;
 
       lots.sort((a, b) => lotSortKey(b.name) - lotSortKey(a.name));
@@ -5076,6 +5148,8 @@ end $$;
             <td data-label="ขนาด (ซม.)">${r.width_cm && r.length_cm ? r.width_cm + ' x ' + r.length_cm : '—'}</td>
             <td data-label="ราคา">${fmtBaht(r.price)}</td>
             <td data-label="ผ้า (หลา)">${isFabricPiece(r) ? yardPerPiece.toFixed(2) : '—'}</td>
+            <td data-label="ปริ้น"><span class="print-badge ${r.printed ? 'printed' : ''}" data-id="${r.id}" data-printed="${r.printed}"
+              title="${r.printed ? 'ปริ้นแล้ว · ตัดผ้าออกจากสต็อกแล้ว' : 'กดเมื่อปริ้นงานเสร็จ ระบบจะตัดผ้าให้'}">${r.printed ? 'ปริ้นแล้ว' : 'ยังไม่ปริ้น'}</span></td>
             <td data-label="สถานะ"><span class="paid-badge ${r.paid ? 'paid' : 'unpaid'}" data-id="${r.id}" data-paid="${r.paid}">${r.paid ? 'จ่ายแล้ว' : 'ยังไม่จ่าย'}</span></td>
           </tr>`;
         }).join('');
@@ -5085,6 +5159,7 @@ end $$;
             <span class="lot-head-right"><span class="lot-total">${lotYard.toFixed(2)} หลา</span><span class="lot-price">${fmtBaht(lotPrice)} บาท</span><span class="lot-buffer">+5%: ${lotBufferYard.toFixed(2)} หลา</span></span>
           </div>
           <div class="lot-actions">
+            ${rows.some(r => !r.printed) ? `<button class="btn secondary btn-sm print-lot" data-lot="${lot.id}">${icon('printer', 15)}ปริ้นทั้งล็อต (ตัดผ้า)</button>` : ''}
             ${hasUnpaid ? `<button class="btn secondary btn-sm mark-lot-paid" data-lot="${lot.id}">${icon('check', 15)}จ่ายครบล็อตนี้</button>` : ''}
             <button class="btn secondary btn-sm toggle-gallery" data-lot="${esc(lot.name)}">${icon('image', 15)}<span class="gal-label">รูปงาน</span></button>
             <button class="btn secondary btn-sm from-photos" data-lot="${esc(lot.name)}" data-id="${lot.id}">${icon('plus', 15)}สร้างชิ้นงานจากชื่อไฟล์รูป</button>
@@ -5092,8 +5167,8 @@ end $$;
           </div>
           <div class="table-wrap">
             <table>
-              <thead><tr><th class="pick-cell"></th><th>รายการ</th><th>ขนาด (ซม.)</th><th>ราคา</th><th>ผ้า (หลา)</th><th>สถานะ</th></tr></thead>
-              <tbody>${rowsHtml || '<tr><td colspan="6" class="empty-cell">ยังไม่มีชิ้นงาน</td></tr>'}</tbody>
+              <thead><tr><th class="pick-cell"></th><th>รายการ</th><th>ขนาด (ซม.)</th><th>ราคา</th><th>ผ้า (หลา)</th><th>ปริ้น</th><th>สถานะ</th></tr></thead>
+              <tbody>${rowsHtml || '<tr><td colspan="7" class="empty-cell">ยังไม่มีชิ้นงาน</td></tr>'}</tbody>
             </table>
           </div>
         `;
@@ -5482,6 +5557,55 @@ end $$;
           });
         });
       });
+
+      // ---- กดปุ่มปริ้นทีละชิ้น: ตัด/คืนผ้าอัตโนมัติ ----
+      app.querySelectorAll('.print-badge').forEach(b => b.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const piece = pieces.find(x => x.id === b.dataset.id);
+        if (!piece) return;
+        const willPrint = b.dataset.printed !== 'true';
+        const lotName = (lots.find(l => l.id === piece.lot_id) || {}).name || '';
+        const yards = round4(pieceYard(piece, SETTINGS));
+        if (willPrint) {
+          const fabric = await getDefaultFabric();
+          if (!fabric) { alert('ยังไม่มีผ้าดิบในสต็อก — ไปเพิ่มที่เมนู "สต็อกของ" ก่อน'); return; }
+          const left = Number(fabric.total_qty) - Number(fabric.used_qty);
+          const msg = 'ปริ้นงาน ' + (piece.label || 'ชิ้นนี้') + ' (' + piece.width_cm + 'x' + piece.length_cm + ')\n\n' +
+            'จะตัดผ้า "' + fabric.name + '" ออก ' + yards.toFixed(2) + ' ' + fabric.unit + '\n' +
+            'คงเหลือหลังตัด: ' + (left - yards).toFixed(2) + ' ' + fabric.unit +
+            (left - yards < 0 ? '\n\n⚠️ ผ้าไม่พอ! (จะติดลบ)' : '');
+          if (!confirm(msg)) return;
+        } else {
+          if (!confirm('ยกเลิกสถานะปริ้น และคืนผ้า ' + yards.toFixed(2) + ' หลา กลับเข้าสต็อก?')) return;
+        }
+        b.textContent = '...';
+        try {
+          await setPiecePrinted(piece, willPrint, lotName);
+          await loadAll();
+        } catch (err) { alert(err.message); await loadAll(); }
+      }));
+
+      // ---- ปริ้นทั้งล็อต ----
+      app.querySelectorAll('.print-lot').forEach(b => b.addEventListener('click', async () => {
+        const lotId = b.dataset.lot;
+        const lot = lots.find(l => l.id === lotId) || {};
+        const todo = pieces.filter(r => r.lot_id === lotId && !r.printed);
+        if (!todo.length) return;
+        const total = round4(todo.reduce((sum, r) => sum + pieceYard(r, SETTINGS), 0));
+        const fabric = await getDefaultFabric();
+        if (!fabric) { alert('ยังไม่มีผ้าดิบในสต็อก — ไปเพิ่มที่เมนู "สต็อกของ" ก่อน'); return; }
+        const left = Number(fabric.total_qty) - Number(fabric.used_qty);
+        const msg = 'ปริ้นทั้งล็อต ' + lot.name + ' (' + todo.length + ' ชิ้น)\n\n' +
+          'จะตัดผ้า "' + fabric.name + '" ออก ' + total.toFixed(2) + ' ' + fabric.unit + '\n' +
+          'คงเหลือหลังตัด: ' + (left - total).toFixed(2) + ' ' + fabric.unit +
+          (left - total < 0 ? '\n\n⚠️ ผ้าไม่พอ! (จะติดลบ)' : '');
+        if (!confirm(msg)) return;
+        b.disabled = true; b.textContent = 'กำลังตัดผ้า...';
+        try {
+          for (const piece of todo) await setPiecePrinted(piece, true, lot.name);
+          await loadAll();
+        } catch (err) { alert(err.message); await loadAll(); }
+      }));
 
       app.querySelectorAll('.delete-piece').forEach(btn => {
         btn.addEventListener('click', async (e) => {
