@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>คำนวณผ้าดิบ (Supabase)</title>
+<title>Haifa Design</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -287,6 +287,8 @@
   .receipt-total { display: flex; justify-content: flex-end; gap: var(--space-5); margin-top: var(--space-4); padding-top: var(--space-3); border-top: 2px solid #1f2430; font-size: 16px; font-weight: 700; }
   .receipt-note { margin-top: var(--space-4); font-size: 12px; color: #6b7280; white-space: pre-wrap; }
   .receipt-foot { margin-top: var(--space-6); font-size: 11px; color: #9aa3b4; text-align: center; }
+
+  .search-count { margin-top: 6px; min-height: 16px; }
 
   /* การ์ดลูกค้าแบบยุบ/กางได้ */
   .cust-toggle { cursor: pointer; user-select: none; }
@@ -602,7 +604,7 @@
 <body>
   <header>
     <div>
-      <h1>คำนวณผ้าดิบ</h1>
+      <h1>Haifa Design</h1>
       <div class="meta" id="statusMsg">กำลังโหลด...</div>
     </div>
   </header>
@@ -1072,6 +1074,33 @@
     function destroyCharts() {
       dashCharts.forEach(c => { try { c.destroy(); } catch (e) {} });
       dashCharts = [];
+    }
+
+    /**
+     * ช่องค้นหาแบบใช้ซ้ำได้ทุกหน้า — กรอง element ที่มี data-search (client-side ไม่ยิง query ใหม่)
+     * @param opts { placeholder, targets: () => Element[], onCount?: (found, total) => void }
+     */
+    function buildSearchBox(opts) {
+      const wrap = document.createElement('div');
+      wrap.className = 'search-wrap no-print';
+      wrap.innerHTML = `<span class="search-ico">${icon('search', 18)}</span>
+        <input type="text" autocomplete="off" placeholder="${esc(opts.placeholder || 'ค้นหา...')}" aria-label="${esc(opts.placeholder || 'ค้นหา')}">
+        <div class="search-count hint"></div>`;
+      const input = wrap.querySelector('input');
+      const count = wrap.querySelector('.search-count');
+      input.addEventListener('input', () => {
+        const q = input.value.trim().toLowerCase();
+        const els = opts.targets();
+        let found = 0;
+        els.forEach(el => {
+          const hit = !q || (el.dataset.search || el.textContent || '').toLowerCase().includes(q);
+          el.style.display = hit ? '' : 'none';
+          if (hit) found++;
+        });
+        count.textContent = q ? (found ? 'เจอ ' + found + ' รายการ' : 'ไม่เจอรายการที่ตรงกับ "' + input.value + '"') : '';
+        if (opts.onCount) opts.onCount(found, els.length);
+      });
+      return wrap;
     }
 
     function buildPageHead(title, sub) {
@@ -2033,13 +2062,19 @@ end $$;
       // รายการสินค้า
       const card = document.createElement('div');
       card.className = 'lot-card';
+      app.appendChild(buildSearchBox({
+        placeholder: 'ค้นหา: ชื่อสินค้า · หมวด · ราคา · ขนาด',
+        targets: () => [...card.querySelectorAll('tbody tr')].filter(tr => !tr.classList.contains('cat-row')),
+      }));
+
       const catGroups = new Map();
       list.forEach(p => {
         const key = p.category || 'อื่นๆ';
         if (!catGroups.has(key)) catGroups.set(key, []);
         catGroups.get(key).push(p);
       });
-      const productRow = p => `<tr>
+      const productRow = p => `<tr data-search="${esc([p.name, p.category, p.unit, p.unit_price, priceLabel(p),
+        (p.width_cm && p.length_cm ? p.width_cm + ' x ' + p.length_cm : '')].filter(Boolean).join(' ').toLowerCase())}">
         <td data-label="สินค้า">${esc(p.name)}${p.note === 'ขนาดขายดี' ? ' <span class="st st-paid">ขายดี</span>' : ''}${p.width_cm && p.length_cm ? '<br><span style="font-size:11px;color:var(--sub)">' + p.width_cm + ' x ' + p.length_cm + ' ซม.</span>' : ''}</td>
         <td data-label="คิดราคา">${p.pricing_mode === 'per_area' ? 'ตามขนาด' : p.pricing_mode === 'tier' ? 'ตามจำนวน' : 'ตายตัว'}</td>
         <td data-label="ราคาขาย">${esc(priceLabel(p))}</td>
@@ -2299,6 +2334,11 @@ end $$;
         stockCat = b.dataset.c; renderStock(list, moves);
       }));
 
+      app.appendChild(buildSearchBox({
+        placeholder: 'ค้นหา: ชื่อวัตถุดิบ · หมวด · หน่วย',
+        targets: () => [...app.querySelectorAll('.stock-card')],
+      }));
+
       // ---- การ์ดวัตถุดิบ ----
       const shown = stockCat === 'ทั้งหมด' ? list : list.filter(i => i.category === stockCat);
       if (!shown.length) {
@@ -2313,7 +2353,8 @@ end $$;
         const usedPct = 100 - left;
         const itemMoves = moves.filter(m => m.item_id === it.id).slice(0, 8);
         const card = document.createElement('div');
-        card.className = 'lot-card no-print';
+        card.className = 'lot-card no-print stock-card';
+        card.dataset.search = [it.name, it.category, it.unit, st.label].join(' ').toLowerCase();
         card.innerHTML = `
           <div class="lot-head">
             <div>
@@ -2553,6 +2594,11 @@ end $$;
         renderOrders(list);
       }));
 
+      app.appendChild(buildSearchBox({
+        placeholder: 'ค้นหา: เลขออเดอร์ · ชื่อลูกค้า · ช่องทาง · ยอดเงิน',
+        targets: () => [...app.querySelectorAll('.ord-row')],
+      }));
+
       const shown = orderFilter === 'all' ? list : list.filter(o => o.status === orderFilter);
       if (!shown.length) {
         const e = document.createElement('div');
@@ -2567,6 +2613,8 @@ end $$;
         const btn = document.createElement('a');
         btn.className = 'ord-row';
         btn.href = routeFor('orderView', o.id);
+        btn.dataset.search = [o.order_no, o.customer, o.channel, st.label, o.total,
+          o.phone, o.address].filter(Boolean).join(' ').toLowerCase();
         btn.innerHTML = `
           <span class="ord-main">
             <span class="ord-top">
@@ -3288,6 +3336,11 @@ end $$;
       app.innerHTML = '';
       app.appendChild(buildPageHead('ใบเสร็จ', 'ประวัติใบเสร็จย้อนหลังทั้งหมด'));
 
+      app.appendChild(buildSearchBox({
+        placeholder: 'ค้นหา: เลขใบเสร็จ · ชื่อผู้รับ · หมายเหตุ · ยอดเงิน',
+        targets: () => [...app.querySelectorAll('.rc-row')],
+      }));
+
       if (!list.length) {
         const empty = document.createElement('div');
         empty.className = 'loading';
@@ -3308,6 +3361,8 @@ end $$;
       list.forEach(r => {
         const btn = document.createElement('a');
         btn.className = 'rc-row';
+        btn.dataset.search = [r.receipt_no, r.recipient, r.note, r.total,
+          r.order_id ? 'จากออเดอร์' : 'จากต้นทุนผลิต'].filter(Boolean).join(' ').toLowerCase();
         btn.href = routeFor('receiptView', r.id);
         btn.innerHTML = `
           <span class="rc-main">
@@ -4388,9 +4443,14 @@ end $$;
       if (groupList.length === 0 && unknown.lots.length === 0) {
         monthlyEl.innerHTML = `<div class="loading">ยังไม่มีข้อมูล</div>`;
       } else {
+        monthlyEl.appendChild(buildSearchBox({
+          placeholder: 'ค้นหา: เดือน · ปี · ชื่อล็อต',
+          targets: () => [...monthlyEl.querySelectorAll('.month-card')],
+        }));
         groupList.forEach(g => {
           const card = document.createElement('div');
           card.className = 'month-card';
+          card.dataset.search = [THAI_MONTHS[g.month], g.yy + 2500, g.lots.join(' ')].join(' ').toLowerCase();
           card.innerHTML = `
             <h3>${THAI_MONTHS[g.month]} ${g.yy + 2500}</h3>
             <div class="month-sub">รวม ${g.lots.length} ล็อต: ${g.lots.map(esc).join(', ')}</div>
@@ -4544,7 +4604,9 @@ end $$;
       } else {
         const histRowsHtml = paidRows.map(({ lot, r }) => {
           const yardPerPiece = pieceYard(r, SETTINGS);
-          return `<tr>
+          return `<tr data-search="${esc([lot.name, r.label, r.item_type,
+            (r.width_cm && r.length_cm ? r.width_cm + ' x ' + r.length_cm : ''), r.price]
+            .filter(Boolean).join(' ').toLowerCase())}">
             <td data-label="ล็อต / รายการ">${esc(lot.name)}${r.label ? ' — ' + esc(r.label) : ''}</td>
             <td data-label="ขนาด (ซม.)">${r.width_cm && r.length_cm ? r.width_cm + ' x ' + r.length_cm : '—'}</td>
             <td data-label="ราคา">${fmtBaht(r.price)}</td>
@@ -4560,6 +4622,13 @@ end $$;
             </table>
           </div>
         `;
+      }
+      if (paidRows.length) {
+        const histSearch = buildSearchBox({
+          placeholder: 'ค้นหาในประวัติที่จ่ายแล้ว: ล็อต · ชื่อลูกค้า · ขนาด · ราคา',
+          targets: () => [...histCard.querySelectorAll('tbody tr')],
+        });
+        paymentEl.appendChild(histSearch);
       }
       paymentEl.appendChild(histCard);
 
