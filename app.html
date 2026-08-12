@@ -290,6 +290,10 @@
 
   .search-count { margin-top: 6px; min-height: 16px; }
 
+  .cust-extra > summary { cursor: pointer; font-size: 13.5px; font-weight: 600; color: var(--accent);
+                          display: flex; align-items: center; gap: 6px; padding: 8px 0; }
+  .cust-extra[open] > summary { margin-bottom: 4px; }
+
   /* การ์ดลูกค้าแบบยุบ/กางได้ */
   .cust-toggle { cursor: pointer; user-select: none; }
   .cust-toggle:hover { filter: brightness(0.98); }
@@ -2655,8 +2659,25 @@ end $$;
      * จะได้ไม่ต้องไปสร้างลูกค้าก่อนทุกครั้ง และไม่มีออเดอร์ที่ลอยไม่ผูกกับใคร
      * คืน customer_id หรือ null (ถ้าไม่ได้กรอกชื่อเลย)
      */
-    async function resolveCustomerId({ pickedId, name, phone, address }) {
-      if (pickedId) return pickedId;
+    async function resolveCustomerId({ pickedId, name, phone, address, extra }) {
+      extra = extra || {};
+      // เติมข้อมูลที่ยังว่างของลูกค้าเดิม (ไม่ทับของเดิมที่กรอกไว้แล้ว)
+      const fillBlanks = async (id) => {
+        const c = CUSTOMERS.find(x => x.id === id);
+        if (!c) return id;
+        const patch = {};
+        Object.entries(extra).forEach(([k, v]) => {
+          if (v && !String(c[k] || '').trim() && k !== 'customer_type') patch[k] = v;
+        });
+        if ((phone || '').trim() && !String(c.phone || '').trim()) patch.phone = phone.trim();
+        if ((address || '').trim() && !String(c.address || '').trim()) patch.address = address.trim();
+        if (Object.keys(patch).length) {
+          await sb.from('customers').update(patch).eq('id', id);
+          await fetchCustomers();
+        }
+        return id;
+      };
+      if (pickedId) return fillBlanks(pickedId);
       const nm = (name || '').trim();
       const ph = (phone || '').trim();
       if (!nm && !ph) return null;
@@ -2665,17 +2686,18 @@ end $$;
       // 1) เบอร์ตรงกันถือว่าคนเดียวกัน (เบอร์เป็น unique ในฐานข้อมูล)
       if (ph) {
         const byPhone = CUSTOMERS.find(c => (c.phone || '').trim() === ph);
-        if (byPhone) return byPhone.id;
+        if (byPhone) return fillBlanks(byPhone.id);
       }
       // 2) ชื่อตรงกันแบบไม่สนตัวพิมพ์
       if (nm) {
         const byName = CUSTOMERS.find(c => (c.name || '').trim().toLowerCase() === nm.toLowerCase());
-        if (byName) return byName.id;
+        if (byName) return fillBlanks(byName.id);
       }
       if (!nm) return null;
 
       // 3) ไม่มีในสมุด -> สร้างใหม่ให้อัตโนมัติ
       const { data, error } = await sb.from('customers').insert({
+        ...extra,
         name: nm,
         phone: ph || null,
         address: (address || '').trim() || null,
@@ -2749,22 +2771,64 @@ end $$;
           <input id="oAddr" placeholder="บ้านเลขที่ ถนน ตำบล อำเภอ จังหวัด รหัสไปรษณีย์" value="${isEdit ? esc(editOrder.address || '') : ''}">
         </div>
         <div class="hint" style="margin-top:8px">
-          ลูกค้าเก่า → เลือกจากลิสต์ (ชื่อ/เบอร์/ที่อยู่เติมให้เอง) ·
+          ลูกค้าเก่า → เลือกจากลิสต์ (ข้อมูลเติมให้เอง) ·
           ลูกค้าใหม่ → พิมพ์ชื่อได้เลย ระบบจะเพิ่มเข้าสมุดลูกค้าให้อัตโนมัติตอนบันทึก
         </div>
+
+        <details class="cust-extra" style="margin-top:var(--space-3)">
+          <summary>${icon('user', 15)}ข้อมูลลูกค้าเพิ่มเติม (ไม่บังคับ — กรอกไว้ครั้งเดียว ครั้งหน้าไม่ต้องพิมพ์ซ้ำ)</summary>
+          <div style="padding-top:var(--space-3)">
+            <div class="form-grid">
+              <div class="field"><label for="xShop">ชื่อร้าน / องค์กร</label><input id="xShop"></div>
+              <div class="field"><label for="xPhone2">เบอร์สำรอง</label><input id="xPhone2" inputmode="tel"></div>
+              <div class="field"><label for="xLine">Line ID</label><input id="xLine"></div>
+              <div class="field"><label for="xFb">Facebook</label><input id="xFb"></div>
+              <div class="field"><label for="xIg">Instagram</label><input id="xIg"></div>
+              <div class="field"><label for="xEmail">อีเมล</label><input id="xEmail" type="email"></div>
+              <div class="field"><label for="xProv">จังหวัด</label><input id="xProv"></div>
+              <div class="field"><label for="xPost">รหัสไปรษณีย์</label><input id="xPost" inputmode="numeric"></div>
+              <div class="field"><label for="xSize">ไซซ์/ขนาดที่ใช้ประจำ</label><input id="xSize" placeholder="เช่น 65x85 ซม."></div>
+              <div class="field"><label for="xColor">สีที่ชอบ/ใช้ประจำ</label><input id="xColor"></div>
+              <div class="field"><label for="xFabric">ผ้า/วัสดุที่เคยใช้</label><input id="xFabric"></div>
+              <div class="field"><label for="xTeam">ทีม/องค์กรที่สังกัด</label><input id="xTeam"></div>
+              <div class="field"><label for="xType">ประเภทลูกค้า</label>
+                <select id="xType">${CUSTOMER_TYPES.map(t => `<option>${esc(t)}</option>`).join('')}</select></div>
+            </div>
+            <div class="field"><label for="xNote">หมายเหตุลูกค้า</label>
+              <input id="xNote" placeholder='เช่น "โทรก่อนส่ง", "ไซซ์ใหญ่กว่าปกติ"'></div>
+            <div class="hint">ช่องที่เว้นว่างจะไม่ไปทับข้อมูลเดิมของลูกค้าเก่า</div>
+          </div>
+        </details>
       `;
       app.appendChild(head);
 
       // เลือกลูกค้าจากสมุด -> เติมชื่อ/เบอร์/ที่อยู่ให้อัตโนมัติ
+      const XMAP = {
+        '#xShop': 'shop_name', '#xPhone2': 'phone2', '#xLine': 'line_id', '#xFb': 'facebook',
+        '#xIg': 'instagram', '#xEmail': 'email', '#xProv': 'province', '#xPost': 'postcode',
+        '#xSize': 'default_size', '#xColor': 'fav_color', '#xFabric': 'fabric_type',
+        '#xTeam': 'team_name', '#xType': 'customer_type', '#xNote': 'note',
+      };
       const custPick = head.querySelector('#oCustPick');
       if (custPick) custPick.addEventListener('change', () => {
         const c = CUSTOMERS.find(x => x.id === custPick.value);
         if (!c) return;
         head.querySelector('#oCust').value = c.name || '';
         if (c.phone) head.querySelector('#oPhone').value = c.phone;
-        const addr = [c.address, c.province, c.postcode].filter(Boolean).join(' ');
-        if (addr) head.querySelector('#oAddr').value = addr;
+        if (c.address) head.querySelector('#oAddr').value = c.address;
+        Object.entries(XMAP).forEach(([sel, col]) => {
+          const el = head.querySelector(sel);
+          if (el) el.value = c[col] == null ? '' : c[col];
+        });
       });
+      // เปิดฟอร์มแก้ไข: เติมข้อมูลลูกค้าที่ผูกไว้ให้เห็นเลย
+      if (isEdit && editOrder.customer_id) {
+        const c = CUSTOMERS.find(x => x.id === editOrder.customer_id);
+        if (c) Object.entries(XMAP).forEach(([sel, col]) => {
+          const el = head.querySelector(sel);
+          if (el) el.value = c[col] == null ? '' : c[col];
+        });
+      }
 
 
       const itemsPanel = document.createElement('div');
@@ -2913,11 +2977,18 @@ end $$;
         try {
           const total = items.reduce((s, i) => s + i.line_total, 0);
           // ลูกค้าเก่า -> ผูกกับรายเดิม · ลูกค้าใหม่ -> สร้างเข้าสมุดให้เลย
+          const extra = {};
+          Object.entries(XMAP).forEach(([sel, col]) => {
+            const el = head.querySelector(sel);
+            const v = el ? el.value.trim() : '';
+            if (v) extra[col] = v;
+          });
           const custId = await resolveCustomerId({
             pickedId: head.querySelector('#oCustPick') ? head.querySelector('#oCustPick').value : '',
             name: head.querySelector('#oCust').value,
             phone: head.querySelector('#oPhone').value,
             address: head.querySelector('#oAddr').value,
+            extra,
           });
           const headFields = {
             customer: head.querySelector('#oCust').value.trim() || null,
