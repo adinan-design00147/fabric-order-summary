@@ -2448,7 +2448,7 @@ end $$;
     // ===== เช็กว่ามีเวอร์ชันใหม่ไหม =====
     // เบราว์เซอร์ชอบจำไฟล์เก่าไว้ (cache) ทำให้ไม่เห็นของที่เพิ่งอัปเดต
     // ตัวนี้จะแอบเทียบเวอร์ชันกับไฟล์บนเซิร์ฟเวอร์ แล้วขึ้นแถบให้กดอัปเดต
-    const APP_BUILD = '20260813-1932';
+    const APP_BUILD = '20260813-1936';
 
     async function checkForUpdate() {
       try {
@@ -2949,17 +2949,39 @@ end $$;
               <td data-label="มูลค่า">${w.cost ? fmtBaht(round2(w.cost))
                 : (wasteCost(w.yards) ? fmtBaht(wasteCost(w.yards)) + ' *' : '-')}</td>
               <td data-label="" class="admin-only"><button class="icon-btn icon-btn-delete waste-del" data-id="${w.id}"
-                aria-label="ลบรายการผ้าเสีย" title="ลบ (ไม่คืนสต็อกให้อัตโนมัติ)">${icon('trash', 18)}</button></td>
+                aria-label="ลบรายการผ้าเสีย" title="ลบ (เลือกได้ว่าจะคืนผ้าเข้าสต็อกไหม)">${icon('trash', 18)}</button></td>
             </tr>`;
           }).join('') : '<tr><td colspan="7" class="empty-cell">ยังไม่มีการบันทึกผ้าเสีย</td></tr>'}</tbody>
         </table></div>`;
       el.appendChild(card);
 
       card.querySelectorAll('.waste-del').forEach(b => b.addEventListener('click', async () => {
-        if (!confirm('ลบรายการนี้ออกจากประวัติผ้าเสีย?\nยอดสต็อกที่ตัดไปแล้วจะไม่ถูกคืนอัตโนมัติ')) return;
-        const { error } = await sb.from('fabric_waste').delete().eq('id', b.dataset.id);
-        if (error) { alert('ลบไม่สำเร็จ: ' + error.message); return; }
-        await loadAll();
+        const w = WASTE.find(x => x.id === b.dataset.id);
+        if (!w) return;
+        if (!confirm('ลบรายการนี้ออกจากประวัติผ้าเสีย?')) return;
+
+        // ถามแยกอีกที: บันทึกผิด -> คืนผ้า · ผ้าเสียจริงแต่ไม่อยากเก็บประวัติ -> ไม่คืน
+        const giveBack = confirm('คืนผ้า ' + Number(w.yards).toFixed(2) + ' หลา เข้าสต็อกด้วยไหม?\n\n' +
+          'ตกลง = บันทึกผิด คืนผ้าเข้าสต็อก\nยกเลิก = ผ้าเสียจริง เก็บยอดที่ตัดไปแล้วไว้เหมือนเดิม');
+
+        b.disabled = true;
+        try {
+          if (giveBack) {
+            const fabric = await getDefaultFabric();
+            if (!fabric) throw new Error('ไม่พบผ้าดิบในสต็อก');
+            await stockMove(fabric, 'in', Number(w.yards), 'คืนผ้าจากการลบรายการผ้าเสีย' + (w.reason ? ' · ' + w.reason : ''));
+          }
+          // งานเสียที่ลบทิ้ง -> ลดตัวนับ "ทำใหม่" ลง 1
+          if (w.kind === 'defect' && w.piece_id) {
+            const p = pieces.find(x => x.id === w.piece_id);
+            if (p && Number(p.redo_count) > 0) {
+              await sb.from('pieces').update({ redo_count: Number(p.redo_count) - 1 }).eq('id', p.id);
+            }
+          }
+          const { error } = await sb.from('fabric_waste').delete().eq('id', w.id);
+          if (error) throw new Error(error.message);
+          await loadAll();
+        } catch (e) { alert('ลบไม่สำเร็จ: ' + e.message); b.disabled = false; }
       }));
 
       return el;
