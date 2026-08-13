@@ -282,7 +282,8 @@
   .btn-sm { font-size: 12px; padding: 0 14px; min-height: 44px; white-space: nowrap; }
 
   .search-wrap { margin-bottom: var(--space-3); position: relative; }
-  .search-ico { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: var(--sub); pointer-events: none; display: flex; }
+  /* ยึดกับกึ่งกลางช่องกรอก (สูง ~49px) ไม่ใช่กึ่งกลางกล่องรวมที่มีบรรทัดนับผลลัพธ์ด้วย */
+  .search-ico { position: absolute; left: 14px; top: 25px; transform: translateY(-50%); color: var(--sub); pointer-events: none; display: flex; }
   .search-wrap input { padding-left: 42px; }
 
   .loading { text-align: center; color: var(--sub); padding: var(--space-6); font-size: 13px; }
@@ -2473,7 +2474,7 @@ end $$;
     // ===== เช็กว่ามีเวอร์ชันใหม่ไหม =====
     // เบราว์เซอร์ชอบจำไฟล์เก่าไว้ (cache) ทำให้ไม่เห็นของที่เพิ่งอัปเดต
     // ตัวนี้จะแอบเทียบเวอร์ชันกับไฟล์บนเซิร์ฟเวอร์ แล้วขึ้นแถบให้กดอัปเดต
-    const APP_BUILD = '20260813-1943';
+    const APP_BUILD = '20260813-1947';
 
     async function checkForUpdate() {
       try {
