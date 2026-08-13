@@ -1233,6 +1233,7 @@
       if (key === 'products') return { label: 'สินค้า & ราคา', icon: 'price' };
       if (key === 'fabric') return { label: 'งานผลิต', icon: 'factory' };
       if (key === 'stock') return { label: 'สต็อกของ', icon: 'box' };
+      if (key === 'stockreport') return { label: 'ตารางวัตถุดิบคงเหลือ', icon: 'box' };
       if (key === 'attendance') return { label: 'ลงเวลา', icon: 'clock' };
       if (key === 'schedule') return { label: 'ตารางงาน', icon: 'calendar' };
       if (key === 'timesheet') return { label: 'ประวัติลงเวลา', icon: 'chart' };
@@ -1247,7 +1248,7 @@
     let orderFilter = 'all';
 
     // ===== URL routing (ทำให้กดค้าง/คลิกขวา → เปิดในแท็บใหม่ได้ และปุ่ม back ใช้งานได้) =====
-    const VALID_VIEWS = ['dashboard', 'calendar', 'orders', 'products', 'fabric', 'stock', 'customers', 'receipts', 'attendance', 'schedule', 'timesheet', 'users', 'trash', 'health', 'profile'];
+    const VALID_VIEWS = ['dashboard', 'calendar', 'orders', 'products', 'fabric', 'stock', 'stockreport', 'customers', 'receipts', 'attendance', 'schedule', 'timesheet', 'users', 'trash', 'health', 'profile'];
 
     function routeFor(view, id) {
       if (view === 'orderView') return '#/order/' + id;
@@ -1456,6 +1457,8 @@
           await loadUsers();
         } else if (currentView === 'trash') {
           await loadTrash();
+        } else if (currentView === 'stockreport') {
+          await loadStockReport();
         } else if (currentView === 'stock') {
           await loadStock();
         } else if (currentView === 'health') {
@@ -2474,7 +2477,7 @@ end $$;
     // ===== เช็กว่ามีเวอร์ชันใหม่ไหม =====
     // เบราว์เซอร์ชอบจำไฟล์เก่าไว้ (cache) ทำให้ไม่เห็นของที่เพิ่งอัปเดต
     // ตัวนี้จะแอบเทียบเวอร์ชันกับไฟล์บนเซิร์ฟเวอร์ แล้วขึ้นแถบให้กดอัปเดต
-    const APP_BUILD = '20260813-1947';
+    const APP_BUILD = '20260813-1954';
 
     async function checkForUpdate() {
       try {
@@ -3862,7 +3865,8 @@ end $$;
       const addBar = document.createElement('div');
       addBar.className = 'no-print';
       addBar.style.marginBottom = 'var(--space-3)';
-      addBar.innerHTML = `<button class="btn" id="stOpen">${icon('plus', 15)}เพิ่มของใหม่</button>`;
+      addBar.innerHTML = `<button class="btn" id="stOpen">${icon('plus', 15)}เพิ่มของใหม่</button>
+        <a class="btn secondary" href="${routeFor('stockreport')}">${icon('printer', 15)}ตารางคงเหลือ (พิมพ์/บันทึกรูป)</a>`;
       app.appendChild(addBar);
 
       const panel = document.createElement('div');
@@ -4043,7 +4047,23 @@ end $$;
         });
       });
 
-      // ---- ตารางของคงเหลือ (พิมพ์/บันทึกเป็นรูปได้) ----
+    }
+
+    // ===== หน้าตารางวัตถุดิบคงเหลือ (แยกออกมาเพื่อพิมพ์/บันทึกรูปโดยเฉพาะ) =====
+    async function loadStockReport() {
+      const list = await fetchStock();
+      const app = document.getElementById('app');
+      app.innerHTML = '';
+      app.appendChild(buildPageHead('ตารางวัตถุดิบคงเหลือ', 'สรุปยอดคงเหลือทุกรายการ — พิมพ์ออกกระดาษหรือบันทึกเป็นรูปส่งต่อได้'));
+      document.getElementById('statusMsg').textContent = 'อัปเดตล่าสุด: ' + new Date().toLocaleString('th-TH');
+
+      const low = list.filter(i => stockStatus(i).key === 'danger');
+      const back = document.createElement('a');
+      back.className = 'btn secondary btn-sm no-print';
+      back.href = routeFor('stock');
+      back.innerHTML = icon('back', 15) + 'กลับไปหน้าสต็อกของ';
+      app.appendChild(back);
+
       const tblBar = document.createElement('div');
       tblBar.className = 'no-print';
       tblBar.style.cssText = 'display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:18px 0 8px';
