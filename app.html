@@ -429,6 +429,17 @@
   .alert-sub { font-size: 11.5px; color: var(--sub); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .alert-go { color: var(--sub); flex-shrink: 0; }
 
+  /* กล่องกรอกกลางจอ (ใช้ตอนแจ้งงานเสีย/เศษผ้า) */
+  .modal-back { position: fixed; inset: 0; background: rgba(15,18,25,.45); z-index: 400;
+                display: flex; align-items: center; justify-content: center; padding: 16px; }
+  .modal-card { background: var(--card); border-radius: var(--radius); width: 100%; max-width: 420px;
+                padding: 20px; box-shadow: 0 20px 50px rgba(0,0,0,.25); }
+  .modal-card h3 { margin: 0 0 4px; font-size: 17px; }
+  .modal-card .modal-sub { font-size: 12.5px; color: var(--sub); margin-bottom: 14px; line-height: 1.5; }
+  .icon-btn-warn { color: #b8862b; }
+  .icon-btn-warn:hover { background: #fdf3e2; }
+  html[data-theme="dark"] .icon-btn-warn:hover { background: #3a2f1c; }
+
   /* ===== หน้าลงเวลา ===== */
   .att-clock { padding: var(--space-5) var(--space-4); text-align: center; }
   .att-time { font-size: 42px; font-weight: 800; letter-spacing: 1px; font-variant-numeric: tabular-nums; }
@@ -2437,7 +2448,7 @@ end $$;
     // ===== เช็กว่ามีเวอร์ชันใหม่ไหม =====
     // เบราว์เซอร์ชอบจำไฟล์เก่าไว้ (cache) ทำให้ไม่เห็นของที่เพิ่งอัปเดต
     // ตัวนี้จะแอบเทียบเวอร์ชันกับไฟล์บนเซิร์ฟเวอร์ แล้วขึ้นแถบให้กดอัปเดต
-    const APP_BUILD = '20260813-1853';
+    const APP_BUILD = '20260813-1906';
 
     async function checkForUpdate() {
       try {
@@ -2751,6 +2762,194 @@ end $$;
           await loadProductCatalog();
         });
       }));
+    }
+
+    // ===== ผ้าที่เสีย: งานเสียต้องทำใหม่ + เศษผ้าที่ใช้ต่อไม่ได้ =====
+    // ทุกครั้งที่บันทึก จะตัดผ้าดิบออกจากสต็อกให้ด้วย (เหมือนตอนกดปริ้น) จะได้ไม่ต้องมาหักเองทีหลัง
+    const WASTE_REASONS = ['พิมพ์เพี้ยน', 'ตัดพลาด', 'สีเพี้ยน', 'ผ้ามีตำหนิ', 'เครื่องมีปัญหา', 'อื่นๆ'];
+    let WASTE = [];
+
+    function wasteCost(yards) {
+      const rate = Number(SETTINGS.fabric_cost_per_yard) || 0;
+      return rate > 0 ? round2(Number(yards) * rate) : null;
+    }
+
+    /** บันทึกผ้าเสีย 1 รายการ + ตัดสต็อกผ้าดิบ */
+    async function addWaste({ kind, yards, reason, note, lotId, lotName, piece }) {
+      const amount = round4(Number(yards));
+      if (!(amount > 0)) throw new Error('ใส่จำนวนหลาก่อน');
+
+      const fabric = await getDefaultFabric();
+      if (!fabric) throw new Error('ยังไม่มีผ้าดิบในสต็อก — ไปเพิ่มที่เมนู "สต็อกของ" ก่อน');
+      const label = kind === 'defect'
+        ? 'งานเสีย ' + (piece ? (piece.label || 'ไม่ระบุชื่อ') + ' · ' + piece.width_cm + 'x' + piece.length_cm : '')
+        : 'เศษผ้า';
+      await stockMove(fabric, 'out', amount, label + (reason ? ' · ' + reason : '') + (lotName ? ' · ล็อต ' + lotName : ''));
+      const { data: mv } = await sb.from('stock_moves').select('id')
+        .eq('item_id', fabric.id).order('created_at', { ascending: false }).limit(1);
+
+      const { error } = await sb.from('fabric_waste').insert({
+        lot_id: lotId || null,
+        piece_id: piece ? piece.id : null,
+        kind, reason: reason || null, note: note || null,
+        yards: amount, cost: wasteCost(amount),
+        stock_move_id: mv && mv.length ? mv[0].id : null,
+        created_by: (ME && ME.email) ? prettyLogin(ME.email) : null,
+      });
+      if (error) throw new Error(error.message);
+
+      // งานเสีย = ต้องพิมพ์ใหม่ -> นับครั้งไว้ที่ชิ้นงาน
+      if (kind === 'defect' && piece) {
+        await sb.from('pieces').update({ redo_count: (Number(piece.redo_count) || 0) + 1 }).eq('id', piece.id);
+      }
+    }
+
+    /** กล่องกรอกข้อมูลเล็กๆ กลางจอ — คืน object ที่กรอก หรือ null ถ้ากดยกเลิก */
+    function openWasteDialog({ title, sub, defYards, showReason }) {
+      return new Promise(resolve => {
+        const back = document.createElement('div');
+        back.className = 'modal-back no-print';
+        back.innerHTML = `
+          <div class="modal-card" role="dialog" aria-modal="true">
+            <h3>${esc(title)}</h3>
+            <div class="modal-sub">${esc(sub || '')}</div>
+            ${showReason ? `<div class="field"><label for="wReason">สาเหตุ</label>
+              <select id="wReason">${WASTE_REASONS.map(r => `<option>${esc(r)}</option>`).join('')}</select></div>` : ''}
+            <div class="field"><label for="wYards">ผ้าที่เสีย (หลา)</label>
+              <input id="wYards" type="number" min="0" step="0.01" inputmode="decimal" value="${defYards || ''}"></div>
+            <div class="field"><label for="wNote">หมายเหตุ (ไม่บังคับ)</label>
+              <input id="wNote" placeholder="อธิบายเพิ่มเติมได้"></div>
+            <div class="msg" id="wMsg"></div>
+            <div class="field-row" style="justify-content:flex-end;margin-top:6px">
+              <button class="btn secondary" id="wCancel">ยกเลิก</button>
+              <button class="btn" id="wOk">${icon('check', 15)}บันทึก & ตัดสต็อก</button>
+            </div>
+          </div>`;
+        document.body.appendChild(back);
+        const close = (val) => { back.remove(); resolve(val); };
+        back.querySelector('#wCancel').addEventListener('click', () => close(null));
+        back.addEventListener('click', (e) => { if (e.target === back) close(null); });
+        back.querySelector('#wOk').addEventListener('click', () => {
+          const y = parseFloat(back.querySelector('#wYards').value);
+          if (!(y > 0)) {
+            const m = back.querySelector('#wMsg');
+            m.textContent = 'ใส่จำนวนหลาก่อน'; m.className = 'msg error';
+            return;
+          }
+          close({
+            yards: y,
+            reason: showReason ? back.querySelector('#wReason').value : null,
+            note: back.querySelector('#wNote').value.trim(),
+          });
+        });
+        setTimeout(() => back.querySelector('#wYards').focus(), 50);
+      });
+    }
+
+    /** แท็บ "ผ้าเสีย" ในหน้างานผลิต */
+    function renderWasteTab(lots, pieces) {
+      const el = document.createElement('div');
+      el.id = 'wasteContent';
+      el.hidden = activeTab !== 'waste';
+
+      const lotById = {}; lots.forEach(l => lotById[l.id] = l);
+      const pieceById = {}; pieces.forEach(p => pieceById[p.id] = p);
+
+      const now = new Date();
+      const thisMonth = WASTE.filter(w => {
+        const d = new Date(w.created_at);
+        return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
+      });
+      const sumY = arr => round4(arr.reduce((a, w) => a + Number(w.yards), 0));
+      const totalYard = round4(pieces.reduce((a, p) => a + pieceYard(p, SETTINGS), 0));
+      const wasteAll = sumY(WASTE);
+      const pct = totalYard > 0 ? (wasteAll / totalYard) * 100 : 0;
+      const costAll = WASTE.reduce((a, w) => a + Number(w.cost || 0), 0);
+
+      const sum = document.createElement('div');
+      sum.className = 'summary-grid';
+      sum.innerHTML = `
+        <div class="stat"><div class="num">${sumY(thisMonth).toFixed(2)}</div><div class="lbl">เสียเดือนนี้ (หลา)</div></div>
+        <div class="stat"><div class="num">${wasteAll.toFixed(2)}</div><div class="lbl">เสียสะสม (หลา)</div></div>
+        <div class="stat"><div class="num">${pct.toFixed(1)}%</div><div class="lbl">คิดเป็น % ของผ้าที่ใช้</div></div>
+        <div class="stat"><div class="num">${costAll > 0 ? fmtBaht(round2(costAll)) : '-'}</div><div class="lbl">มูลค่าที่เสีย (บาท)</div></div>`;
+      el.appendChild(sum);
+
+      // ตั้งราคาผ้าต่อหลา (แอดมิน) — ไว้ตีมูลค่าของเสีย
+      const rateCard = document.createElement('div');
+      rateCard.className = 'lot-card admin-only';
+      rateCard.innerHTML = `
+        <div class="lot-head"><span>${icon('price', 16)}ราคาผ้าดิบต่อหลา</span></div>
+        <div style="padding:var(--space-4)">
+          <div class="field-row">
+            <input id="wRate" type="number" min="0" step="0.01" style="max-width:160px"
+              value="${Number(SETTINGS.fabric_cost_per_yard) || ''}" placeholder="เช่น 35" aria-label="ราคาผ้าต่อหลา">
+            <button class="btn secondary btn-sm" id="wRateSave">${icon('check', 15)}บันทึก</button>
+            <span class="hint">ใส่แล้วระบบจะตีมูลค่าผ้าที่เสียเป็นเงินให้อัตโนมัติ (ของเก่าที่บันทึกไว้แล้วไม่เปลี่ยนย้อนหลัง)</span>
+          </div>
+          <div class="msg" id="wRateMsg"></div>
+        </div>`;
+      el.appendChild(rateCard);
+      rateCard.querySelector('#wRateSave').addEventListener('click', async () => {
+        const m = rateCard.querySelector('#wRateMsg');
+        const v = parseFloat(rateCard.querySelector('#wRate').value) || 0;
+        const { error } = await sb.from('settings').upsert({ key: 'fabric_cost_per_yard', value: String(v) }, { onConflict: 'key' });
+        if (error) { m.textContent = 'บันทึกไม่สำเร็จ: ' + error.message; m.className = 'msg error'; return; }
+        SETTINGS = await loadSettings();
+        m.textContent = 'บันทึกแล้ว'; m.className = 'msg ok';
+      });
+
+      // แยกตามสาเหตุ
+      const byReason = {};
+      WASTE.filter(w => w.kind === 'defect').forEach(w => {
+        const k = w.reason || 'ไม่ระบุ';
+        byReason[k] = round4((byReason[k] || 0) + Number(w.yards));
+      });
+      const reasons = Object.entries(byReason).sort((a, b) => b[1] - a[1]);
+      if (reasons.length) {
+        const rc = document.createElement('div');
+        rc.className = 'lot-card';
+        rc.innerHTML = `<div class="lot-head"><span>${icon('chart', 16)}งานเสียเพราะอะไรบ่อยสุด</span></div>
+          <div class="att-people">${reasons.map(([r, y]) => `<div class="att-person">
+            <div class="ap-main"><div class="ap-name">${esc(r)}</div>
+              <div class="ap-sub">${((y / (wasteAll || 1)) * 100).toFixed(0)}% ของผ้าที่เสียทั้งหมด</div></div>
+            <span class="ap-state">${y.toFixed(2)} หลา</span>
+          </div>`).join('')}</div>`;
+        el.appendChild(rc);
+      }
+
+      const card = document.createElement('div');
+      card.className = 'lot-card';
+      card.innerHTML = `
+        <div class="lot-head"><span>${icon('trash', 16)}รายการผ้าที่เสีย (${WASTE.length})</span></div>
+        <div class="table-wrap"><table>
+          <thead><tr><th>วันที่</th><th>ประเภท</th><th>งาน / ล็อต</th><th>สาเหตุ</th><th>หลา</th><th>มูลค่า</th><th></th></tr></thead>
+          <tbody>${WASTE.length ? WASTE.map(w => {
+            const p = w.piece_id ? pieceById[w.piece_id] : null;
+            const lot = w.lot_id ? lotById[w.lot_id] : null;
+            return `<tr>
+              <td data-label="วันที่">${new Date(w.created_at).toLocaleDateString('th-TH', { day: 'numeric', month: 'short' })}</td>
+              <td data-label="ประเภท"><span class="st ${w.kind === 'defect' ? 'st-cancel' : 'st-prod'}">${w.kind === 'defect' ? 'งานเสีย' : 'เศษผ้า'}</span></td>
+              <td data-label="งาน / ล็อต">${p ? esc(p.label || 'ไม่ระบุชื่อ') + ' · ' + p.width_cm + 'x' + p.length_cm : (lot ? 'ล็อต ' + esc(lot.name) : '-')}
+                ${w.note ? `<div class="hint">${esc(w.note)}</div>` : ''}</td>
+              <td data-label="สาเหตุ">${esc(w.reason || '-')}</td>
+              <td data-label="หลา">${Number(w.yards).toFixed(2)}</td>
+              <td data-label="มูลค่า">${w.cost ? fmtBaht(round2(w.cost)) : '-'}</td>
+              <td data-label="" class="admin-only"><button class="icon-btn icon-btn-delete waste-del" data-id="${w.id}"
+                aria-label="ลบรายการผ้าเสีย" title="ลบ (ไม่คืนสต็อกให้อัตโนมัติ)">${icon('trash', 18)}</button></td>
+            </tr>`;
+          }).join('') : '<tr><td colspan="7" class="empty-cell">ยังไม่มีการบันทึกผ้าเสีย</td></tr>'}</tbody>
+        </table></div>`;
+      el.appendChild(card);
+
+      card.querySelectorAll('.waste-del').forEach(b => b.addEventListener('click', async () => {
+        if (!confirm('ลบรายการนี้ออกจากประวัติผ้าเสีย?\nยอดสต็อกที่ตัดไปแล้วจะไม่ถูกคืนอัตโนมัติ')) return;
+        const { error } = await sb.from('fabric_waste').delete().eq('id', b.dataset.id);
+        if (error) { alert('ลบไม่สำเร็จ: ' + error.message); return; }
+        await loadAll();
+      }));
+
+      return el;
     }
 
     // ===== ลงเวลาทำงาน =====
@@ -6144,8 +6343,10 @@ end $$;
 
       const { data: lots, error: e1 } = await sb.from('lots').select('id,name,lot_date,created_at');
       if (e1) throw e1;
-      const { data: pieces, error: e2 } = await sb.from('pieces').select('id,lot_id,width_cm,length_cm,label,price,paid,item_type,printed,printed_at,stock_move_id');
+      const { data: pieces, error: e2 } = await sb.from('pieces').select('id,lot_id,width_cm,length_cm,label,price,paid,item_type,printed,printed_at,stock_move_id,redo_count');
       if (e2) throw e2;
+      const { data: waste } = await sb.from('fabric_waste').select('*').order('created_at', { ascending: false }).limit(300);
+      WASTE = waste || [];
 
       lots.sort((a, b) => lotSortKey(b.name) - lotSortKey(a.name));
       render(lots, pieces);
@@ -6178,6 +6379,7 @@ end $$;
         <button class="tab-btn ${activeTab === 'daily' ? 'active' : ''}" data-tab="daily">${icon('calendar', 17)}รายวัน</button>
         <button class="tab-btn ${activeTab === 'monthly' ? 'active' : ''}" data-tab="monthly">${icon('chart', 17)}รายเดือน</button>
         <button class="tab-btn ${activeTab === 'payment' ? 'active' : ''}" data-tab="payment">${icon('wallet', 17)}การชำระเงิน</button>
+        <button class="tab-btn ${activeTab === 'waste' ? 'active' : ''}" data-tab="waste">${icon('trash', 17)}ผ้าเสีย</button>
       `;
       app.appendChild(tabs);
 
@@ -6249,6 +6451,9 @@ end $$;
                 <button class="icon-btn icon-btn-edit edit-piece" data-id="${r.id}" data-label="${esc(r.label || '')}" data-width="${r.width_cm}" data-length="${r.length_cm}" data-type="${esc(r.item_type || 'ป้ายผ้า')}" data-price="${r.price}" aria-label="แก้ไขชิ้นงาน" title="แก้ไข">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
                 </button>
+                <button class="icon-btn icon-btn-warn waste-piece" data-id="${r.id}" aria-label="แจ้งงานเสีย" title="แจ้งงานเสีย (ตัดผ้าเพิ่ม)">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
+                </button>
                 <button class="icon-btn icon-btn-delete delete-piece" data-id="${r.id}" data-name="${esc(r.label || 'ไม่ระบุชื่อ')}" data-size="${r.width_cm}x${r.length_cm} ซม." aria-label="ลบชิ้นงาน" title="ลบ">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>
                 </button>
@@ -6257,6 +6462,7 @@ end $$;
             <td data-label="ขนาด (ซม.)">${r.width_cm && r.length_cm ? r.width_cm + ' x ' + r.length_cm : '—'}</td>
             <td data-label="ราคา">${fmtBaht(r.price)}</td>
             <td data-label="ผ้า (หลา)">${isFabricPiece(r) ? yardPerPiece.toFixed(2) : '—'}</td>
+            <td data-label="ทำใหม่">${r.redo_count ? `<span class="st st-cancel">ทำใหม่ ${r.redo_count} ครั้ง</span>` : '<span style="color:var(--sub)">-</span>'}</td>
             <td data-label="ปริ้น"><span class="print-badge ${r.printed ? 'printed' : ''}" data-id="${r.id}" data-printed="${r.printed}"
               title="${r.printed ? 'ปริ้นแล้ว · ตัดผ้าออกจากสต็อกแล้ว' : 'กดเมื่อปริ้นงานเสร็จ ระบบจะตัดผ้าให้'}">${r.printed ? 'ปริ้นแล้ว' : 'ยังไม่ปริ้น'}</span></td>
             <td data-label="สถานะ"><span class="paid-badge ${r.paid ? 'paid' : 'unpaid'}" data-id="${r.id}" data-paid="${r.paid}">${r.paid ? 'จ่ายแล้ว' : 'ยังไม่จ่าย'}</span></td>
@@ -6270,14 +6476,15 @@ end $$;
           <div class="lot-actions">
             ${rows.some(r => !r.printed) ? `<button class="btn secondary btn-sm print-lot" data-lot="${lot.id}">${icon('printer', 15)}ปริ้นทั้งล็อต (ตัดผ้า)</button>` : ''}
             ${hasUnpaid ? `<button class="btn secondary btn-sm mark-lot-paid" data-lot="${lot.id}">${icon('check', 15)}จ่ายครบล็อตนี้</button>` : ''}
+            <button class="btn secondary btn-sm waste-lot" data-lot="${lot.id}" data-name="${esc(lot.name)}">${icon('trash', 15)}บันทึกเศษผ้า</button>
             <button class="btn secondary btn-sm toggle-gallery" data-lot="${esc(lot.name)}">${icon('image', 15)}<span class="gal-label">รูปงาน</span></button>
             <button class="btn secondary btn-sm from-photos" data-lot="${esc(lot.name)}" data-id="${lot.id}">${icon('plus', 15)}สร้างชิ้นงานจากชื่อไฟล์รูป</button>
             ${rows.length ? `<button class="btn secondary btn-sm pick-all">${icon('checkbox', 15)}เลือกทั้งล็อต</button>` : ''}
           </div>
           <div class="table-wrap">
             <table>
-              <thead><tr><th class="pick-cell"></th><th>รายการ</th><th>ขนาด (ซม.)</th><th>ราคา</th><th>ผ้า (หลา)</th><th>ปริ้น</th><th>สถานะ</th></tr></thead>
-              <tbody>${rowsHtml || '<tr><td colspan="7" class="empty-cell">ยังไม่มีชิ้นงาน</td></tr>'}</tbody>
+              <thead><tr><th class="pick-cell"></th><th>รายการ</th><th>ขนาด (ซม.)</th><th>ราคา</th><th>ผ้า (หลา)</th><th>ทำใหม่</th><th>ปริ้น</th><th>สถานะ</th></tr></thead>
+              <tbody>${rowsHtml || '<tr><td colspan="8" class="empty-cell">ยังไม่มีชิ้นงาน</td></tr>'}</tbody>
             </table>
           </div>
         `;
@@ -6603,18 +6810,24 @@ end $$;
       paymentEl.appendChild(histCard);
 
       app.appendChild(paymentEl);
+      const wasteEl = renderWasteTab(lots, pieces);
+      app.appendChild(wasteEl);
 
       dailyEl.style.display = activeTab === 'daily' ? '' : 'none';
-      monthlyEl.style.display = activeTab === 'monthly' ? '' : 'none';
-      paymentEl.style.display = activeTab === 'payment' ? '' : 'none';
+      const syncTabs = () => {
+        dailyEl.style.display = activeTab === 'daily' ? '' : 'none';
+        monthlyEl.style.display = activeTab === 'monthly' ? '' : 'none';
+        paymentEl.style.display = activeTab === 'payment' ? '' : 'none';
+        wasteEl.hidden = false;
+        wasteEl.style.display = activeTab === 'waste' ? '' : 'none';
+      };
+      syncTabs();
 
       tabs.querySelectorAll('.tab-btn').forEach(btn => {
         btn.addEventListener('click', () => {
           activeTab = btn.dataset.tab;
           tabs.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b === btn));
-          dailyEl.style.display = activeTab === 'daily' ? '' : 'none';
-          monthlyEl.style.display = activeTab === 'monthly' ? '' : 'none';
-          paymentEl.style.display = activeTab === 'payment' ? '' : 'none';
+          syncTabs();
         });
       });
 
@@ -6695,6 +6908,41 @@ end $$;
       }));
 
       // ---- ปริ้นทั้งล็อต ----
+      app.querySelectorAll('.waste-piece').forEach(b => b.addEventListener('click', async () => {
+        const piece = pieces.find(x => x.id === b.dataset.id);
+        if (!piece) return;
+        const lot = lots.find(l => l.id === piece.lot_id);
+        const def = round4(pieceYard(piece, SETTINGS)).toFixed(2);
+        const res = await openWasteDialog({
+          title: 'แจ้งงานเสีย',
+          sub: (piece.label || 'ไม่ระบุชื่อ') + ' · ' + piece.width_cm + 'x' + piece.length_cm + ' ซม.'
+            + (lot ? ' · ล็อต ' + lot.name : '') + ' — ผ้าที่ต้องตัดใหม่ตามสูตรคือ ' + def + ' หลา',
+          defYards: def, showReason: true,
+        });
+        if (!res) return;
+        b.disabled = true;
+        try {
+          await addWaste({ kind: 'defect', yards: res.yards, reason: res.reason, note: res.note,
+            lotId: piece.lot_id, lotName: lot ? lot.name : '', piece });
+          await loadAll();
+        } catch (e) { alert('บันทึกไม่สำเร็จ: ' + e.message); b.disabled = false; }
+      }));
+
+      app.querySelectorAll('.waste-lot').forEach(b => b.addEventListener('click', async () => {
+        const res = await openWasteDialog({
+          title: 'บันทึกเศษผ้าของล็อต ' + b.dataset.name,
+          sub: 'เศษที่ตัดเหลือแล้วเอาไปทำงานอื่นต่อไม่ได้ — ระบบจะตัดออกจากสต็อกผ้าดิบให้',
+          defYards: '', showReason: false,
+        });
+        if (!res) return;
+        b.disabled = true;
+        try {
+          await addWaste({ kind: 'scrap', yards: res.yards, note: res.note,
+            lotId: b.dataset.lot, lotName: b.dataset.name });
+          await loadAll();
+        } catch (e) { alert('บันทึกไม่สำเร็จ: ' + e.message); b.disabled = false; }
+      }));
+
       app.querySelectorAll('.print-lot').forEach(b => b.addEventListener('click', async () => {
         const lotId = b.dataset.lot;
         const lot = lots.find(l => l.id === lotId) || {};
