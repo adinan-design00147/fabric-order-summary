@@ -62,11 +62,40 @@
   html[data-theme="dark"] .switch-knob { background: #e8eaf0; }
   html[data-theme="dark"] .lot-actions { background: var(--accent-soft); }
   html[data-theme="dark"] .icon-btn { background: var(--card); }
-  html[data-theme="dark"] .field input,
-  html[data-theme="dark"] .field select,
-  html[data-theme="dark"] .edit-row input,
-  html[data-theme="dark"] .search-wrap input { background: var(--bg); color: var(--text); }
+  html[data-theme="dark"] input:not([type="checkbox"]):not([type="radio"]),
+  html[data-theme="dark"] select,
+  html[data-theme="dark"] textarea { background: var(--bg); color: var(--text); }
+  html[data-theme="dark"] select {
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%239aa3b4' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='m6 9 6 6 6-6'/></svg>"); }
   * { box-sizing: border-box; }
+
+  /* ===== ช่องกรอกทุกช่องในระบบใช้หน้าตาเดียวกัน =====
+     เดิมสไตล์ผูกกับ .field เท่านั้น ช่องที่วางลอยๆ (เช่น ช่องจำนวนในสต็อก) เลยเป็นสไตล์ดิบของเบราว์เซอร์ */
+  input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
+  select, textarea {
+    font-family: inherit; font-size: 16px; color: var(--text);
+    padding: 11px 12px; border: 1px solid var(--border); border-radius: 10px;
+    background: var(--card); min-height: 44px; width: 100%;
+    transition: border-color .15s ease, box-shadow .15s ease;
+  }
+  input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):focus,
+  select:focus, textarea:focus {
+    outline: none; border-color: var(--accent);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
+  }
+  input::placeholder, textarea::placeholder { color: var(--sub); opacity: .75; }
+  input:disabled, select:disabled { background: var(--soft); color: var(--sub); cursor: not-allowed; }
+  select { appearance: none; -webkit-appearance: none; padding-right: 34px; cursor: pointer;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='m6 9 6 6 6-6'/></svg>");
+    background-repeat: no-repeat; background-position: right 11px center; }
+  /* ปุ่มลูกศรขึ้น-ลงของช่องตัวเลขทำให้ช่องแคบและกดพลาดบ่อย ตัดออกทั้งระบบ */
+  input[type="number"] { -moz-appearance: textfield; }
+  input[type="number"]::-webkit-outer-spin-button,
+  input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+  input[type="checkbox"], input[type="radio"] { width: 18px; height: 18px; accent-color: var(--accent); cursor: pointer; }
+
+  /* ช่องเล็กที่วางแทรกในบรรทัด (จุดเตือน, จำนวนในตาราง) */
+  .inline-input { width: auto; max-width: 120px; min-height: 40px; padding: 8px 10px; font-size: 15px; }
   body {
     margin: 0; font-family: 'Prompt', -apple-system, "Segoe UI", Roboto, "Noto Sans Thai", sans-serif;
     background: var(--bg); color: var(--text); padding-bottom: 96px;
@@ -110,13 +139,9 @@
 
   .field { display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 110px; }
   .field label { font-size: 12px; color: var(--sub); font-weight: 500; }
-  .field input, .field select {
-    font-family: inherit; font-size: 16px; padding: 11px 12px; border: 1px solid var(--border);
-    border-radius: 10px; background: #fff; min-height: 44px; width: 100%;
-  }
-  .field input:focus, .field select:focus { outline: 2px solid var(--accent); outline-offset: 1px; border-color: var(--accent); }
-
   .field-row { display: flex; gap: var(--space-3); align-items: flex-end; flex-wrap: wrap; }
+  /* ช่องที่วางตรงๆ ใน field-row (ไม่ได้ห่อด้วย .field) ให้ยืดเต็มที่ว่าง ไม่หดจนพิมพ์ลำบาก */
+  .field-row > input:not(.inline-input), .field-row > select:not(.inline-input) { flex: 1 1 170px; min-width: 140px; }
   .form-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--space-2); margin-bottom: var(--space-3); }
 
   .btn {
@@ -229,7 +254,7 @@
   .icon-btn-delete:hover { background: #fdecea; color: var(--err-text); border-color: var(--err-text); }
 
   .edit-row { display: flex; gap: var(--space-2); align-items: center; flex-wrap: wrap; padding: var(--space-2) 0; }
-  .edit-row input { font-family: inherit; font-size: 16px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; flex: 1; min-width: 90px; min-height: 44px; }
+  .edit-row input { flex: 1; min-width: 90px; }
   .edit-row .btn { padding: 0 14px; font-size: 12px; min-height: 44px; }
 
   .lot-actions { padding: var(--space-2) var(--space-4); border-top: 1px solid var(--border); background: #fafafa; display: flex; gap: var(--space-2); flex-wrap: wrap; }
@@ -258,8 +283,7 @@
 
   .search-wrap { margin-bottom: var(--space-3); position: relative; }
   .search-ico { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: var(--sub); pointer-events: none; display: flex; }
-  .search-wrap input { font-family: inherit; font-size: 16px; padding: 11px 14px 11px 42px; border: 1px solid var(--border); border-radius: 10px; background: #fff; min-height: 44px; width: 100%; }
-  .search-wrap input:focus { outline: 2px solid var(--accent); outline-offset: 1px; border-color: var(--accent); }
+  .search-wrap input { padding-left: 42px; }
 
   .loading { text-align: center; color: var(--sub); padding: var(--space-6); font-size: 13px; }
 
@@ -525,8 +549,9 @@
   /* สต็อกวัตถุดิบ */
   .stock-bar { height: 12px; background: var(--accent-soft); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
   .stock-bar > div { height: 100%; border-radius: 8px 0 0 8px; transition: width .3s ease; }
-  .threshold-row { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--sub); margin-top: 10px; }
-  .threshold-row input { width: 70px; }
+  .threshold-row { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--sub); margin-top: 12px;
+                   flex-wrap: wrap; background: var(--soft); padding: 10px 12px; border-radius: 10px; }
+  .threshold-row input { width: 96px; min-height: 40px; padding: 8px 10px; font-size: 15px; background: var(--card); }
   .stock-log { margin-top: 12px; font-size: 12.5px; }
   .stock-log summary { cursor: pointer; color: var(--sub); font-weight: 600; padding: 4px 0; }
   .log-line { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 6px 0; border-top: 1px solid var(--border); }
@@ -2448,7 +2473,7 @@ end $$;
     // ===== เช็กว่ามีเวอร์ชันใหม่ไหม =====
     // เบราว์เซอร์ชอบจำไฟล์เก่าไว้ (cache) ทำให้ไม่เห็นของที่เพิ่งอัปเดต
     // ตัวนี้จะแอบเทียบเวอร์ชันกับไฟล์บนเซิร์ฟเวอร์ แล้วขึ้นแถบให้กดอัปเดต
-    const APP_BUILD = '20260813-1936';
+    const APP_BUILD = '20260813-1943';
 
     async function checkForUpdate() {
       try {
@@ -2882,7 +2907,7 @@ end $$;
         <div class="lot-head"><span>${icon('price', 16)}ราคาผ้าดิบต่อหลา</span></div>
         <div style="padding:var(--space-4)">
           <div class="field-row">
-            <input id="wRate" type="number" min="0" step="0.01" style="max-width:160px"
+            <input id="wRate" type="number" min="0" step="0.01" class="inline-input" style="max-width:160px"
               value="${Number(SETTINGS.fabric_cost_per_yard) || ''}" placeholder="เช่น 35" aria-label="ราคาผ้าต่อหลา">
             <button class="btn secondary btn-sm" id="wRateSave">${icon('check', 15)}บันทึก</button>
             <span class="hint">ใส่แล้วระบบจะตีมูลค่าผ้าที่เสียเป็นเงินให้อัตโนมัติ (ของเก่าที่บันทึกไว้แล้วไม่เปลี่ยนย้อนหลัง)</span>
@@ -3967,7 +3992,7 @@ end $$;
             </div>
             <div class="msg s-msg"></div>
             <div class="threshold-row">เตือนเมื่อเหลือต่ำกว่า
-              <input class="s-th" type="number" min="0" step="any" value="${stockThreshold(it)}" aria-label="จุดเตือน"> ${esc(it.unit)}
+              <input class="s-th inline-input" type="number" min="0" step="any" value="${stockThreshold(it)}" aria-label="จุดเตือน"> ${esc(it.unit)}
             </div>
             ${it.category === 'ผ้าดิบ' ? `<label class="threshold-row" style="cursor:pointer">
               <input type="checkbox" class="s-default" ${it.is_default_fabric ? 'checked' : ''}>
