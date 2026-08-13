@@ -463,6 +463,14 @@
     .att-summary { grid-template-columns: repeat(2, 1fr); }
   }
 
+  .att-geo-row { display: flex; align-items: center; justify-content: center; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
+  .att-geo-row .att-geo { margin: 0; }
+  .att-map { height: 210px; margin: 12px 0 4px; border-radius: var(--radius); overflow: hidden;
+             border: 1px solid var(--border); background: var(--soft); }
+  .att-map-hint { font-size: 12px; color: var(--sub); display: flex; align-items: center; justify-content: center;
+                  gap: 10px; flex-wrap: wrap; margin-bottom: 6px; }
+  .leaflet-container { font: inherit; }
+
   /* แท็บแบบแบ่งช่องเท่ากัน (ใช้ในหน้าลงเวลา) */
   .tabs.tabs-fixed { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-2); }
   .tabs.tabs-fixed .tab-btn { justify-content: center; white-space: nowrap; padding-left: 6px; padding-right: 6px; }
@@ -1040,6 +1048,7 @@
       signin:    '<path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><path d="M10 17l5-5-5-5"/><path d="M15 12H3"/>',
       signout:   '<path d="M9 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/>',
       pin:       '<path d="M12 21s7-6.2 7-11a7 7 0 1 0-14 0c0 4.8 7 11 7 11Z"/><circle cx="12" cy="10" r="2.6"/>',
+      refresh:   '<path d="M21 12a9 9 0 1 1-2.6-6.4"/><path d="M21 3v6h-6"/>',
       box:       '<path d="M12 3 3.5 7.5v9L12 21l8.5-4.5v-9Z"/><path d="m3.5 7.5 8.5 4.5 8.5-4.5M12 12v9"/>',
       layers:    '<path d="m12 3 9 5-9 5-9-5Z"/><path d="m3 13 9 5 9-5"/>',
       back:      '<path d="M19 12H5"/><path d="m11 6-6 6 6 6"/>',
@@ -2419,7 +2428,7 @@ end $$;
     // ===== เช็กว่ามีเวอร์ชันใหม่ไหม =====
     // เบราว์เซอร์ชอบจำไฟล์เก่าไว้ (cache) ทำให้ไม่เห็นของที่เพิ่งอัปเดต
     // ตัวนี้จะแอบเทียบเวอร์ชันกับไฟล์บนเซิร์ฟเวอร์ แล้วขึ้นแถบให้กดอัปเดต
-    const APP_BUILD = '20260813-0802';
+    const APP_BUILD = '20260813-0852';
 
     async function checkForUpdate() {
       try {
@@ -2738,6 +2747,40 @@ end $$;
     // ===== ลงเวลาทำงาน =====
     // เก็บ 3 อย่าง: ตารางงานรายคน (work_schedules) · การเข้า-ออกรายวัน (attendances) · คำขอโอที (ot_requests)
     // กดเข้า/ออกงานได้เฉพาะตอนอยู่ในรัศมีร้าน (พิกัดร้านตั้งได้ในหน้านี้ ฝั่งผู้ดูแล)
+    // แผนที่โหลดแบบ lazy — หน้าอื่นจะได้ไม่ต้องแบกไฟล์นี้
+    let leafletPromise = null;
+    function loadLeaflet() {
+      if (window.L) return Promise.resolve(window.L);
+      if (leafletPromise) return leafletPromise;
+      leafletPromise = new Promise((resolve, reject) => {
+        const css = document.createElement('link');
+        css.rel = 'stylesheet';
+        css.href = 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css';
+        document.head.appendChild(css);
+        const js = document.createElement('script');
+        js.src = 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js';
+        js.onload = () => resolve(window.L);
+        js.onerror = () => {
+          const alt = document.createElement('script');
+          alt.src = 'https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js';
+          alt.onload = () => resolve(window.L);
+          alt.onerror = () => reject(new Error('โหลดแผนที่ไม่สำเร็จ'));
+          document.head.appendChild(alt);
+        };
+        document.head.appendChild(js);
+      });
+      return leafletPromise;
+    }
+
+    /** อ่านพิกัดจากข้อความที่วางมา เช่น "7.1234, 100.5678" (ลิงก์ Google Maps ที่มีตัวเลขก็ได้) */
+    function parseLatLng(text) {
+      const m = String(text || '').match(/(-?\d{1,3}\.\d{3,})[,\s/@]+(-?\d{1,3}\.\d{3,})/);
+      if (!m) return null;
+      const lat = parseFloat(m[1]), lng = parseFloat(m[2]);
+      if (Math.abs(lat) > 90 || Math.abs(lng) > 180) return null;
+      return { lat, lng };
+    }
+
     const DOW_TH = ['อาทิตย์', 'จันทร์', 'อังคาร', 'พุธ', 'พฤหัสบดี', 'ศุกร์', 'เสาร์'];
     const DOW_SHORT = ['อา', 'จ', 'อ', 'พ', 'พฤ', 'ศ', 'ส'];
     const DEFAULT_DAYS = [0, 1, 2, 3, 4, 5, 6].map(i => ({ work: i !== 0, start: '09:00', end: '17:00' }));
@@ -2864,8 +2907,13 @@ end $$;
             ? 'วันนี้เข้างาน <b>' + esc(plan.start) + '</b> — ออกงาน <b>' + esc(plan.end) + '</b> · สายเกิน ' + sc.grace_minutes + ' น. นับว่าสาย'
             : '<b>วันนี้เป็นวันหยุดตามตารางงาน</b> — ถ้ามาทำงานก็กดลงเวลาได้ตามปกติ'}</div>
         </div>
-        <div class="att-geo" id="attGeo">${icon('pin', 15)}<span id="attGeoTxt">${shopSet ? 'กดปุ่มแล้วระบบจะเช็กตำแหน่งให้' : 'ยังไม่ได้ตั้งพิกัดร้าน'}</span></div>
-        ${!shopSet && isAdmin() ? `<div style="margin-top:10px"><button class="btn secondary btn-sm" id="attSetHere">${icon('pin', 15)}ตั้งพิกัดร้านจากตำแหน่งนี้</button></div>` : ''}
+        <div class="att-geo-row">
+          <div class="att-geo" id="attGeo">${icon('pin', 15)}<span id="attGeoTxt">${shopSet ? 'กด "Sync GPS" เพื่อเช็กตำแหน่ง' : 'ยังไม่ได้ตั้งพิกัดร้าน'}</span></div>
+          <button class="btn secondary btn-sm" id="attSync">${icon('refresh', 15)}Sync GPS</button>
+        </div>
+        <div class="att-map" id="attMap"></div>
+        ${isAdmin() ? `<div class="att-map-hint">${shopSet ? 'แตะบนแผนที่เพื่อย้ายจุดร้าน' : 'ยังไม่ได้ตั้งจุดร้าน — แตะบนแผนที่ตรงที่ตั้งร้าน หรือกดปุ่มด้านล่าง'}
+          <button class="btn secondary btn-sm" id="attSetHere">${icon('pin', 15)}ใช้ตำแหน่งปัจจุบันเป็นที่ตั้งร้าน</button></div>` : ''}
         ${!shopSet && !isAdmin() ? '<div class="hint" style="margin-top:8px">แจ้งผู้ดูแลให้ตั้งพิกัดร้านก่อน ถึงจะกดลงเวลาได้</div>' : ''}
         <div class="att-actions">
           <button class="att-btn in ${today && today.clock_in ? 'done' : ''}" id="attIn" ${today && today.clock_in ? 'disabled' : ''}>
@@ -2898,6 +2946,81 @@ end $$;
       const msg = card.querySelector('#attMsg');
       const geo = card.querySelector('#attGeo');
       const geoTxt = card.querySelector('#attGeoTxt');
+      const radius = Number(SETTINGS.geo_radius_m) || 150;
+
+      // ---- แผนที่: วงกลม = พื้นที่ร้าน · หมุด = ตำแหน่งคุณตอนนี้ ----
+      let map = null, meMarker = null, shopMarker = null, shopCircle = null;
+      const shopLL = () => [Number(SETTINGS.shop_lat) || 13.7563, Number(SETTINGS.shop_lng) || 100.5018];
+
+      const drawShop = (L, lat, lng) => {
+        if (shopMarker) map.removeLayer(shopMarker);
+        if (shopCircle) map.removeLayer(shopCircle);
+        shopCircle = L.circle([lat, lng], { radius, color: '#3454d1', weight: 1.5, fillOpacity: .12 }).addTo(map);
+        shopMarker = L.circleMarker([lat, lng], { radius: 7, color: '#fff', weight: 2, fillColor: '#3454d1', fillOpacity: 1 })
+          .addTo(map).bindTooltip('ที่ตั้งร้าน');
+      };
+
+      const showMe = (L, lat, lng, inRange) => {
+        if (meMarker) map.removeLayer(meMarker);
+        meMarker = L.circleMarker([lat, lng], {
+          radius: 8, color: '#fff', weight: 2, fillColor: inRange ? '#22a06b' : '#d1493f', fillOpacity: 1,
+        }).addTo(map).bindTooltip('คุณอยู่ตรงนี้');
+      };
+
+      loadLeaflet().then(L => {
+        const el = card.querySelector('#attMap');
+        if (!el) return;
+        map = L.map(el, { attributionControl: false, zoomControl: true }).setView(shopLL(), shopSet ? 17 : 13);
+        L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(map);
+        if (shopSet) drawShop(L, ...shopLL());
+        setTimeout(() => map.invalidateSize(), 200);
+
+        // ผู้ดูแลแตะบนแผนที่เพื่อย้ายจุดร้าน
+        if (isAdmin()) map.on('click', async (e) => {
+          if (!confirm('ตั้งจุดนี้เป็นที่ตั้งร้าน?')) return;
+          const { error } = await sb.from('settings').upsert([
+            { key: 'shop_lat', value: String(e.latlng.lat) },
+            { key: 'shop_lng', value: String(e.latlng.lng) },
+          ], { onConflict: 'key' });
+          if (error) { alert('บันทึกไม่สำเร็จ: ' + error.message); return; }
+          SETTINGS = await loadSettings();
+          drawShop(L, e.latlng.lat, e.latlng.lng);
+          await loadAttendance();
+        });
+      }).catch(() => {
+        const el = card.querySelector('#attMap');
+        if (el) el.innerHTML = '<div class="empty-cell" style="padding:20px">เปิดแผนที่ไม่ได้ (เน็ตอาจไม่ถึง CDN) — ปุ่มลงเวลายังใช้ได้ตามปกติ</div>';
+      });
+
+      /** เช็กตำแหน่งปัจจุบัน อัปเดตข้อความ+หมุดบนแผนที่ แล้วคืนค่าระยะห่าง */
+      const syncGps = async () => {
+        geoTxt.textContent = 'กำลังหาตำแหน่ง...';
+        geo.className = 'att-geo';
+        const c = await getPosition();
+        const dist = shopSet ? distanceMeters(c.latitude, c.longitude, ...shopLL()) : null;
+        const inRange = dist !== null && dist <= radius;
+        if (dist === null) {
+          geoTxt.textContent = 'ได้ตำแหน่งแล้ว (ยังไม่ได้ตั้งจุดร้าน)';
+        } else {
+          geoTxt.textContent = inRange
+            ? 'อยู่ในพื้นที่ร้าน (ห่าง ' + dist.toLocaleString('th-TH') + ' ม.)'
+            : 'อยู่นอกพื้นที่ร้าน ห่าง ' + dist.toLocaleString('th-TH') + ' ม. · อนุญาตไม่เกิน ' + radius + ' ม.';
+          geo.className = 'att-geo ' + (inRange ? 'in-range' : 'out-range');
+        }
+        if (map && window.L) {
+          showMe(window.L, c.latitude, c.longitude, inRange);
+          map.setView([c.latitude, c.longitude], Math.max(map.getZoom(), 16));
+        }
+        return { c, dist, inRange };
+      };
+
+      card.querySelector('#attSync').addEventListener('click', async () => {
+        const b = card.querySelector('#attSync');
+        b.disabled = true;
+        msg.textContent = ''; msg.className = 'msg';
+        try { await syncGps(); } catch (e) { msg.textContent = e.message; msg.className = 'msg error'; }
+        b.disabled = false;
+      });
 
       // ผู้ดูแลตั้งพิกัดร้านได้จากหน้านี้เลย ไม่ต้องข้ามไปแท็บอื่น
       const setHere = card.querySelector('#attSetHere');
@@ -2921,16 +3044,9 @@ end $$;
         const btn = card.querySelector(kind === 'in' ? '#attIn' : '#attOut');
         btn.disabled = true;
         try {
-          if (!shopSet) throw new Error('ยังไม่ได้ตั้งพิกัดร้าน — ให้ผู้ดูแลตั้งก่อนที่แท็บ "ตารางงาน"');
-          geoTxt.textContent = 'กำลังหาตำแหน่ง...';
-          const c = await getPosition();
-          const dist = distanceMeters(c.latitude, c.longitude, Number(SETTINGS.shop_lat), Number(SETTINGS.shop_lng));
-          const radius = Number(SETTINGS.geo_radius_m) || 150;
-          geoTxt.textContent = dist <= radius
-            ? 'อยู่ในพื้นที่ร้าน (ห่าง ' + dist.toLocaleString('th-TH') + ' ม.)'
-            : 'อยู่นอกพื้นที่ร้าน ห่าง ' + dist.toLocaleString('th-TH') + ' ม. · อนุญาตไม่เกิน ' + radius + ' ม.';
-          geo.className = 'att-geo ' + (dist <= radius ? 'in-range' : 'out-range');
-          if (dist > radius) throw new Error('อยู่นอกรัศมีร้าน (' + dist.toLocaleString('th-TH') + ' ม.) กดลงเวลาไม่ได้');
+          if (!shopSet) throw new Error('ยังไม่ได้ตั้งพิกัดร้าน — ให้ผู้ดูแลแตะจุดร้านบนแผนที่ก่อน');
+          const { c, dist, inRange } = await syncGps();
+          if (!inRange) throw new Error('อยู่นอกพื้นที่ร้าน (' + dist.toLocaleString('th-TH') + ' ม.) กดลงเวลาไม่ได้');
 
           const now = new Date();
           if (kind === 'in') {
@@ -3073,8 +3189,13 @@ end $$;
               <div class="field"><label for="gLng">ลองจิจูด</label><input id="gLng" type="number" step="any" value="${Number(SETTINGS.shop_lng) || 0}"></div>
               <div class="field"><label for="gRad">รัศมี (เมตร)</label><input id="gRad" type="number" min="20" step="10" value="${Number(SETTINGS.geo_radius_m) || 150}"></div>
             </div>
+            <div class="field" style="margin-bottom:10px">
+              <label for="gPaste">หรือวางพิกัดจากแอปแผนที่ (เช่น 6.8712, 101.2500)</label>
+              <input id="gPaste" placeholder="วางตัวเลขพิกัด lat, lng ตรงนี้">
+            </div>
             <div class="field-row">
-              <button class="btn secondary" id="gHere">${icon('check', 15)}ใช้ตำแหน่งปัจจุบัน</button>
+              <button class="btn secondary" id="gPasteBtn">${icon('pin', 15)}ใช้พิกัดที่วาง</button>
+              <button class="btn secondary" id="gHere">${icon('pin', 15)}ใช้ตำแหน่งปัจจุบัน</button>
               <button class="btn" id="gSave">${icon('check', 15)}บันทึกพิกัด</button>
             </div>
             <div class="msg" id="gMsg"></div>
@@ -3092,6 +3213,17 @@ end $$;
             gMsg.className = 'msg ok';
           } catch (e) { gMsg.textContent = e.message; gMsg.className = 'msg error'; }
         });
+        geoCard.querySelector('#gPasteBtn').addEventListener('click', () => {
+          const p = parseLatLng(geoCard.querySelector('#gPaste').value);
+          if (!p) {
+            gMsg.textContent = 'อ่านพิกัดไม่ออก — ต้องมีตัวเลข 2 ตัวคั่นด้วยจุลภาค เช่น 6.8712, 101.2500 (ลิงก์ย่อของ Apple Maps ใช้ไม่ได้ ต้องเปิดลิงก์แล้วก๊อปพิกัดออกมา)';
+            gMsg.className = 'msg error'; return;
+          }
+          geoCard.querySelector('#gLat').value = p.lat;
+          geoCard.querySelector('#gLng').value = p.lng;
+          gMsg.textContent = 'ใส่พิกัดให้แล้ว กด "บันทึกพิกัด" เพื่อยืนยัน'; gMsg.className = 'msg ok';
+        });
+
         geoCard.querySelector('#gSave').addEventListener('click', async () => {
           const rows = [
             { key: 'shop_lat', value: String(geoCard.querySelector('#gLat').value || 0) },
