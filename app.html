@@ -441,16 +441,16 @@
   html[data-theme="dark"] .att-geo.in-range { background: #123324; color: #6ee7a8; }
   html[data-theme="dark"] .att-geo.out-range { background: #3a1d1b; color: #f4a49b; }
   .att-actions { display: flex; gap: var(--space-4); justify-content: center; flex-wrap: wrap; margin: 20px 0 6px; }
-  .att-btn { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
-             width: 150px; height: 150px; border-radius: 50%; border: none; cursor: pointer;
-             font-family: inherit; font-size: 16px; font-weight: 700; color: #fff;
-             box-shadow: 0 6px 18px rgba(0,0,0,.12); transition: transform .12s ease; }
+  .att-btn { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
+             width: 220px; height: 220px; border-radius: 50%; border: none; cursor: pointer;
+             font-family: inherit; font-size: 22px; font-weight: 800; color: #fff;
+             box-shadow: 0 10px 30px rgba(0,0,0,.16); transition: transform .12s ease, background .2s ease; }
   .att-btn:active:not(:disabled) { transform: scale(.96); }
-  .att-btn small { font-size: 11.5px; font-weight: 500; opacity: .9; }
+  .att-btn small { font-size: 13px; font-weight: 500; opacity: .92; }
+  .att-btn.finished { background: var(--soft); color: var(--sub); box-shadow: none; cursor: default; }
   .att-btn.in { background: #22a06b; }
   .att-btn.out { background: #d1493f; }
-  .att-btn:disabled { opacity: .45; cursor: not-allowed; }
-  .att-btn.done { background: var(--soft); color: var(--sub); }
+  .att-btn:disabled { cursor: not-allowed; }
   .att-summary { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--space-3); margin-top: 18px;
                  border-top: 1px solid var(--border); padding-top: 16px; }
   .att-summary .lbl { display: block; font-size: 11.5px; color: var(--sub); }
@@ -459,7 +459,7 @@
   .att-summary .val.danger { color: #b42318; }
   @media (max-width: 560px) {
     .att-time { font-size: 34px; }
-    .att-btn { width: 130px; height: 130px; }
+    .att-btn { width: 200px; height: 200px; font-size: 20px; }
     .att-summary { grid-template-columns: repeat(2, 1fr); }
   }
 
@@ -1157,7 +1157,10 @@
       { key: 'customers', label: 'ลูกค้า',     icon: 'user' },
       { key: 'receipts',  label: 'ใบเสร็จ',    icon: 'receipt' },
       { sep: true },
-      { key: 'attendance', label: 'ลงเวลา',    icon: 'clock' },
+      { key: 'attendance', label: 'ลงเวลา',      icon: 'clock' },
+      { key: 'schedule',   label: 'ตารางงาน',    icon: 'calendar' },
+      { key: 'timesheet',  label: 'ประวัติลงเวลา', icon: 'chart' },
+      { sep: true },
       { key: 'users',     label: 'ผู้ใช้ & สิทธิ์', icon: 'user' },
       { sep: true },
       { key: 'trash',     label: 'ถังขยะ',     icon: 'trash' },
@@ -1166,7 +1169,7 @@
     ];
     // แถบล่างมือถือ: 4 หน้าหลัก + ปุ่มเพิ่มเติมสำหรับที่เหลือ
     const MOBILE_NAV = ['dashboard', 'orders', 'calendar', 'fabric'];
-    const MOBILE_MORE = ['products', 'stock', 'customers', 'receipts', 'attendance', 'users', 'trash', 'health', 'profile'];
+    const MOBILE_MORE = ['products', 'stock', 'customers', 'receipts', 'attendance', 'schedule', 'timesheet', 'users', 'trash', 'health', 'profile'];
     const PAY_METHODS = ['เงินสด', 'โอนธนาคาร', 'พร้อมเพย์', 'เก็บปลายทาง', 'บัตรเครดิต', 'อื่นๆ'];
 
     // ช่องทางรับออเดอร์ (แก้เพิ่ม/ลดได้ที่นี่)
@@ -1192,6 +1195,8 @@
       if (key === 'fabric') return { label: 'งานผลิต', icon: 'factory' };
       if (key === 'stock') return { label: 'สต็อกของ', icon: 'box' };
       if (key === 'attendance') return { label: 'ลงเวลา', icon: 'clock' };
+      if (key === 'schedule') return { label: 'ตารางงาน', icon: 'calendar' };
+      if (key === 'timesheet') return { label: 'ประวัติลงเวลา', icon: 'chart' };
       if (key === 'users') return { label: 'ผู้ใช้ & สิทธิ์', icon: 'user' };
       if (key === 'trash') return { label: 'ถังขยะ', icon: 'trash' };
       if (key === 'health') return { label: 'ตรวจระบบ & สำรองข้อมูล', icon: 'check' };
@@ -1203,7 +1208,7 @@
     let orderFilter = 'all';
 
     // ===== URL routing (ทำให้กดค้าง/คลิกขวา → เปิดในแท็บใหม่ได้ และปุ่ม back ใช้งานได้) =====
-    const VALID_VIEWS = ['dashboard', 'calendar', 'orders', 'products', 'fabric', 'stock', 'customers', 'receipts', 'attendance', 'users', 'trash', 'health', 'profile'];
+    const VALID_VIEWS = ['dashboard', 'calendar', 'orders', 'products', 'fabric', 'stock', 'customers', 'receipts', 'attendance', 'schedule', 'timesheet', 'users', 'trash', 'health', 'profile'];
 
     function routeFor(view, id) {
       if (view === 'orderView') return '#/order/' + id;
@@ -1405,7 +1410,8 @@
           await loadOrderDetail(viewingOrderId);
         } else if (currentView === 'products') {
           await loadProductCatalog();
-        } else if (currentView === 'attendance') {
+        } else if (currentView === 'attendance' || currentView === 'schedule' || currentView === 'timesheet') {
+          attTab = currentView === 'attendance' ? 'clock' : currentView === 'schedule' ? 'schedule' : 'history';
           await loadAttendance();
         } else if (currentView === 'users') {
           await loadUsers();
@@ -2428,7 +2434,7 @@ end $$;
     // ===== เช็กว่ามีเวอร์ชันใหม่ไหม =====
     // เบราว์เซอร์ชอบจำไฟล์เก่าไว้ (cache) ทำให้ไม่เห็นของที่เพิ่งอัปเดต
     // ตัวนี้จะแอบเทียบเวอร์ชันกับไฟล์บนเซิร์ฟเวอร์ แล้วขึ้นแถบให้กดอัปเดต
-    const APP_BUILD = '20260813-0854';
+    const APP_BUILD = '20260813-0905';
 
     async function checkForUpdate() {
       try {
@@ -2870,19 +2876,11 @@ end $$;
       const app = document.getElementById('app');
       if (attClockTimer) { clearInterval(attClockTimer); attClockTimer = null; }
       app.innerHTML = '';
-      app.appendChild(buildPageHead('ลงเวลา', 'เข้างาน-ออกงาน ตารางเวลาทำงาน และโอที'));
-
-      const tabs = document.createElement('div');
-      tabs.className = 'tabs tabs-fixed no-print';
-      tabs.innerHTML = `
-        <button class="tab-btn ${attTab === 'clock' ? 'active' : ''}" data-tab="clock">${icon('clock', 16)}ลงเวลา</button>
-        <button class="tab-btn ${attTab === 'schedule' ? 'active' : ''}" data-tab="schedule">${icon('calendar', 16)}ตารางงาน</button>
-        <button class="tab-btn ${attTab === 'history' ? 'active' : ''}" data-tab="history">${icon('chart', 16)}ประวัติ</button>
-      `;
-      app.appendChild(tabs);
-      tabs.querySelectorAll('.tab-btn').forEach(b => b.addEventListener('click', () => {
-        attTab = b.dataset.tab; renderAttendance();
-      }));
+      app.appendChild(buildPageHead(
+        attTab === 'clock' ? 'ลงเวลา' : attTab === 'schedule' ? 'ตารางงาน' : 'ประวัติลงเวลา & โอที',
+        attTab === 'clock' ? 'กดเข้างาน-ออกงาน ระบบเช็กว่าอยู่ที่ร้านให้เอง'
+          : attTab === 'schedule' ? 'วันทำงาน เวลาเข้า-ออก และที่ตั้งร้าน'
+            : 'สรุปรายเดือน ประวัติการลงเวลา และคำขอโอที'));
 
       if (attTab === 'clock') renderClockTab(app);
       else if (attTab === 'schedule') renderScheduleTab(app);
@@ -2892,6 +2890,8 @@ end $$;
     // ---------- แท็บ 1: ลงเวลา ----------
     function renderClockTab(app) {
       const today = ATT.records.find(r => r.work_date === dateKey());
+      // ปุ่มเดียวเปลี่ยนหน้าที่ตามสถานะ: ยังไม่เข้า -> เข้างาน · เข้าแล้ว -> ออกงาน · ครบแล้ว -> ปิดปุ่ม
+      const phase = !today || !today.clock_in ? 'in' : !today.clock_out ? 'out' : 'finished';
       const sc = scheduleOf(ME ? ME.id : null);
       const dow = new Date().getDay();
       const plan = sc.days[dow] || DEFAULT_DAYS[dow];
@@ -2916,13 +2916,12 @@ end $$;
           <button class="btn secondary btn-sm" id="attSetHere">${icon('pin', 15)}ใช้ตำแหน่งปัจจุบันเป็นที่ตั้งร้าน</button></div>` : ''}
         ${!shopSet && !isAdmin() ? '<div class="hint" style="margin-top:8px">แจ้งผู้ดูแลให้ตั้งพิกัดร้านก่อน ถึงจะกดลงเวลาได้</div>' : ''}
         <div class="att-actions">
-          <button class="att-btn in ${today && today.clock_in ? 'done' : ''}" id="attIn" ${today && today.clock_in ? 'disabled' : ''}>
-            ${icon('signin', 26)}<span>${today && today.clock_in ? 'เข้างานแล้ว' : 'เข้างาน'}</span>
-            <small>${today && today.clock_in ? hhmm(today.clock_in) : 'แตะเพื่อลงเวลา'}</small>
-          </button>
-          <button class="att-btn out ${today && today.clock_out ? 'done' : ''}" id="attOut" ${(!today || !today.clock_in || today.clock_out) ? 'disabled' : ''}>
-            ${icon('signout', 26)}<span>${today && today.clock_out ? 'ออกงานแล้ว' : 'ออกงาน'}</span>
-            <small>${today && today.clock_out ? hhmm(today.clock_out) : (today && today.clock_in ? 'แตะเมื่อเลิกงาน' : 'ต้องเข้างานก่อน')}</small>
+          <button class="att-btn ${phase}" id="attPunch" ${phase === 'finished' ? 'disabled' : ''}>
+            ${icon(phase === 'out' ? 'signout' : 'signin', 40)}
+            <span>${phase === 'in' ? 'เข้างาน' : phase === 'out' ? 'ออกงาน' : 'ครบแล้ววันนี้'}</span>
+            <small>${phase === 'in' ? 'แตะเพื่อลงเวลา'
+              : phase === 'out' ? 'เข้างาน ' + hhmm(today.clock_in)
+                : hhmm(today.clock_in) + ' – ' + hhmm(today.clock_out)}</small>
           </button>
         </div>
         <div class="msg" id="attMsg"></div>
@@ -3041,7 +3040,7 @@ end $$;
 
       const punch = async (kind) => {
         msg.textContent = ''; msg.className = 'msg';
-        const btn = card.querySelector(kind === 'in' ? '#attIn' : '#attOut');
+        const btn = card.querySelector('#attPunch');
         btn.disabled = true;
         try {
           if (!shopSet) throw new Error('ยังไม่ได้ตั้งพิกัดร้าน — ให้ผู้ดูแลแตะจุดร้านบนแผนที่ก่อน');
@@ -3077,8 +3076,7 @@ end $$;
           btn.disabled = false;
         }
       };
-      card.querySelector('#attIn').addEventListener('click', () => punch('in'));
-      card.querySelector('#attOut').addEventListener('click', () => punch('out'));
+      if (phase !== 'finished') card.querySelector('#attPunch').addEventListener('click', () => punch(phase));
 
       // ---- ผู้ดูแล: ใครมาแล้วบ้างวันนี้ ----
       if (isAdmin()) {
