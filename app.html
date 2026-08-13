@@ -2448,7 +2448,7 @@ end $$;
     // ===== เช็กว่ามีเวอร์ชันใหม่ไหม =====
     // เบราว์เซอร์ชอบจำไฟล์เก่าไว้ (cache) ทำให้ไม่เห็นของที่เพิ่งอัปเดต
     // ตัวนี้จะแอบเทียบเวอร์ชันกับไฟล์บนเซิร์ฟเวอร์ แล้วขึ้นแถบให้กดอัปเดต
-    const APP_BUILD = '20260813-1906';
+    const APP_BUILD = '20260813-1918';
 
     async function checkForUpdate() {
       try {
@@ -2897,6 +2897,17 @@ end $$;
         if (error) { m.textContent = 'บันทึกไม่สำเร็จ: ' + error.message; m.className = 'msg error'; return; }
         SETTINGS = await loadSettings();
         m.textContent = 'บันทึกแล้ว'; m.className = 'msg ok';
+
+        // รายการเก่าคิดด้วยราคาเดิม -> ถามว่าจะคิดใหม่ตามราคาที่เพิ่งใส่ไหม
+        if (WASTE.length && v > 0) {
+          const stale = WASTE.filter(w => Number(w.cost || 0) !== round2(Number(w.yards) * v));
+          if (stale.length && confirm('คิดมูลค่าของรายการเก่า ' + stale.length + ' รายการใหม่ ด้วยราคา ' + v + ' บาท/หลา ด้วยไหม?')) {
+            for (const w of stale) {
+              await sb.from('fabric_waste').update({ cost: round2(Number(w.yards) * v) }).eq('id', w.id);
+            }
+            await loadAll();
+          }
+        }
       });
 
       // แยกตามสาเหตุ
@@ -2925,6 +2936,7 @@ end $$;
         <div class="table-wrap"><table>
           <thead><tr><th>วันที่</th><th>ประเภท</th><th>งาน / ล็อต</th><th>สาเหตุ</th><th>หลา</th><th>มูลค่า</th><th></th></tr></thead>
           <tbody>${WASTE.length ? WASTE.map(w => {
+            // eslint-disable-next-line
             const p = w.piece_id ? pieceById[w.piece_id] : null;
             const lot = w.lot_id ? lotById[w.lot_id] : null;
             return `<tr>
@@ -2934,7 +2946,8 @@ end $$;
                 ${w.note ? `<div class="hint">${esc(w.note)}</div>` : ''}</td>
               <td data-label="สาเหตุ">${esc(w.reason || '-')}</td>
               <td data-label="หลา">${Number(w.yards).toFixed(2)}</td>
-              <td data-label="มูลค่า">${w.cost ? fmtBaht(round2(w.cost)) : '-'}</td>
+              <td data-label="มูลค่า">${w.cost ? fmtBaht(round2(w.cost))
+                : (wasteCost(w.yards) ? fmtBaht(wasteCost(w.yards)) + ' *' : '-')}</td>
               <td data-label="" class="admin-only"><button class="icon-btn icon-btn-delete waste-del" data-id="${w.id}"
                 aria-label="ลบรายการผ้าเสีย" title="ลบ (ไม่คืนสต็อกให้อัตโนมัติ)">${icon('trash', 18)}</button></td>
             </tr>`;
