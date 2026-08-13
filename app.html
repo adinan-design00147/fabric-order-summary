@@ -2428,7 +2428,7 @@ end $$;
     // ===== เช็กว่ามีเวอร์ชันใหม่ไหม =====
     // เบราว์เซอร์ชอบจำไฟล์เก่าไว้ (cache) ทำให้ไม่เห็นของที่เพิ่งอัปเดต
     // ตัวนี้จะแอบเทียบเวอร์ชันกับไฟล์บนเซิร์ฟเวอร์ แล้วขึ้นแถบให้กดอัปเดต
-    const APP_BUILD = '20260813-0852';
+    const APP_BUILD = '20260813-0854';
 
     async function checkForUpdate() {
       try {
@@ -2774,7 +2774,7 @@ end $$;
 
     /** อ่านพิกัดจากข้อความที่วางมา เช่น "7.1234, 100.5678" (ลิงก์ Google Maps ที่มีตัวเลขก็ได้) */
     function parseLatLng(text) {
-      const m = String(text || '').match(/(-?\d{1,3}\.\d{3,})[,\s/@]+(-?\d{1,3}\.\d{3,})/);
+      const m = String(text || '').match(/(-?\d{1,3}\.\d{2,})[,\s/@]+(-?\d{1,3}\.\d{2,})/);
       if (!m) return null;
       const lat = parseFloat(m[1]), lng = parseFloat(m[2]);
       if (Math.abs(lat) > 90 || Math.abs(lng) > 180) return null;
