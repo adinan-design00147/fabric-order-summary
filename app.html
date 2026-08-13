@@ -434,16 +434,19 @@
   .att-time { font-size: 42px; font-weight: 800; letter-spacing: 1px; font-variant-numeric: tabular-nums; }
   .att-date { color: var(--sub); font-size: 13px; margin-top: 2px; }
   .att-plan { font-size: 13px; margin-top: 10px; color: var(--text); }
-  .att-geo { margin: 14px auto 0; display: inline-block; padding: 7px 14px; border-radius: 999px;
-             background: var(--soft); color: var(--sub); font-size: 12.5px; }
+  .att-geo { margin: 14px auto 0; display: inline-flex; align-items: center; gap: 6px; padding: 7px 14px;
+             border-radius: 999px; background: var(--soft); color: var(--sub); font-size: 12.5px; }
   .att-geo.in-range { background: #e7f6ec; color: #067647; }
   .att-geo.out-range { background: #fdecea; color: #b42318; }
   html[data-theme="dark"] .att-geo.in-range { background: #123324; color: #6ee7a8; }
   html[data-theme="dark"] .att-geo.out-range { background: #3a1d1b; color: #f4a49b; }
   .att-actions { display: flex; gap: var(--space-4); justify-content: center; flex-wrap: wrap; margin: 20px 0 6px; }
-  .att-btn { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
+  .att-btn { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
              width: 150px; height: 150px; border-radius: 50%; border: none; cursor: pointer;
-             font-family: inherit; font-size: 15px; font-weight: 700; color: #fff; }
+             font-family: inherit; font-size: 16px; font-weight: 700; color: #fff;
+             box-shadow: 0 6px 18px rgba(0,0,0,.12); transition: transform .12s ease; }
+  .att-btn:active:not(:disabled) { transform: scale(.96); }
+  .att-btn small { font-size: 11.5px; font-weight: 500; opacity: .9; }
   .att-btn.in { background: #22a06b; }
   .att-btn.out { background: #d1493f; }
   .att-btn:disabled { opacity: .45; cursor: not-allowed; }
@@ -459,6 +462,26 @@
     .att-btn { width: 130px; height: 130px; }
     .att-summary { grid-template-columns: repeat(2, 1fr); }
   }
+
+  /* แท็บแบบแบ่งช่องเท่ากัน (ใช้ในหน้าลงเวลา) */
+  .tabs.tabs-fixed { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-2); }
+  .tabs.tabs-fixed .tab-btn { justify-content: center; white-space: nowrap; padding-left: 6px; padding-right: 6px; }
+
+  /* รายการคนที่ลงเวลาวันนี้ */
+  .att-people { display: flex; flex-direction: column; }
+  .att-person { display: flex; align-items: center; gap: var(--space-3); justify-content: space-between;
+                padding: 12px var(--space-4); border-top: 1px solid var(--border); }
+  .att-person .ap-name { font-size: 14px; font-weight: 600; }
+  .att-person .ap-sub { font-size: 12px; color: var(--sub); margin-top: 2px; }
+  .att-person .ap-state { font-size: 12px; font-weight: 600; white-space: nowrap; }
+  .att-person.off .ap-state { color: var(--sub); }
+  .att-person.on .ap-state { color: #067647; }
+  .att-person.done .ap-state { color: #3454d1; }
+
+  /* การ์ดอธิบายสิทธิ์ในหน้าผู้ใช้ */
+  .role-legend { display: grid; gap: var(--space-3); grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); margin-bottom: var(--space-5); }
+  .role-card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px; }
+  .role-card .role-desc { font-size: 12.5px; color: var(--sub); margin-top: 8px; line-height: 1.55; }
 
   /* หน้าจอเข้าสู่ระบบ */
   #authScreen { position: fixed; inset: 0; z-index: 200; background: var(--bg); display: flex; align-items: center; justify-content: center; padding: var(--space-4); }
@@ -1014,6 +1037,9 @@
       pin:       '<path d="M12 21s7-6.4 7-11a7 7 0 1 0-14 0c0 4.6 7 11 7 11Z"/><circle cx="12" cy="10" r="2.4"/>',
       wallet:    '<rect x="3" y="6" width="18" height="13" rx="3"/><path d="M3 10h18"/><circle cx="16.4" cy="14.5" r="1.2"/>',
       clock:     '<circle cx="12" cy="12" r="9"/><path d="M12 7v5.3l3.2 1.9"/>',
+      signin:    '<path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><path d="M10 17l5-5-5-5"/><path d="M15 12H3"/>',
+      signout:   '<path d="M9 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/>',
+      pin:       '<path d="M12 21s7-6.2 7-11a7 7 0 1 0-14 0c0 4.8 7 11 7 11Z"/><circle cx="12" cy="10" r="2.6"/>',
       box:       '<path d="M12 3 3.5 7.5v9L12 21l8.5-4.5v-9Z"/><path d="m3.5 7.5 8.5 4.5 8.5-4.5M12 12v9"/>',
       layers:    '<path d="m12 3 9 5-9 5-9-5Z"/><path d="m3 13 9 5 9-5"/>',
       back:      '<path d="M19 12H5"/><path d="m11 6-6 6 6 6"/>',
@@ -1123,6 +1149,7 @@
       { key: 'receipts',  label: 'ใบเสร็จ',    icon: 'receipt' },
       { sep: true },
       { key: 'attendance', label: 'ลงเวลา',    icon: 'clock' },
+      { key: 'users',     label: 'ผู้ใช้ & สิทธิ์', icon: 'user' },
       { sep: true },
       { key: 'trash',     label: 'ถังขยะ',     icon: 'trash' },
       { key: 'health',    label: 'ตรวจระบบ & สำรอง', icon: 'check' },
@@ -1130,7 +1157,7 @@
     ];
     // แถบล่างมือถือ: 4 หน้าหลัก + ปุ่มเพิ่มเติมสำหรับที่เหลือ
     const MOBILE_NAV = ['dashboard', 'orders', 'calendar', 'fabric'];
-    const MOBILE_MORE = ['products', 'stock', 'customers', 'receipts', 'attendance', 'trash', 'health', 'profile'];
+    const MOBILE_MORE = ['products', 'stock', 'customers', 'receipts', 'attendance', 'users', 'trash', 'health', 'profile'];
     const PAY_METHODS = ['เงินสด', 'โอนธนาคาร', 'พร้อมเพย์', 'เก็บปลายทาง', 'บัตรเครดิต', 'อื่นๆ'];
 
     // ช่องทางรับออเดอร์ (แก้เพิ่ม/ลดได้ที่นี่)
@@ -1156,6 +1183,7 @@
       if (key === 'fabric') return { label: 'งานผลิต', icon: 'factory' };
       if (key === 'stock') return { label: 'สต็อกของ', icon: 'box' };
       if (key === 'attendance') return { label: 'ลงเวลา', icon: 'clock' };
+      if (key === 'users') return { label: 'ผู้ใช้ & สิทธิ์', icon: 'user' };
       if (key === 'trash') return { label: 'ถังขยะ', icon: 'trash' };
       if (key === 'health') return { label: 'ตรวจระบบ & สำรองข้อมูล', icon: 'check' };
       if (key === 'profile') return { label: 'โปรไฟล์ผู้ใช้', icon: 'user' };
@@ -1166,7 +1194,7 @@
     let orderFilter = 'all';
 
     // ===== URL routing (ทำให้กดค้าง/คลิกขวา → เปิดในแท็บใหม่ได้ และปุ่ม back ใช้งานได้) =====
-    const VALID_VIEWS = ['dashboard', 'calendar', 'orders', 'products', 'fabric', 'stock', 'customers', 'receipts', 'attendance', 'trash', 'health', 'profile'];
+    const VALID_VIEWS = ['dashboard', 'calendar', 'orders', 'products', 'fabric', 'stock', 'customers', 'receipts', 'attendance', 'users', 'trash', 'health', 'profile'];
 
     function routeFor(view, id) {
       if (view === 'orderView') return '#/order/' + id;
@@ -1370,6 +1398,8 @@
           await loadProductCatalog();
         } else if (currentView === 'attendance') {
           await loadAttendance();
+        } else if (currentView === 'users') {
+          await loadUsers();
         } else if (currentView === 'trash') {
           await loadTrash();
         } else if (currentView === 'stock') {
@@ -1716,7 +1746,7 @@
     async function loadProfile() {
       const app = document.getElementById('app');
       app.innerHTML = '';
-      app.appendChild(buildPageHead('โปรไฟล์ผู้ใช้', 'ชื่อเรียก รหัสผ่าน และผู้ใช้ที่เข้าระบบนี้ได้'));
+      app.appendChild(buildPageHead('โปรไฟล์ผู้ใช้', 'ชื่อเรียกและรหัสผ่านของคุณ'));
       document.getElementById('statusMsg').textContent = 'อัปเดตล่าสุด: ' + new Date().toLocaleString('th-TH');
 
       // ---- ข้อมูลของฉัน ----
@@ -1777,8 +1807,41 @@
         msg.textContent = 'เปลี่ยนรหัสผ่านเรียบร้อย ครั้งหน้าใช้รหัสใหม่'; msg.className = 'msg ok';
       });
 
+      const hint = document.createElement('div');
+      hint.className = 'hint';
+      hint.style.marginTop = '4px';
+      hint.innerHTML = isAdmin()
+        ? 'จัดการบัญชีผู้ใช้และสิทธิ์ ย้ายไปที่เมนู <a href="' + routeFor('users') + '">ผู้ใช้ &amp; สิทธิ์</a> แล้ว'
+        : 'ถ้าลืมรหัสผ่าน ให้แจ้งผู้ดูแลตั้งรหัสใหม่ให้';
+      app.appendChild(hint);
+    }
+
+    // ===== ผู้ใช้ & สิทธิ์ (เมนูแยก เฉพาะผู้ดูแล) =====
+    async function loadUsers() {
+      const app = document.getElementById('app');
+      app.innerHTML = '';
+      app.appendChild(buildPageHead('ผู้ใช้ & สิทธิ์', 'บัญชีที่เข้าระบบนี้ได้ และระดับสิทธิ์ของแต่ละคน'));
+      document.getElementById('statusMsg').textContent = 'อัปเดตล่าสุด: ' + new Date().toLocaleString('th-TH');
+
+      if (!isAdmin()) {
+        const no = document.createElement('div');
+        no.className = 'lot-card';
+        no.innerHTML = '<div class="empty-cell" style="padding:28px">เฉพาะผู้ดูแลเท่านั้นที่เปิดหน้านี้ได้</div>';
+        app.appendChild(no);
+        return;
+      }
+
+      // การ์ดอธิบายว่าแต่ละระดับทำอะไรได้
+      const legend = document.createElement('div');
+      legend.className = 'role-legend';
+      legend.innerHTML = Object.entries(ROLES).map(([k, v]) => `<div class="role-card">
+        <span class="st ${v.cls}">${esc(v.label)}</span>
+        <div class="role-desc">${esc(v.desc)}</div>
+      </div>`).join('');
+      app.appendChild(legend);
+
       const { data: list, error } = await sb.from('app_users')
-        .select('user_id,email,display_name,role,created_at').order('created_at');
+        .select('user_id,email,username,display_name,role,created_at').order('created_at');
 
       // ---- เพิ่มผู้ใช้ใหม่ (เฉพาะ admin) — สร้างบัญชีให้เลย ----
       if (isAdmin()) {
@@ -1856,7 +1919,7 @@
             inv.querySelector('#nuUser').value = '';
             inv.querySelector('#nuEmail').value = '';
             inv.querySelector('#nuPass').value = '';
-            await loadProfile();
+            await loadUsers();
           } catch (e) {
             msg.textContent = 'สร้างบัญชีไม่สำเร็จ: ' + e.message; msg.className = 'msg error';
           } finally { btn.disabled = false; }
@@ -1940,7 +2003,7 @@
           await callUserFn({ action: 'reset', user_id: b.dataset.id, password: pass });
           m.innerHTML = 'ตั้งรหัสใหม่ให้ <b>' + esc(b.dataset.login) + '</b> แล้ว — รหัสใหม่: <b>' + esc(pass) + '</b>';
           m.className = 'msg ok';
-          await loadProfile();
+          await loadUsers();
         } catch (e) { m.textContent = 'ตั้งรหัสไม่สำเร็จ: ' + e.message; m.className = 'msg error'; b.disabled = false; }
       }));
 
@@ -1950,14 +2013,14 @@
         b.disabled = true;
         try {
           await callUserFn({ action: 'delete', user_id: b.dataset.id });
-          await loadProfile();
+          await loadUsers();
         } catch (e) { m.textContent = 'ลบไม่สำเร็จ: ' + e.message; m.className = 'msg error'; b.disabled = false; }
       }));
 
       users.querySelectorAll('.u-role').forEach(sel => sel.addEventListener('change', async () => {
         const { error } = await sb.from('app_users').update({ role: sel.value }).eq('user_id', sel.dataset.id);
         if (error) { alert('เปลี่ยนสิทธิ์ไม่สำเร็จ: ' + error.message); }
-        await loadProfile();
+        await loadUsers();
       }));
     }
 
@@ -2356,7 +2419,7 @@ end $$;
     // ===== เช็กว่ามีเวอร์ชันใหม่ไหม =====
     // เบราว์เซอร์ชอบจำไฟล์เก่าไว้ (cache) ทำให้ไม่เห็นของที่เพิ่งอัปเดต
     // ตัวนี้จะแอบเทียบเวอร์ชันกับไฟล์บนเซิร์ฟเวอร์ แล้วขึ้นแถบให้กดอัปเดต
-    const APP_BUILD = '20260813-0747';
+    const APP_BUILD = '20260813-0802';
 
     async function checkForUpdate() {
       try {
@@ -2754,7 +2817,10 @@ end $$;
 
     function userLabel(u) {
       if (!u) return '—';
-      return u.display_name || u.username || prettyLogin(u.email) || '—';
+      if (u.display_name) return u.display_name;
+      if (u.username) return u.username;
+      const e = prettyLogin(u.email) || '';
+      return e.includes('@') ? e.split('@')[0] : (e || '—');
     }
 
     function renderAttendance() {
@@ -2764,11 +2830,11 @@ end $$;
       app.appendChild(buildPageHead('ลงเวลา', 'เข้างาน-ออกงาน ตารางเวลาทำงาน และโอที'));
 
       const tabs = document.createElement('div');
-      tabs.className = 'tabs no-print';
+      tabs.className = 'tabs tabs-fixed no-print';
       tabs.innerHTML = `
-        <button class="tab-btn ${attTab === 'clock' ? 'active' : ''}" data-tab="clock">${icon('clock', 17)}ลงเวลา</button>
-        <button class="tab-btn ${attTab === 'schedule' ? 'active' : ''}" data-tab="schedule">${icon('calendar', 17)}ตารางงาน</button>
-        <button class="tab-btn ${attTab === 'history' ? 'active' : ''}" data-tab="history">${icon('chart', 17)}ประวัติ & โอที</button>
+        <button class="tab-btn ${attTab === 'clock' ? 'active' : ''}" data-tab="clock">${icon('clock', 16)}ลงเวลา</button>
+        <button class="tab-btn ${attTab === 'schedule' ? 'active' : ''}" data-tab="schedule">${icon('calendar', 16)}ตารางงาน</button>
+        <button class="tab-btn ${attTab === 'history' ? 'active' : ''}" data-tab="history">${icon('chart', 16)}ประวัติ</button>
       `;
       app.appendChild(tabs);
       tabs.querySelectorAll('.tab-btn').forEach(b => b.addEventListener('click', () => {
@@ -2798,13 +2864,17 @@ end $$;
             ? 'วันนี้เข้างาน <b>' + esc(plan.start) + '</b> — ออกงาน <b>' + esc(plan.end) + '</b> · สายเกิน ' + sc.grace_minutes + ' น. นับว่าสาย'
             : '<b>วันนี้เป็นวันหยุดตามตารางงาน</b> — ถ้ามาทำงานก็กดลงเวลาได้ตามปกติ'}</div>
         </div>
-        <div class="att-geo" id="attGeo">${shopSet ? 'ยังไม่ได้ตรวจตำแหน่ง' : '⚠️ ยังไม่ได้ตั้งพิกัดร้าน — ตั้งได้ที่แท็บ "ตารางงาน" (ผู้ดูแล)'}</div>
+        <div class="att-geo" id="attGeo">${icon('pin', 15)}<span id="attGeoTxt">${shopSet ? 'กดปุ่มแล้วระบบจะเช็กตำแหน่งให้' : 'ยังไม่ได้ตั้งพิกัดร้าน'}</span></div>
+        ${!shopSet && isAdmin() ? `<div style="margin-top:10px"><button class="btn secondary btn-sm" id="attSetHere">${icon('pin', 15)}ตั้งพิกัดร้านจากตำแหน่งนี้</button></div>` : ''}
+        ${!shopSet && !isAdmin() ? '<div class="hint" style="margin-top:8px">แจ้งผู้ดูแลให้ตั้งพิกัดร้านก่อน ถึงจะกดลงเวลาได้</div>' : ''}
         <div class="att-actions">
           <button class="att-btn in ${today && today.clock_in ? 'done' : ''}" id="attIn" ${today && today.clock_in ? 'disabled' : ''}>
-            ${icon('back', 22)}<span>${today && today.clock_in ? 'เข้างานแล้ว ' + hhmm(today.clock_in) : 'เข้างาน'}</span>
+            ${icon('signin', 26)}<span>${today && today.clock_in ? 'เข้างานแล้ว' : 'เข้างาน'}</span>
+            <small>${today && today.clock_in ? hhmm(today.clock_in) : 'แตะเพื่อลงเวลา'}</small>
           </button>
           <button class="att-btn out ${today && today.clock_out ? 'done' : ''}" id="attOut" ${(!today || !today.clock_in || today.clock_out) ? 'disabled' : ''}>
-            ${icon('truck', 22)}<span>${today && today.clock_out ? 'ออกงานแล้ว ' + hhmm(today.clock_out) : 'ออกงาน'}</span>
+            ${icon('signout', 26)}<span>${today && today.clock_out ? 'ออกงานแล้ว' : 'ออกงาน'}</span>
+            <small>${today && today.clock_out ? hhmm(today.clock_out) : (today && today.clock_in ? 'แตะเมื่อเลิกงาน' : 'ต้องเข้างานก่อน')}</small>
           </button>
         </div>
         <div class="msg" id="attMsg"></div>
@@ -2827,6 +2897,24 @@ end $$;
 
       const msg = card.querySelector('#attMsg');
       const geo = card.querySelector('#attGeo');
+      const geoTxt = card.querySelector('#attGeoTxt');
+
+      // ผู้ดูแลตั้งพิกัดร้านได้จากหน้านี้เลย ไม่ต้องข้ามไปแท็บอื่น
+      const setHere = card.querySelector('#attSetHere');
+      if (setHere) setHere.addEventListener('click', async () => {
+        setHere.disabled = true;
+        msg.textContent = 'กำลังหาตำแหน่ง...'; msg.className = 'msg';
+        try {
+          const c = await getPosition();
+          const { error } = await sb.from('settings').upsert([
+            { key: 'shop_lat', value: String(c.latitude) },
+            { key: 'shop_lng', value: String(c.longitude) },
+          ], { onConflict: 'key' });
+          if (error) throw new Error(error.message);
+          SETTINGS = await loadSettings();
+          await loadAttendance();
+        } catch (e) { msg.textContent = e.message; msg.className = 'msg error'; setHere.disabled = false; }
+      });
 
       const punch = async (kind) => {
         msg.textContent = ''; msg.className = 'msg';
@@ -2834,11 +2922,13 @@ end $$;
         btn.disabled = true;
         try {
           if (!shopSet) throw new Error('ยังไม่ได้ตั้งพิกัดร้าน — ให้ผู้ดูแลตั้งก่อนที่แท็บ "ตารางงาน"');
-          geo.textContent = 'กำลังหาตำแหน่ง...';
+          geoTxt.textContent = 'กำลังหาตำแหน่ง...';
           const c = await getPosition();
           const dist = distanceMeters(c.latitude, c.longitude, Number(SETTINGS.shop_lat), Number(SETTINGS.shop_lng));
           const radius = Number(SETTINGS.geo_radius_m) || 150;
-          geo.textContent = 'ห่างจากร้าน ' + dist.toLocaleString('th-TH') + ' ม. (อนุญาตไม่เกิน ' + radius + ' ม.)';
+          geoTxt.textContent = dist <= radius
+            ? 'อยู่ในพื้นที่ร้าน (ห่าง ' + dist.toLocaleString('th-TH') + ' ม.)'
+            : 'อยู่นอกพื้นที่ร้าน ห่าง ' + dist.toLocaleString('th-TH') + ' ม. · อนุญาตไม่เกิน ' + radius + ' ม.';
           geo.className = 'att-geo ' + (dist <= radius ? 'in-range' : 'out-range');
           if (dist > radius) throw new Error('อยู่นอกรัศมีร้าน (' + dist.toLocaleString('th-TH') + ' ม.) กดลงเวลาไม่ได้');
 
@@ -2880,20 +2970,22 @@ end $$;
         const panel = document.createElement('div');
         panel.className = 'lot-card';
         panel.innerHTML = `
-          <div class="lot-head"><span>${icon('user', 16)}วันนี้ใครลงเวลาแล้วบ้าง (${ATT.todayAll.length}/${staff.length})</span></div>
-          <div class="table-wrap"><table>
-            <thead><tr><th>พนักงาน</th><th>เข้างาน</th><th>ออกงาน</th><th>สาย</th><th>ชั่วโมงงาน</th></tr></thead>
-            <tbody>${staff.map(u => {
-              const r = ATT.todayAll.find(x => x.user_id === u.user_id);
-              return `<tr>
-                <td data-label="พนักงาน">${esc(userLabel(u))} <span class="st ${roleMeta(u.role).cls}">${esc(roleMeta(u.role).label)}</span></td>
-                <td data-label="เข้างาน">${r && r.clock_in ? hhmm(r.clock_in) : '<span style="color:var(--sub)">ยังไม่มา</span>'}</td>
-                <td data-label="ออกงาน">${r && r.clock_out ? hhmm(r.clock_out) : '-'}</td>
-                <td data-label="สาย">${r && r.late_minutes ? '<span style="color:#b42318">' + r.late_minutes + ' น.</span>' : '-'}</td>
-                <td data-label="ชั่วโมงงาน">${r && r.work_minutes ? minToHM(r.work_minutes) : '-'}</td>
-              </tr>`;
-            }).join('')}</tbody>
-          </table></div>`;
+          <div class="lot-head"><span>${icon('user', 16)}วันนี้ใครลงเวลาแล้วบ้าง</span>
+            <span class="st ${ATT.todayAll.length ? 'st-paid' : 'st-prod'}">มาแล้ว ${ATT.todayAll.length}/${staff.length}</span></div>
+          <div class="att-people">${staff.map(u => {
+            const r = ATT.todayAll.find(x => x.user_id === u.user_id);
+            const state = !r || !r.clock_in ? 'ยังไม่มา' : r.clock_out ? 'ออกงานแล้ว' : 'กำลังทำงาน';
+            const cls = !r || !r.clock_in ? 'off' : r.clock_out ? 'done' : 'on';
+            return `<div class="att-person ${cls}">
+              <div class="ap-main">
+                <div class="ap-name">${esc(userLabel(u))} <span class="st ${roleMeta(u.role).cls}">${esc(roleMeta(u.role).label)}</span></div>
+                <div class="ap-sub">${r && r.clock_in ? 'เข้า ' + hhmm(r.clock_in) + ' · ออก ' + hhmm(r.clock_out)
+                  + (r.late_minutes ? ' · สาย ' + r.late_minutes + ' น.' : '')
+                  + (r.work_minutes ? ' · ' + minToHM(r.work_minutes) : '') : 'ยังไม่ได้ลงเวลาวันนี้'}</div>
+              </div>
+              <span class="ap-state">${state}</span>
+            </div>`;
+          }).join('')}</div>`;
         app.appendChild(panel);
       }
     }
