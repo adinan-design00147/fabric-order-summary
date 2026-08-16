@@ -242,6 +242,8 @@
   .piece-name.active .piece-name-text { display: none; }
   .piece-name.active .piece-name-actions { display: flex; }
   .tag-redo { margin-left: 6px; font-size: 10.5px; }
+  .vendor-tag { display: inline-flex; align-items: center; gap: 4px; margin-left: 6px; font-size: 11px;
+                color: var(--sub); background: var(--soft); border-radius: 999px; padding: 2px 8px; white-space: nowrap; }
   .badge-pair { display: inline-flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
   /* จอคอม: โชว์ปุ่มแก้ไข/งานเสีย/ลบ ไว้ข้างชื่อเลย ไม่ต้องกดชื่อก่อน */
   @media (min-width: 900px) {
@@ -1192,6 +1194,27 @@
     function round4(n) { return Math.round(n * 10000) / 10000; }
     // ประเภทงานที่ส่งผลิตกับร้านอื่น — มีแค่ "ป้ายผ้า" ที่คิดผ้าเป็นหลา
     const PRODUCE_TYPES = ['ป้ายผ้า', 'โฟมบอร์ด', 'สติกเกอร์ A3', 'สติกเกอร์ติดกระจก'];
+
+    // ร้านที่เราส่งงานไปผลิต — เก็บใน shop_info.vendors คั่นด้วย | (พิมพ์ชื่อร้านใหม่แล้วระบบจำให้เอง)
+    const NEW_VENDOR = '__new__';
+    let lastVendor = '';
+
+    function vendorList() {
+      return String(SHOP.vendors || 'UM Sport|เอ็มดีกิจการค้า')
+        .split('|').map(v => v.trim()).filter(Boolean);
+    }
+
+    /** พิมพ์ชื่อร้านใหม่เข้ามา -> เก็บเข้ารายชื่อไว้ใช้ครั้งหน้า */
+    async function rememberVendor(name) {
+      const v = String(name || '').trim();
+      if (!v) return;
+      const list = vendorList();
+      if (list.includes(v)) return;
+      list.push(v);
+      const value = list.join('|');
+      const { error } = await sb.from('shop_info').upsert({ key: 'vendors', value }, { onConflict: 'key' });
+      if (!error) SHOP.vendors = value;
+    }
     const isFabricPiece = (r) => (r.item_type || 'ป้ายผ้า') === 'ป้ายผ้า';
     /** ผ้าที่ใช้ต่อชิ้น — งานที่ไม่ใช่ป้ายผ้าไม่นับผ้า */
     function pieceYard(r, settings) {
@@ -1627,7 +1650,7 @@
       SETTINGS = await loadSettings();
       const [lotsRes, piecesRes, ordersRes, salesRes, stockRes] = await Promise.all([
         sb.from('lots').select('id,name'),
-        sb.from('pieces').select('id,lot_id,width_cm,length_cm,label,price,sell_price,paid,item_type,printed,printed_at,stock_move_id'),
+        sb.from('pieces').select('id,lot_id,width_cm,length_cm,label,price,sell_price,paid,item_type,printed,printed_at,stock_move_id,vendor'),
         sb.from('product_orders').select('id,category,name,customer,quantity,unit_cost,paid,created_at'),
         sb.from('orders').select('id,order_no,customer,customer_id,channel,status,total,paid_amount,due_date,created_at,cover_file_id,phone'),
         sb.from('stock_items').select('id,name,category,unit,total_qty,used_qty,threshold_pct,threshold_qty').eq('active', true),
@@ -2782,7 +2805,7 @@ end $$;
     // ===== เช็กว่ามีเวอร์ชันใหม่ไหม =====
     // เบราว์เซอร์ชอบจำไฟล์เก่าไว้ (cache) ทำให้ไม่เห็นของที่เพิ่งอัปเดต
     // ตัวนี้จะแอบเทียบเวอร์ชันกับไฟล์บนเซิร์ฟเวอร์ แล้วขึ้นแถบให้กดอัปเดต
-    const APP_BUILD = '20260816-2212';
+    const APP_BUILD = '20260816-2230';
 
     let lastUpdateCheck = 0;
 
@@ -6957,7 +6980,7 @@ end $$;
       const [st, lotsRes, piecesRes, wasteRes] = await Promise.all([
         loadSettings(),
         sb.from('lots').select('id,name,lot_date,created_at'),
-        sb.from('pieces').select('id,lot_id,width_cm,length_cm,label,price,paid,item_type,printed,printed_at,stock_move_id,redo_count'),
+        sb.from('pieces').select('id,lot_id,width_cm,length_cm,label,price,paid,item_type,printed,printed_at,stock_move_id,redo_count,vendor'),
         // ดึงทุกแถว (เฉพาะคอลัมน์ที่ใช้) ยอดสรุปจะได้ตรงเสมอ ไม่ตัดที่ 300 แถวแบบเงียบๆ
         sb.from('fabric_waste').select('id,lot_id,piece_id,kind,reason,note,yards,cost,created_at')
           .order('created_at', { ascending: false }),
@@ -7057,6 +7080,7 @@ end $$;
         const card = document.createElement('div');
         card.className = 'lot-card';
         card.dataset.search = (lot.name + ' ' + rows.map(r => r.label || '').join(' ')).toLowerCase();
+        const lotVendors = [...new Set(rows.map(r => r.vendor).filter(Boolean))];
         const nPrinted = rows.filter(r => r.printed).length;
         const nPaid = rows.filter(r => r.paid).length;
 
@@ -7070,7 +7094,8 @@ end $$;
             </td>
             <td class="piece-name" data-label="รายการ">
               <span class="piece-name-text">${esc(r.label || '-')}${isFabricPiece(r) ? '' : ' <span class="st st-prod">' + esc(r.item_type) + '</span>'}
-                ${r.redo_count ? `<span class="st st-cancel tag-redo">ทำใหม่ ${r.redo_count} ครั้ง</span>` : ''}</span>
+                ${r.redo_count ? `<span class="st st-cancel tag-redo">ทำใหม่ ${r.redo_count} ครั้ง</span>` : ''}
+                ${r.vendor ? `<span class="vendor-tag">${icon('factory', 12)}${esc(r.vendor)}</span>` : ''}</span>
               <span class="piece-name-actions">
                 <button class="icon-btn icon-btn-edit edit-piece" data-id="${r.id}" data-label="${esc(r.label || '')}" data-width="${r.width_cm}" data-length="${r.length_cm}" data-type="${esc(r.item_type || 'ป้ายผ้า')}" data-price="${r.price}" aria-label="แก้ไขชิ้นงาน" title="แก้ไข">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
@@ -7102,6 +7127,7 @@ end $$;
             <div class="lp-line">
               <span class="lp-tag ${nPrinted === rows.length ? 'done' : ''}">${icon('printer', 14)}ปริ้นแล้ว ${nPrinted}/${rows.length}</span>
               <span class="lp-tag ${nPaid === rows.length ? 'done' : ''}">${icon('wallet', 14)}จ่ายแล้ว ${nPaid}/${rows.length}</span>
+              ${lotVendors.map(v => `<span class="lp-tag">${icon('factory', 14)}${esc(v)}</span>`).join('')}
             </div>
             <div class="lp-bar"><div style="width:${Math.round(nPrinted / rows.length * 100)}%"></div></div>
           </div>` : ''}
@@ -7316,6 +7342,38 @@ end $$;
         <div class="stat"><div class="num">${paidPieces}</div><div class="lbl">ชิ้นที่จ่ายแล้ว</div></div>
       `;
       paymentEl.appendChild(paySummary);
+
+      // ---- ค้างจ่ายแยกตามร้านผลิต ----
+      const byVendor = {};
+      pieces.forEach(r => {
+        const v = r.vendor || 'ไม่ระบุร้าน';
+        byVendor[v] = byVendor[v] || { unpaid: 0, unpaidN: 0, paid: 0, total: 0, n: 0 };
+        byVendor[v].total += Number(r.price);
+        byVendor[v].n += 1;
+        if (r.paid) byVendor[v].paid += Number(r.price);
+        else { byVendor[v].unpaid += Number(r.price); byVendor[v].unpaidN += 1; }
+      });
+      const vendorRows = Object.entries(byVendor).sort((a, b) => b[1].unpaid - a[1].unpaid);
+      if (vendorRows.length) {
+        const vHead = document.createElement('h2');
+        vHead.className = 'section-title';
+        vHead.innerHTML = icon('factory', 17) + 'ค้างจ่ายแยกตามร้านผลิต';
+        paymentEl.appendChild(vHead);
+
+        const vCard = document.createElement('div');
+        vCard.className = 'lot-card';
+        vCard.innerHTML = `<div class="att-people">${vendorRows.map(([name, v]) => `
+          <div class="att-person ${v.unpaid > 0 ? 'on' : 'done'}">
+            <div class="ap-main">
+              <div class="ap-name">${esc(name)}</div>
+              <div class="ap-sub">${v.n} ชิ้น · ยอดรวม ${fmtBaht(round2(v.total))} บาท · จ่ายแล้ว ${fmtBaht(round2(v.paid))} บาท</div>
+            </div>
+            <span class="ap-state" style="color:${v.unpaid > 0 ? '#b42318' : '#067647'}">
+              ${v.unpaid > 0 ? 'ค้าง ' + fmtBaht(round2(v.unpaid)) + ' (' + v.unpaidN + ' ชิ้น)' : 'จ่ายครบแล้ว'}
+            </span>
+          </div>`).join('')}</div>`;
+        paymentEl.appendChild(vCard);
+      }
 
       // ค้างชำระรายเดือน
       const payMonthHeading = document.createElement('h2');
@@ -7739,6 +7797,18 @@ end $$;
             <label for="pieceQty">จำนวน</label>
             <input id="pieceQty" type="number" min="1" value="1" inputmode="numeric">
           </div>
+          <div class="field">
+            <label for="pieceVendor">ร้านที่ส่งผลิต</label>
+            <select id="pieceVendor">
+              <option value="">— ยังไม่ระบุ —</option>
+              ${vendorList().map(v => `<option ${v === lastVendor ? 'selected' : ''}>${esc(v)}</option>`).join('')}
+              <option value="${NEW_VENDOR}">+ พิมพ์ชื่อร้านอื่น...</option>
+            </select>
+          </div>
+          <div class="field" id="pieceVendorNewField" style="display:none">
+            <label for="pieceVendorNew">ชื่อร้านใหม่</label>
+            <input id="pieceVendorNew" placeholder="พิมพ์ชื่อร้าน แล้วระบบจะจำไว้ให้">
+          </div>
         </div>
         <button id="addPieceBtn" class="btn secondary block">+ เพิ่มชิ้นงาน</button>
         <div class="msg" id="pieceMsg"></div>
@@ -7758,6 +7828,14 @@ end $$;
       }
       typeSel.addEventListener('change', syncPieceType);
       syncPieceType();
+      // เลือก "พิมพ์ชื่อร้านอื่น" แล้วค่อยโชว์ช่องพิมพ์
+      const vendorSel = piecePanel.querySelector('#pieceVendor');
+      const vendorNewField = piecePanel.querySelector('#pieceVendorNewField');
+      vendorSel.addEventListener('change', () => {
+        vendorNewField.style.display = vendorSel.value === NEW_VENDOR ? '' : 'none';
+        if (vendorSel.value === NEW_VENDOR) piecePanel.querySelector('#pieceVendorNew').focus();
+      });
+
       piecePanel.querySelector('#addPieceBtn').addEventListener('click', async () => {
         const lotId = piecePanel.querySelector('#pieceLot').value;
         const label = piecePanel.querySelector('#pieceLabel').value.trim();
@@ -7773,12 +7851,22 @@ end $$;
         if (!lotId) { msg.textContent = 'ยังไม่มีล็อต กรุณาเพิ่มล็อตก่อน'; msg.className = 'msg error'; return; }
         if (isFabric && (!width || !length)) { msg.textContent = 'กรอกกว้างและยาวให้ครบ'; msg.className = 'msg error'; return; }
         if (!isFabric && !(cost > 0)) { msg.textContent = 'กรอกต้นทุน/ชิ้นก่อน'; msg.className = 'msg error'; return; }
+        // ร้านที่ส่งผลิต — เลือกจากลิสต์ หรือพิมพ์ชื่อใหม่
+        let vendor = vendorSel.value;
+        if (vendor === NEW_VENDOR) {
+          vendor = piecePanel.querySelector('#pieceVendorNew').value.trim();
+          if (!vendor) { msg.textContent = 'พิมพ์ชื่อร้านก่อน หรือเลือกจากลิสต์'; msg.className = 'msg error'; return; }
+          await rememberVendor(vendor);
+        }
+
         btn.disabled = true; btn.textContent = 'กำลังเพิ่ม...';
         lastSelectedLotId = lotId;
+        lastVendor = vendor || '';
         const price = isFabric ? Math.round(width * length * SETTINGS.price_rate) : Math.round(cost);
         const rowsToInsert = Array.from({ length: qty }, () => ({
           lot_id: lotId, width_cm: width || 0, length_cm: length || 0,
           label: label || null, price, paid: false, item_type: itemType,
+          vendor: vendor || null,
         }));
         const { error } = await sb.from('pieces').insert(rowsToInsert);
         if (error) {
