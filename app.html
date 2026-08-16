@@ -1244,7 +1244,7 @@
       return { month: parseInt(m[2]), yy };
     }
 
-    let SETTINGS = null;
+    let SETTINGS = {};   // ห้ามเป็น null — หลายหน้าอ่านค่าตรงๆ เช่น vatOn()
     let lastSelectedLotId = null;
     let activeTab = 'daily';
     const HOME_VIEW = 'orders';        // หน้าแรกหลังเข้าระบบ = My Job
@@ -1567,7 +1567,11 @@
     async function boot() {
       syncHash();
       destroyCharts();
-      await fetchShopInfo();
+      // โหลดค่าร้าน + ค่าตั้งต้นให้พร้อมก่อนเข้าหน้าไหนก็ตาม (ทั้งคู่มีแคช ยิงจริงครั้งเดียว)
+      await Promise.all([
+        fetchShopInfo(),
+        loadSettings().then(v => { SETTINGS = v; }).catch(() => {}),
+      ]);
       // การเลือกชิ้นงานใช้ได้เฉพาะหน้าป้ายผ้า ออกจากหน้านี้ให้ล้างทิ้ง
       if (currentView !== 'fabric' && selectedPieces.size) selectedPieces.clear();
       renderSelBar();
@@ -2778,7 +2782,7 @@ end $$;
     // ===== เช็กว่ามีเวอร์ชันใหม่ไหม =====
     // เบราว์เซอร์ชอบจำไฟล์เก่าไว้ (cache) ทำให้ไม่เห็นของที่เพิ่งอัปเดต
     // ตัวนี้จะแอบเทียบเวอร์ชันกับไฟล์บนเซิร์ฟเวอร์ แล้วขึ้นแถบให้กดอัปเดต
-    const APP_BUILD = '20260816-2207';
+    const APP_BUILD = '20260816-2212';
 
     let lastUpdateCheck = 0;
 
@@ -2824,10 +2828,14 @@ end $$;
     // ===== ภาษี =====
     // ตอนนี้ร้านยังไม่จด VAT -> vat_enabled = 0 ทุกอย่างทำงานเหมือนเดิมทุกบาท
     // วันจดจริงค่อยเปิดสวิตช์ในหน้า "สินค้า & ราคา" ระบบจะแยกยอดและเปลี่ยนชื่อเอกสารให้เอง
-    const vatOn = () => Number(SETTINGS.vat_enabled) === 1;
-    const vatRate = () => (Number(SETTINGS.vat_rate) || 7) / 100;
-    const whtRate = () => (Number(SETTINGS.wht_rate) || 3) / 100;
-    const priceIncludesVat = () => Number(SETTINGS.price_includes_vat) !== 0;
+    const cfg = (k, def) => {
+      const v = SETTINGS ? SETTINGS[k] : undefined;
+      return (v === undefined || v === null || Number.isNaN(Number(v))) ? def : Number(v);
+    };
+    const vatOn = () => cfg('vat_enabled', 0) === 1;
+    const vatRate = () => cfg('vat_rate', 7) / 100;
+    const whtRate = () => cfg('wht_rate', 3) / 100;
+    const priceIncludesVat = () => cfg('price_includes_vat', 1) !== 0;
 
     /** แยกยอดรวมเป็น ก่อนภาษี / VAT / รวมสุทธิ — ปิดสวิตช์อยู่จะคืน VAT = 0 */
     function splitVat(total) {
