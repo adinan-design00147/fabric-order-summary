@@ -350,8 +350,19 @@
   .cover-btn.is-cover { background: var(--accent); }
 
   /* ===== My Job — การ์ดใบงาน ===== */
-  .job-hero { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3);
-              background: #1f2430; color: #fff; border-radius: 16px; padding: 16px 18px; margin-bottom: var(--space-3); }
+  .job-hero { background: #1f2430; color: #fff; border-radius: 16px; padding: 16px 18px; margin-bottom: var(--space-3); }
+  .job-hero-top { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); }
+  .hero-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 14px; }
+  .hero-stat { background: rgba(255,255,255,.10); border: none; border-radius: 12px; padding: 10px 8px;
+               color: #fff; font-family: inherit; cursor: pointer; text-align: center; }
+  .hero-stat:hover { background: rgba(255,255,255,.18); }
+  .hs-num { display: block; font-size: 19px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .hs-num.warn { color: #ffb4a8; }
+  .hs-lbl { display: block; font-size: 11.5px; opacity: .8; margin-top: 2px; }
+  .quick-bar { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3);
+               background: var(--accent-soft); color: var(--accent); border-radius: var(--radius);
+               padding: 10px 14px; margin-bottom: var(--space-3); font-size: 13px; font-weight: 600; }
+  .quick-bar span { display: inline-flex; align-items: center; gap: 6px; }
   html[data-theme="dark"] .job-hero { background: #11141c; border: 1px solid var(--border); }
   .job-hero-left { display: flex; align-items: center; gap: 12px; min-width: 0; }
   .job-hero-ico { display: inline-flex; align-items: center; justify-content: center; width: 40px; height: 40px;
@@ -1290,6 +1301,7 @@
 
     let viewingOrderId = null;
     let orderFilter = 'all';
+    let jobQuick = null;      // ตัวกรองด่วนจากแถบทักทาย: today | due | unpaid
 
     // ===== URL routing (ทำให้กดค้าง/คลิกขวา → เปิดในแท็บใหม่ได้ และปุ่ม back ใช้งานได้) =====
     const VALID_VIEWS = ['dashboard', 'calendar', 'orders', 'products', 'fabric', 'stock', 'stockreport', 'customers', 'receipts', 'attendance', 'schedule', 'timesheet', 'users', 'trash', 'health', 'profile'];
@@ -2664,7 +2676,7 @@ end $$;
     // ===== เช็กว่ามีเวอร์ชันใหม่ไหม =====
     // เบราว์เซอร์ชอบจำไฟล์เก่าไว้ (cache) ทำให้ไม่เห็นของที่เพิ่งอัปเดต
     // ตัวนี้จะแอบเทียบเวอร์ชันกับไฟล์บนเซิร์ฟเวอร์ แล้วขึ้นแถบให้กดอัปเดต
-    const APP_BUILD = '20260816-1703';
+    const APP_BUILD = '20260816-1712';
 
     async function checkForUpdate() {
       try {
@@ -4438,21 +4450,50 @@ end $$;
       const openList = list.filter(o => o.status !== 'paid' && o.status !== 'cancelled');
       const unpaidTotal = list.reduce((s, o) => s + Math.max(0, Number(o.total) - Number(o.paid_amount || 0)), 0);
 
-      // ---- แถบหัวเรื่องสีเข้ม + ปุ่มสร้างใบงาน ----
+      // ---- แถบทักทาย + ตัวเลขที่ต้องรู้วันนี้ ----
+      const h = new Date().getHours();
+      const greet = h < 12 ? 'สวัสดีตอนเช้า' : h < 17 ? 'สวัสดีตอนบ่าย' : 'สวัสดีตอนเย็น';
+      const myName = MY_NAME || (prettyLogin(ME ? ME.email : '') || '').split('@')[0] || '';
+      const today0 = new Date(new Date().toDateString());
+
+      const isSameDay = (d) => d && new Date(d).toDateString() === today0.toDateString();
+      const todayJobs = list.filter(o => isSameDay(o.created_at) || isSameDay(o.due_date));
+      const dueSoon = list.filter(o => {
+        if (!o.due_date || o.status === 'paid' || o.status === 'cancelled') return false;
+        const diff = (new Date(o.due_date) - today0) / 86400000;
+        return diff >= 0 && diff <= 3;
+      });
+
       const hero = document.createElement('div');
       hero.className = 'job-hero no-print';
       hero.innerHTML = `
-        <div class="job-hero-left">
-          <span class="job-hero-ico">${icon('clipboard', 20)}</span>
-          <div>
-            <div class="job-hero-title">จัดการใบงาน</div>
-            <div class="job-hero-sub">${list.length} รายการ · ค้างเก็บ ${fmtBaht(round2(unpaidTotal))} บาท</div>
+        <div class="job-hero-top">
+          <div class="job-hero-left">
+            <div>
+              <div class="job-hero-title">${esc(greet)}${myName ? ' ' + esc(myName) : ''}</div>
+              <div class="job-hero-sub">${today0.toLocaleDateString('th-TH', { weekday: 'long', day: 'numeric', month: 'long' })} ${today0.getFullYear() + 543}</div>
+            </div>
           </div>
+          <button class="btn job-hero-btn" id="newOrder">${icon('plus', 16)}สร้างใบงาน</button>
         </div>
-        <button class="btn job-hero-btn" id="newOrder">${icon('plus', 16)}สร้างใบงาน</button>
+        <div class="hero-stats">
+          <button class="hero-stat" data-jump="today">
+            <span class="hs-num">${todayJobs.length}</span><span class="hs-lbl">งานวันนี้</span></button>
+          <button class="hero-stat" data-jump="due">
+            <span class="hs-num ${dueSoon.length ? 'warn' : ''}">${dueSoon.length}</span><span class="hs-lbl">ส่งใน 3 วัน</span></button>
+          <button class="hero-stat" data-jump="unpaid">
+            <span class="hs-num ${unpaidTotal > 0 ? 'warn' : ''}">${fmtBaht(round2(unpaidTotal))}</span><span class="hs-lbl">ค้างเก็บ (บาท)</span></button>
+        </div>
       `;
       app.appendChild(hero);
       hero.querySelector('#newOrder').addEventListener('click', () => openOrderForm());
+
+      // กดตัวเลขแล้วกรองรายการให้เลย
+      hero.querySelectorAll('.hero-stat').forEach(b => b.addEventListener('click', () => {
+        jobQuick = jobQuick === b.dataset.jump ? null : b.dataset.jump;
+        orderFilter = 'all';
+        renderOrders(list);
+      }));
 
       // ---- ค้นหา + ปุ่มตัวกรอง ----
       const searchRow = document.createElement('div');
@@ -4467,6 +4508,18 @@ end $$;
       `;
       app.appendChild(searchRow);
 
+      // แถบบอกว่ากำลังกรองด่วนอยู่ + ปุ่มล้าง
+      if (jobQuick) {
+        const qb = document.createElement('div');
+        qb.className = 'quick-bar no-print';
+        const qLabel = jobQuick === 'today' ? 'เฉพาะงานวันนี้'
+          : jobQuick === 'due' ? 'เฉพาะงานที่ต้องส่งใน 3 วัน' : 'เฉพาะงานที่ยังค้างเก็บเงิน';
+        qb.innerHTML = `<span>${icon('layers', 15)}${qLabel}</span>
+          <button class="btn secondary btn-sm" id="qClear">${icon('close', 14)}ล้างตัวกรอง</button>`;
+        app.appendChild(qb);
+        qb.querySelector('#qClear').addEventListener('click', () => { jobQuick = null; renderOrders(list); });
+      }
+
       const chips = document.createElement('div');
       chips.className = 'chips no-print';
       chips.hidden = window.innerWidth < 900 && orderFilter === 'all';
@@ -4478,6 +4531,7 @@ end $$;
       app.appendChild(chips);
       chips.querySelectorAll('.chip').forEach(c => c.addEventListener('click', () => {
         orderFilter = c.dataset.f;
+        jobQuick = null;
         renderOrders(list);
       }));
       searchRow.querySelector('#jobFilter').addEventListener('click', () => { chips.hidden = !chips.hidden; });
@@ -4487,11 +4541,18 @@ end $$;
       countMsg.style.margin = '-2px 0 10px';
       app.appendChild(countMsg);
 
-      const shown = orderFilter === 'all' ? list : list.filter(o => o.status === orderFilter);
+      let shown = orderFilter === 'all' ? list : list.filter(o => o.status === orderFilter);
+      // ตัวกรองด่วนจากแถบทักทาย (กดตัวเลขบนหัวหน้า)
+      if (jobQuick === 'today') shown = shown.filter(o => todayJobs.includes(o));
+      else if (jobQuick === 'due') shown = shown.filter(o => dueSoon.includes(o));
+      else if (jobQuick === 'unpaid') shown = shown.filter(o =>
+        o.status !== 'cancelled' && Math.max(0, Number(o.total) - Number(o.paid_amount || 0)) > 0);
+
       if (!shown.length) {
         const e = document.createElement('div');
         e.className = 'loading';
-        e.textContent = list.length ? 'ไม่มีใบงานในสถานะนี้' : 'ยังไม่มีใบงาน — กด "สร้างใบงาน" เพื่อเริ่ม';
+        e.textContent = jobQuick ? 'ไม่มีใบงานที่ตรงกับตัวกรองนี้'
+          : list.length ? 'ไม่มีใบงานในสถานะนี้' : 'ยังไม่มีใบงาน — กด "สร้างใบงาน" เพื่อเริ่ม';
         app.appendChild(e);
         return;
       }
