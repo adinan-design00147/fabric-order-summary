@@ -659,6 +659,10 @@
     .item-row .line-sum { grid-column: 1 / -1; text-align: left; padding-bottom: 0; }
   }
 
+  .tax-block { font-size: 11.5px; color: #555; line-height: 1.6; margin-top: 6px; }
+  .vat-line { display: flex; justify-content: space-between; font-size: 13px; padding: 3px 0; }
+  .vat-line.total { font-weight: 700; border-top: 1px solid var(--border); margin-top: 4px; padding-top: 6px; }
+
   /* ===== แถวรายการแบบหน้าตั้งค่า (ใช้ซ้ำได้ทั้งระบบ) ===== */
   .list-group { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius);
                 overflow: hidden; margin-bottom: var(--space-4); }
@@ -1693,6 +1697,34 @@
           <span class="alert-go">${icon('chevron', 18)}</span>
         </a>`).join('');
         app.appendChild(alertGrid);
+      }
+
+      // ===== ตัวนับรายได้ 12 เดือน เทียบเกณฑ์ที่ต้องจด VAT =====
+      // (โชว์เฉพาะตอนยังไม่ได้จด — จดแล้วไม่ต้องเตือนอีก)
+      if (!vatOn()) {
+        const yearAgo = new Date();
+        yearAgo.setFullYear(yearAgo.getFullYear() - 1);
+        const rev12 = sales
+          .filter(s2 => s2.status !== 'cancelled' && new Date(s2.created_at) >= yearAgo)
+          .reduce((a, s2) => a + Number(s2.total), 0);
+        const threshold = Number(SETTINGS.vat_threshold) || 1800000;
+        const pctVat = Math.min(100, (rev12 / threshold) * 100);
+        const near = pctVat >= 80;
+
+        const vatCard = document.createElement('div');
+        vatCard.className = 'lot-card';
+        vatCard.style.marginBottom = 'var(--space-5)';
+        vatCard.innerHTML = `
+          <div class="lot-head"><span>${icon('price', 16)}รายได้ 12 เดือนล่าสุด</span>
+            <span class="st ${near ? 'st-cancel' : 'st-paid'}">${pctVat.toFixed(1)}% ของเกณฑ์จด VAT</span></div>
+          <div style="padding:var(--space-4)">
+            <div style="font-size:22px;font-weight:700">${fmtBaht(round2(rev12))} <span style="font-size:13px;font-weight:500;color:var(--sub)">/ ${fmtBaht(threshold)} บาท</span></div>
+            <div class="lp-bar" style="margin-top:10px"><div style="width:${pctVat}%;background:${near ? '#b42318' : '#22a06b'}"></div></div>
+            <div class="hint">${near
+              ? 'ใกล้ถึงเกณฑ์แล้ว — เกิน ' + fmtBaht(threshold) + ' บาท/ปี ต้องจดทะเบียน VAT ภายใน 30 วัน ปรึกษาผู้ทำบัญชีไว้ล่วงหน้า'
+              : 'ยังไม่ถึงเกณฑ์ที่ต้องจดทะเบียน VAT — ระบบจะเตือนเมื่อถึง 80%'}</div>
+          </div>`;
+        app.appendChild(vatCard);
       }
 
       // ===== ฝั่งขาย (ออเดอร์) =====
@@ -2746,7 +2778,7 @@ end $$;
     // ===== เช็กว่ามีเวอร์ชันใหม่ไหม =====
     // เบราว์เซอร์ชอบจำไฟล์เก่าไว้ (cache) ทำให้ไม่เห็นของที่เพิ่งอัปเดต
     // ตัวนี้จะแอบเทียบเวอร์ชันกับไฟล์บนเซิร์ฟเวอร์ แล้วขึ้นแถบให้กดอัปเดต
-    const APP_BUILD = '20260816-2149';
+    const APP_BUILD = '20260816-2205';
 
     let lastUpdateCheck = 0;
 
@@ -2787,6 +2819,39 @@ end $$;
         u.searchParams.set('v', Date.now());
         location.replace(u.toString());
       });
+    }
+
+    // ===== ภาษี =====
+    // ตอนนี้ร้านยังไม่จด VAT -> vat_enabled = 0 ทุกอย่างทำงานเหมือนเดิมทุกบาท
+    // วันจดจริงค่อยเปิดสวิตช์ในหน้า "สินค้า & ราคา" ระบบจะแยกยอดและเปลี่ยนชื่อเอกสารให้เอง
+    const vatOn = () => Number(SETTINGS.vat_enabled) === 1;
+    const vatRate = () => (Number(SETTINGS.vat_rate) || 7) / 100;
+    const whtRate = () => (Number(SETTINGS.wht_rate) || 3) / 100;
+    const priceIncludesVat = () => Number(SETTINGS.price_includes_vat) !== 0;
+
+    /** แยกยอดรวมเป็น ก่อนภาษี / VAT / รวมสุทธิ — ปิดสวิตช์อยู่จะคืน VAT = 0 */
+    function splitVat(total) {
+      const t = round2(Number(total) || 0);
+      if (!vatOn()) return { subtotal: t, vat: 0, total: t };
+      if (priceIncludesVat()) {
+        const sub = round2(t / (1 + vatRate()));
+        return { subtotal: sub, vat: round2(t - sub), total: t };
+      }
+      const vat = round2(t * vatRate());
+      return { subtotal: t, vat, total: round2(t + vat) };
+    }
+
+    /** ชื่อเอกสารเปลี่ยนตามสถานะการจด VAT (ยังไม่จด = ห้ามเขียนว่าใบกำกับภาษี) */
+    const receiptTitle = () => vatOn() ? 'ใบเสร็จรับเงิน / ใบกำกับภาษี' : 'ใบเสร็จรับเงิน';
+
+    /** บล็อกข้อมูลผู้เสียภาษีของร้าน (โผล่เฉพาะตอนจด VAT แล้วและกรอกข้อมูลครบ) */
+    function taxIdBlockHTML() {
+      if (!vatOn() || !SHOP.tax_id) return '';
+      return `<div class="tax-block">
+        <div>${esc(SHOP.legal_name || 'Haifa Design')}</div>
+        ${SHOP.tax_address ? `<div>${esc(SHOP.tax_address)}</div>` : ''}
+        <div>เลขประจำตัวผู้เสียภาษี ${esc(SHOP.tax_id)}${SHOP.branch ? ' · ' + esc(SHOP.branch) : ''}</div>
+      </div>`;
     }
 
     // ===== ข้อมูลร้าน / ช่องทางชำระเงิน =====
@@ -3029,6 +3094,69 @@ end $$;
         if (error) { msg.textContent = 'บันทึกไม่สำเร็จ: ' + error.message; msg.className = 'msg error'; return; }
         rows.forEach(r => { SHOP[r.key] = r.value; });
         msg.textContent = 'บันทึกแล้ว'; msg.className = 'msg ok';
+      });
+
+      // ---- ภาษี (เตรียมไว้ ปิดสวิตช์อยู่จนกว่าจะจด VAT) ----
+      const taxPanel = document.createElement('div');
+      taxPanel.className = 'panel admin-only';
+      taxPanel.innerHTML = `
+        <h2>${icon('price', 17)}ภาษี</h2>
+        <label class="threshold-row" style="cursor:pointer;margin-top:0">
+          <input type="checkbox" id="tVat" ${vatOn() ? 'checked' : ''}>
+          <span><b>ร้านจดทะเบียน VAT แล้ว</b> — เปิดแล้วใบเสร็จจะกลายเป็น "ใบเสร็จรับเงิน / ใบกำกับภาษี" และแยกยอดภาษีให้</span>
+        </label>
+        <div class="hint" style="margin-bottom:12px">ยังไม่ได้จดอย่าเปิด — ออกใบกำกับภาษีโดยไม่ได้จดทะเบียนมีความผิดตามกฎหมาย</div>
+        <div class="form-grid">
+          <div class="field"><label for="tLegal">ชื่อผู้ประกอบการ (ตามที่จด)</label><input id="tLegal" value="${esc(SHOP.legal_name || '')}" placeholder="เช่น ห้างหุ้นส่วนจำกัด ..."></div>
+          <div class="field"><label for="tTaxId">เลขประจำตัวผู้เสียภาษี</label><input id="tTaxId" value="${esc(SHOP.tax_id || '')}" placeholder="13 หลัก" inputmode="numeric"></div>
+          <div class="field"><label for="tBranch">สาขา</label><input id="tBranch" value="${esc(SHOP.branch || 'สำนักงานใหญ่')}"></div>
+          <div class="field"><label for="tAddr">ที่อยู่ตามที่จดทะเบียน</label><input id="tAddr" value="${esc(SHOP.tax_address || '')}" placeholder="ที่อยู่ที่ใช้ออกเอกสาร"></div>
+          <div class="field"><label for="tRate">อัตรา VAT (%)</label><input id="tRate" type="number" min="0" step="0.5" value="${Number(SETTINGS.vat_rate) || 7}"></div>
+          <div class="field"><label for="tWht">อัตราหัก ณ ที่จ่าย (%)</label><input id="tWht" type="number" min="0" step="0.5" value="${Number(SETTINGS.wht_rate) || 3}"></div>
+          <div class="field"><label for="tInc">ราคาที่ตั้งไว้</label>
+            <select id="tInc">
+              <option value="1" ${priceIncludesVat() ? 'selected' : ''}>รวม VAT แล้ว</option>
+              <option value="0" ${priceIncludesVat() ? '' : 'selected'}>ยังไม่รวม VAT</option>
+            </select></div>
+        </div>
+        <button id="tSave" class="btn secondary block">${icon('check', 15)}บันทึกข้อมูลภาษี</button>
+        <div class="msg" id="tMsg"></div>
+        <div class="hint">ต้องจด VAT เมื่อรายได้เกิน ${fmtBaht(Number(SETTINGS.vat_threshold) || 1800000)} บาท/ปี (ดูตัวนับที่หน้าแดชบอร์ด) · ตัวเลขทั้งหมดควรยืนยันกับผู้ทำบัญชีอีกครั้ง</div>
+      `;
+      app.appendChild(taxPanel);
+
+      taxPanel.querySelector('#tSave').addEventListener('click', async () => {
+        const msg = taxPanel.querySelector('#tMsg');
+        const on = taxPanel.querySelector('#tVat').checked;
+        const taxId = taxPanel.querySelector('#tTaxId').value.trim();
+        if (on && taxId.replace(/\D/g, '').length !== 13) {
+          msg.textContent = 'ถ้าเปิด VAT ต้องใส่เลขประจำตัวผู้เสียภาษีให้ครบ 13 หลักก่อน';
+          msg.className = 'msg error'; return;
+        }
+        const shopRows = [
+          { key: 'legal_name', value: taxPanel.querySelector('#tLegal').value.trim() },
+          { key: 'tax_id', value: taxId },
+          { key: 'branch', value: taxPanel.querySelector('#tBranch').value.trim() },
+          { key: 'tax_address', value: taxPanel.querySelector('#tAddr').value.trim() },
+        ];
+        const setRows = [
+          { key: 'vat_enabled', value: on ? '1' : '0' },
+          { key: 'vat_rate', value: String(parseFloat(taxPanel.querySelector('#tRate').value) || 7) },
+          { key: 'wht_rate', value: String(parseFloat(taxPanel.querySelector('#tWht').value) || 3) },
+          { key: 'price_includes_vat', value: taxPanel.querySelector('#tInc').value },
+        ];
+        const [r1, r2] = await Promise.all([
+          sb.from('shop_info').upsert(shopRows, { onConflict: 'key' }),
+          sb.from('settings').upsert(setRows, { onConflict: 'key' }),
+        ]);
+        if (r1.error || r2.error) {
+          msg.textContent = 'บันทึกไม่สำเร็จ: ' + ((r1.error || r2.error).message);
+          msg.className = 'msg error'; return;
+        }
+        shopRows.forEach(r => { SHOP[r.key] = r.value; });
+        SETTINGS = await loadSettings(true);
+        msg.textContent = on ? 'บันทึกแล้ว — เปิดโหมด VAT อยู่' : 'บันทึกแล้ว — ยังปิดโหมด VAT';
+        msg.className = 'msg ok';
       });
 
       app.querySelectorAll('.del-product').forEach(b => b.addEventListener('click', async () => {
@@ -5378,6 +5506,15 @@ end $$;
             <select id="payMethod">${PAY_METHODS.map(m => `<option ${o.payment_method === m ? 'selected' : ''}>${esc(m)}</option>`).join('')}</select>
           </div>
           <div class="field"><label for="payNote">หมายเหตุ</label><input id="payNote" placeholder="เช่น มัดจำ"></div>
+          <div class="field">
+            <label for="payWht">ถูกหัก ณ ที่จ่าย (บาท)</label>
+            <input id="payWht" type="number" min="0" step="any" value="0" inputmode="decimal">
+          </div>
+        </div>
+        <div class="hint" style="margin:-6px 0 10px">
+          ลูกค้าที่เป็นบริษัทมักหักภาษี ณ ที่จ่าย ${Math.round(whtRate() * 100)}% ก่อนโอน —
+          ใส่ยอดที่ถูกหักไว้ ระบบจะถือว่าออเดอร์นี้เก็บครบแล้ว
+          <button class="btn secondary btn-sm" id="calcWht" style="margin-left:6px">คิด ${Math.round(whtRate() * 100)}% ให้</button>
         </div>
         <button class="btn secondary block" id="addPay">${icon('plus', 15)}บันทึกรับเงิน</button>
         <div class="msg" id="payMsg"></div>` : ''}
@@ -5391,6 +5528,14 @@ end $$;
         return sum;
       }
 
+      // ปุ่มคิดยอดหัก ณ ที่จ่ายให้อัตโนมัติจากยอดคงเหลือ
+      payPanel.querySelector('#calcWht')?.addEventListener('click', () => {
+        const base = Number(balance) || 0;
+        const wht = round2(base * whtRate());
+        payPanel.querySelector('#payWht').value = wht;
+        payPanel.querySelector('#payAmt').value = round2(base - wht);
+      });
+
       payPanel.querySelector('#addPay')?.addEventListener('click', async () => {
         const amt = parseFloat(payPanel.querySelector('#payAmt').value);
         const msg = payPanel.querySelector('#payMsg');
@@ -5398,8 +5543,9 @@ end $$;
         if (!amt || amt <= 0) { msg.textContent = 'ใส่จำนวนเงินก่อน'; msg.className = 'msg error'; return; }
         const btn = payPanel.querySelector('#addPay');
         btn.disabled = true; btn.textContent = 'กำลังบันทึก...';
+        const wht = parseFloat(payPanel.querySelector('#payWht').value) || 0;
         const { error } = await sb.from('order_payments').insert({
-          order_id: o.id, amount: amt,
+          order_id: o.id, amount: amt, wht_amount: wht,
           method: payPanel.querySelector('#payMethod').value,
           note: payPanel.querySelector('#payNote').value.trim() || null,
         });
@@ -5774,7 +5920,8 @@ end $$;
         <div class="receipt-head">
           <div>
             <div class="receipt-shop">Haifa Design</div>
-            <div class="receipt-shop-sub">ใบสรุปยอด</div>
+            <div class="receipt-shop-sub">${esc(receiptTitle())}</div>
+            ${taxIdBlockHTML()}
           </div>
           <div class="receipt-meta">
             <div class="r-no">${esc(rc.receipt_no)}</div>
@@ -5794,7 +5941,15 @@ end $$;
             </tr>`).join('')}
           </tbody>
         </table>
-        <div class="receipt-total"><span>รวมทั้งสิ้น</span><span>${fmtBaht(round2(rc.total))} บาท</span></div>
+        ${(() => {
+          const v = splitVat(rc.total);
+          if (!v.vat) return `<div class="receipt-total"><span>รวมทั้งสิ้น</span><span>${fmtBaht(round2(rc.total))} บาท</span></div>`;
+          return `<div style="margin-top:10px">
+            <div class="vat-line"><span>มูลค่าก่อนภาษี</span><span>${fmtBaht(v.subtotal)} บาท</span></div>
+            <div class="vat-line"><span>ภาษีมูลค่าเพิ่ม ${Math.round(vatRate() * 100)}%</span><span>${fmtBaht(v.vat)} บาท</span></div>
+            <div class="vat-line total"><span>รวมทั้งสิ้น</span><span>${fmtBaht(v.total)} บาท</span></div>
+          </div>`;
+        })()}
         ${rc.note ? `<div class="receipt-note">หมายเหตุ: ${esc(rc.note)}</div>` : ''}
         ${rc.order_id ? bankBlockHTML() : ''}
         <div class="receipt-foot">ออกโดยระบบจัดการออเดอร์ Haifa Design</div>
@@ -6203,7 +6358,7 @@ end $$;
       inactive:  { label: 'ไม่เคลื่อนไหว', cls: 'st-prod' },
       blacklist: { label: 'บัญชีดำ', cls: 'st-cancel' },
     };
-    const CUSTOMER_COLS = 'id,code,name,shop_name,phone,phone2,line_id,facebook,instagram,email,' +
+    const CUSTOMER_COLS = 'id,code,name,shop_name,phone,phone2,line_id,facebook,instagram,email,,tax_id,branch' +
       'address,province,postcode,default_size,fav_color,fabric_type,team_name,design_ref,' +
       'customer_type,status,marketing_consent,note,first_order_at,created_at';
     let CUSTOMERS = [];
@@ -6248,6 +6403,10 @@ end $$;
           <div class="field"><label for="cFb">Facebook</label><input id="cFb" value="${v('facebook')}"></div>
           <div class="field"><label for="cIg">Instagram</label><input id="cIg" value="${v('instagram')}"></div>
           <div class="field"><label for="cEmail">อีเมล</label><input id="cEmail" type="email" value="${v('email')}"></div>
+          <div class="field"><label for="cTaxId">เลขประจำตัวผู้เสียภาษี</label>
+            <input id="cTaxId" value="${v('tax_id')}" placeholder="ใส่เมื่อลูกค้าขอใบกำกับภาษี" inputmode="numeric"></div>
+          <div class="field"><label for="cBranch">สาขา</label>
+            <input id="cBranch" value="${v('branch')}" placeholder="เช่น สำนักงานใหญ่"></div>
         </div>
 
         <h2 style="margin-top:var(--space-5)">${icon('truck', 17)}ที่อยู่จัดส่ง</h2>
@@ -6305,6 +6464,7 @@ end $$;
           phone: g('#cPhone') || null, phone2: g('#cPhone2') || null,
           line_id: g('#cLine') || null, facebook: g('#cFb') || null, instagram: g('#cIg') || null,
           email: g('#cEmail') || null,
+          tax_id: g('#cTaxId') || null, branch: g('#cBranch') || null,
           address: g('#cAddr') || null, province: g('#cProv') || null, postcode: g('#cPost') || null,
           default_size: g('#cSize') || null, fav_color: g('#cColor') || null,
           fabric_type: g('#cFabric') || null, team_name: g('#cTeam') || null, design_ref: g('#cDesign') || null,
