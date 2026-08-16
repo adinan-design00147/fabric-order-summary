@@ -238,9 +238,29 @@
 
   .piece-name { cursor: pointer; }
   .piece-name:hover .piece-name-text { color: var(--accent); }
-  .piece-name-actions { display: none; gap: var(--space-2); }
+  .piece-name-actions { display: none; gap: 6px; }
   .piece-name.active .piece-name-text { display: none; }
   .piece-name.active .piece-name-actions { display: flex; }
+  .tag-redo { margin-left: 6px; font-size: 10.5px; }
+  .badge-pair { display: inline-flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+  /* จอคอม: โชว์ปุ่มแก้ไข/งานเสีย/ลบ ไว้ข้างชื่อเลย ไม่ต้องกดชื่อก่อน */
+  @media (min-width: 900px) {
+    .piece-name { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); cursor: default; }
+    .piece-name .piece-name-text { display: inline !important; }
+    .piece-name .piece-name-actions { display: flex !important; opacity: .25; transition: opacity .15s ease; }
+    tr:hover .piece-name .piece-name-actions { opacity: 1; }
+    .piece-name .icon-btn { width: 34px; height: 34px; }
+  }
+  /* ความคืบหน้าของล็อต */
+  .lot-progress { padding: 10px var(--space-4) 0; }
+  .lp-line { display: flex; gap: var(--space-2); flex-wrap: wrap; margin-bottom: 8px; }
+  .lp-tag { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 600;
+            color: var(--sub); background: var(--soft); border-radius: 999px; padding: 4px 10px; }
+  .lp-tag.done { background: var(--ok-bg); color: var(--ok-text); }
+  .lp-bar { height: 5px; border-radius: 999px; background: var(--soft); overflow: hidden; }
+  .lp-bar > div { height: 100%; background: #22a06b; border-radius: 999px; transition: width .3s ease; }
+  .lot-more-box { display: contents; }
+  .lot-more-box[hidden] { display: none; }
   .icon-btn {
     display: inline-flex; align-items: center; justify-content: center;
     width: 44px; height: 44px; padding: 0; flex-shrink: 0;
@@ -2678,7 +2698,7 @@ end $$;
     // ===== เช็กว่ามีเวอร์ชันใหม่ไหม =====
     // เบราว์เซอร์ชอบจำไฟล์เก่าไว้ (cache) ทำให้ไม่เห็นของที่เพิ่งอัปเดต
     // ตัวนี้จะแอบเทียบเวอร์ชันกับไฟล์บนเซิร์ฟเวอร์ แล้วขึ้นแถบให้กดอัปเดต
-    const APP_BUILD = '20260816-1717';
+    const APP_BUILD = '20260816-1723';
 
     async function checkForUpdate() {
       try {
@@ -6778,6 +6798,9 @@ end $$;
         const card = document.createElement('div');
         card.className = 'lot-card';
         card.dataset.search = (lot.name + ' ' + rows.map(r => r.label || '').join(' ')).toLowerCase();
+        const nPrinted = rows.filter(r => r.printed).length;
+        const nPaid = rows.filter(r => r.paid).length;
+
         const rowsHtml = rows.map(r => {
           const yardPerPiece = pieceYard(r, SETTINGS);
           return `<tr>
@@ -6787,7 +6810,8 @@ end $$;
                 data-price="${r.price}" aria-label="เลือกชิ้นงานนี้" ${selectedPieces.has(r.id) ? 'checked' : ''}>
             </td>
             <td class="piece-name" data-label="รายการ">
-              <span class="piece-name-text">${esc(r.label || '-')}${isFabricPiece(r) ? '' : ' <span class="st st-prod">' + esc(r.item_type) + '</span>'}</span>
+              <span class="piece-name-text">${esc(r.label || '-')}${isFabricPiece(r) ? '' : ' <span class="st st-prod">' + esc(r.item_type) + '</span>'}
+                ${r.redo_count ? `<span class="st st-cancel tag-redo">ทำใหม่ ${r.redo_count} ครั้ง</span>` : ''}</span>
               <span class="piece-name-actions">
                 <button class="icon-btn icon-btn-edit edit-piece" data-id="${r.id}" data-label="${esc(r.label || '')}" data-width="${r.width_cm}" data-length="${r.length_cm}" data-type="${esc(r.item_type || 'ป้ายผ้า')}" data-price="${r.price}" aria-label="แก้ไขชิ้นงาน" title="แก้ไข">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
@@ -6803,10 +6827,11 @@ end $$;
             <td data-label="ขนาด (ซม.)">${r.width_cm && r.length_cm ? r.width_cm + ' x ' + r.length_cm : '—'}</td>
             <td data-label="ราคา">${fmtBaht(r.price)}</td>
             <td data-label="ผ้า (หลา)">${isFabricPiece(r) ? yardPerPiece.toFixed(2) : '—'}</td>
-            <td data-label="ทำใหม่">${r.redo_count ? `<span class="st st-cancel">ทำใหม่ ${r.redo_count} ครั้ง</span>` : '<span style="color:var(--sub)">-</span>'}</td>
-            <td data-label="ปริ้น"><span class="print-badge ${r.printed ? 'printed' : ''}" data-id="${r.id}" data-printed="${r.printed}"
-              title="${r.printed ? 'ปริ้นแล้ว · ตัดผ้าออกจากสต็อกแล้ว' : 'กดเมื่อปริ้นงานเสร็จ ระบบจะตัดผ้าให้'}">${r.printed ? 'ปริ้นแล้ว' : 'ยังไม่ปริ้น'}</span></td>
-            <td data-label="สถานะ"><span class="paid-badge ${r.paid ? 'paid' : 'unpaid'}" data-id="${r.id}" data-paid="${r.paid}">${r.paid ? 'จ่ายแล้ว' : 'ยังไม่จ่าย'}</span></td>
+            <td data-label="สถานะ"><span class="badge-pair">
+              <span class="print-badge ${r.printed ? 'printed' : ''}" data-id="${r.id}" data-printed="${r.printed}"
+                title="${r.printed ? 'ปริ้นแล้ว · ตัดผ้าออกจากสต็อกแล้ว' : 'กดเมื่อปริ้นงานเสร็จ ระบบจะตัดผ้าให้'}">${r.printed ? 'ปริ้นแล้ว' : 'ยังไม่ปริ้น'}</span>
+              <span class="paid-badge ${r.paid ? 'paid' : 'unpaid'}" data-id="${r.id}" data-paid="${r.paid}">${r.paid ? 'จ่ายแล้ว' : 'ยังไม่จ่าย'}</span>
+            </span></td>
           </tr>`;
         }).join('');
         card.innerHTML = `
@@ -6814,18 +6839,28 @@ end $$;
             <span>${esc(lot.name)}</span>
             <span class="lot-head-right"><span class="lot-total">${lotYard.toFixed(2)} หลา</span><span class="lot-price">${fmtBaht(lotPrice)} บาท</span><span class="lot-buffer">+5%: ${lotBufferYard.toFixed(2)} หลา</span></span>
           </div>
+          ${rows.length ? `<div class="lot-progress">
+            <div class="lp-line">
+              <span class="lp-tag ${nPrinted === rows.length ? 'done' : ''}">${icon('printer', 14)}ปริ้นแล้ว ${nPrinted}/${rows.length}</span>
+              <span class="lp-tag ${nPaid === rows.length ? 'done' : ''}">${icon('wallet', 14)}จ่ายแล้ว ${nPaid}/${rows.length}</span>
+            </div>
+            <div class="lp-bar"><div style="width:${Math.round(nPrinted / rows.length * 100)}%"></div></div>
+          </div>` : ''}
           <div class="lot-actions">
-            ${rows.some(r => !r.printed) ? `<button class="btn secondary btn-sm print-lot" data-lot="${lot.id}">${icon('printer', 15)}ปริ้นทั้งล็อต (ตัดผ้า)</button>` : ''}
-            ${hasUnpaid ? `<button class="btn secondary btn-sm mark-lot-paid" data-lot="${lot.id}">${icon('check', 15)}จ่ายครบล็อตนี้</button>` : ''}
-            <button class="btn secondary btn-sm waste-lot" data-lot="${lot.id}" data-name="${esc(lot.name)}">${icon('trash', 15)}บันทึกเศษผ้า</button>
+            ${rows.some(r => !r.printed) ? `<button class="btn secondary btn-sm print-lot" data-lot="${lot.id}">${icon('printer', 15)}ปริ้นทั้งล็อต</button>` : ''}
+            ${hasUnpaid ? `<button class="btn secondary btn-sm mark-lot-paid" data-lot="${lot.id}">${icon('check', 15)}จ่ายครบล็อต</button>` : ''}
             <button class="btn secondary btn-sm toggle-gallery" data-lot="${esc(lot.name)}">${icon('image', 15)}<span class="gal-label">รูปงาน</span></button>
-            <button class="btn secondary btn-sm from-photos" data-lot="${esc(lot.name)}" data-id="${lot.id}">${icon('plus', 15)}สร้างชิ้นงานจากชื่อไฟล์รูป</button>
-            ${rows.length ? `<button class="btn secondary btn-sm pick-all">${icon('checkbox', 15)}เลือกทั้งล็อต</button>` : ''}
+            <button class="btn secondary btn-sm lot-more" aria-expanded="false">${icon('more', 15)}เพิ่มเติม</button>
+            <span class="lot-more-box" hidden>
+              <button class="btn secondary btn-sm waste-lot" data-lot="${lot.id}" data-name="${esc(lot.name)}">${icon('trash', 15)}บันทึกเศษผ้า</button>
+              <button class="btn secondary btn-sm from-photos" data-lot="${esc(lot.name)}" data-id="${lot.id}">${icon('plus', 15)}สร้างชิ้นงานจากชื่อไฟล์รูป</button>
+              ${rows.length ? `<button class="btn secondary btn-sm pick-all">${icon('checkbox', 15)}เลือกทั้งล็อต</button>` : ''}
+            </span>
           </div>
           <div class="table-wrap">
             <table>
-              <thead><tr><th class="pick-cell"></th><th>รายการ</th><th>ขนาด (ซม.)</th><th>ราคา</th><th>ผ้า (หลา)</th><th>ทำใหม่</th><th>ปริ้น</th><th>สถานะ</th></tr></thead>
-              <tbody>${rowsHtml || '<tr><td colspan="8" class="empty-cell">ยังไม่มีชิ้นงาน</td></tr>'}</tbody>
+              <thead><tr><th class="pick-cell"></th><th>รายการ</th><th>ขนาด (ซม.)</th><th>ราคา</th><th>ผ้า (หลา)</th><th>สถานะ</th></tr></thead>
+              <tbody>${rowsHtml || '<tr><td colspan="6" class="empty-cell">ยังไม่มีชิ้นงาน</td></tr>'}</tbody>
             </table>
           </div>
         `;
@@ -7249,6 +7284,12 @@ end $$;
       }));
 
       // ---- ปริ้นทั้งล็อต ----
+      app.querySelectorAll('.lot-more').forEach(b => b.addEventListener('click', () => {
+        const box = b.parentElement.querySelector('.lot-more-box');
+        box.hidden = !box.hidden;
+        b.setAttribute('aria-expanded', String(!box.hidden));
+      }));
+
       app.querySelectorAll('.waste-piece').forEach(b => b.addEventListener('click', async () => {
         const piece = pieces.find(x => x.id === b.dataset.id);
         if (!piece) return;
