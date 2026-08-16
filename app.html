@@ -2805,7 +2805,7 @@ end $$;
     // ===== เช็กว่ามีเวอร์ชันใหม่ไหม =====
     // เบราว์เซอร์ชอบจำไฟล์เก่าไว้ (cache) ทำให้ไม่เห็นของที่เพิ่งอัปเดต
     // ตัวนี้จะแอบเทียบเวอร์ชันกับไฟล์บนเซิร์ฟเวอร์ แล้วขึ้นแถบให้กดอัปเดต
-    const APP_BUILD = '20260816-2230';
+    const APP_BUILD = '20260816-2239';
 
     let lastUpdateCheck = 0;
 
@@ -7071,7 +7071,8 @@ end $$;
       const searchWrap = document.createElement('div');
       searchWrap.className = 'search-wrap';
       searchWrap.innerHTML = `<span class="search-ico">${icon('search', 18)}</span>
-        <input id="lotSearch" type="text" placeholder="ค้นหาล็อตหรือชื่อลูกค้า..." aria-label="ค้นหาล็อตหรือชื่อลูกค้า">`;
+        <input id="lotSearch" type="text" placeholder="ค้นหา: ชื่อลูกค้า · ล็อต · ขนาด · ราคา · ร้านผลิต" aria-label="ค้นหาล็อตหรือชิ้นงาน">
+        <div class="search-count hint"></div>`;
       dailyEl.appendChild(searchWrap);
 
       lotBlocks.forEach(({ lot, rows, lotYard, lotPrice }) => {
@@ -7079,14 +7080,18 @@ end $$;
         const hasUnpaid = rows.some(r => !r.paid);
         const card = document.createElement('div');
         card.className = 'lot-card';
-        card.dataset.search = (lot.name + ' ' + rows.map(r => r.label || '').join(' ')).toLowerCase();
+        card.dataset.search = [lot.name, ...rows.map(r => [r.label, r.vendor, r.item_type,
+          r.width_cm + 'x' + r.length_cm, r.price].join(' '))].join(' ').toLowerCase();
         const lotVendors = [...new Set(rows.map(r => r.vendor).filter(Boolean))];
         const nPrinted = rows.filter(r => r.printed).length;
         const nPaid = rows.filter(r => r.paid).length;
 
         const rowsHtml = rows.map(r => {
           const yardPerPiece = pieceYard(r, SETTINGS);
-          return `<tr>
+          const rowSearch = [r.label, r.vendor, r.item_type, r.width_cm + 'x' + r.length_cm,
+            r.width_cm + ' x ' + r.length_cm, r.price, r.paid ? 'จ่ายแล้ว' : 'ยังไม่จ่าย',
+            r.printed ? 'ปริ้นแล้ว' : 'ยังไม่ปริ้น'].filter(Boolean).join(' ').toLowerCase();
+          return `<tr data-search="${esc(rowSearch)}">
             <td class="pick-cell" data-label="เลือก">
               <input type="checkbox" class="pick" data-id="${r.id}" data-lot="${esc(lot.name)}"
                 data-label-txt="${esc(r.label || '')}" data-w="${r.width_cm}" data-l="${r.length_cm}"
@@ -7250,11 +7255,44 @@ end $$;
         } catch (e) { /* ไดรฟ์ล่มไม่ควรทำให้หน้าพัง */ }
       })();
 
-      searchWrap.querySelector('#lotSearch').addEventListener('input', (e) => {
-        const q = e.target.value.trim().toLowerCase();
+      // ค้นหา: กรองทั้งการ์ดล็อตและแถวชิ้นงานข้างใน + สรุปผลให้เห็น
+      const lotSearchInput = searchWrap.querySelector('#lotSearch');
+      const lotSearchCount = searchWrap.querySelector('.search-count');
+      lotSearchInput.addEventListener('input', () => {
+        const q = lotSearchInput.value.trim().toLowerCase();
+        let foundRows = 0, foundLots = 0;
         dailyEl.querySelectorAll('.lot-card').forEach(card => {
-          card.style.display = !q || card.dataset.search.includes(q) ? '' : 'none';
+          const rowsEl = [...card.querySelectorAll('tbody tr')].filter(tr => tr.dataset.search);
+          let hitInCard = 0;
+          rowsEl.forEach(tr => {
+            const hit = !q || tr.dataset.search.includes(q);
+            tr.style.display = hit ? '' : 'none';
+            if (hit && q) hitInCard++;
+          });
+          // ล็อตจะโชว์เมื่อชื่อล็อตตรง หรือมีชิ้นงานข้างในตรง
+          const lotHit = !q || card.dataset.search.includes(q);
+          card.style.display = lotHit ? '' : 'none';
+          if (lotHit && q) { foundLots++; foundRows += hitInCard; }
+
+          // ถ้าเข้าล็อตเพราะชื่อล็อตตรง แต่ไม่มีชิ้นไหนตรง -> โชว์ทุกแถวตามเดิม
+          if (q && lotHit && hitInCard === 0) {
+            rowsEl.forEach(tr => { tr.style.display = ''; });
+            foundRows += rowsEl.length;
+          }
+          const note = card.querySelector('.search-note');
+          if (note) note.remove();
+          if (q && lotHit && hitInCard > 0 && hitInCard < rowsEl.length) {
+            const n = document.createElement('div');
+            n.className = 'search-note hint no-print';
+            n.style.cssText = 'padding:6px var(--space-4) 0';
+            n.textContent = 'แสดง ' + hitInCard + ' จาก ' + rowsEl.length + ' ชิ้นที่ตรงกับคำค้น';
+            card.querySelector('.table-wrap')?.before(n);
+          }
         });
+        lotSearchCount.textContent = q
+          ? (foundRows ? 'เจอ ' + foundRows + ' ชิ้นงาน ใน ' + foundLots + ' ล็อต'
+            : 'ไม่เจอรายการที่ตรงกับ "' + lotSearchInput.value + '"')
+          : '';
       });
 
       // ---- แท็บรายเดือน ----
