@@ -2698,15 +2698,30 @@ end $$;
     // ===== เช็กว่ามีเวอร์ชันใหม่ไหม =====
     // เบราว์เซอร์ชอบจำไฟล์เก่าไว้ (cache) ทำให้ไม่เห็นของที่เพิ่งอัปเดต
     // ตัวนี้จะแอบเทียบเวอร์ชันกับไฟล์บนเซิร์ฟเวอร์ แล้วขึ้นแถบให้กดอัปเดต
-    const APP_BUILD = '20260816-1723';
+    const APP_BUILD = '20260816-1745';
 
-    async function checkForUpdate() {
+    let lastUpdateCheck = 0;
+
+    // อ่านจากไฟล์ version.txt (ไม่กี่ไบต์) แทนการโหลด app.html ทั้งก้อน 470 KB
+    // ถ้าไฟล์นั้นหาย (เช่น deploy เก่า) ค่อยถอยไปอ่าน app.html เหมือนเดิม
+    async function checkForUpdate(force) {
+      const now = Date.now();
+      if (!force && now - lastUpdateCheck < 5 * 60 * 1000) return;   // เช็กถี่สุด 5 นาทีครั้ง
+      lastUpdateCheck = now;
       try {
-        const res = await fetch('app.html?_=' + Date.now(), { cache: 'no-store' });
-        if (!res.ok) return;
-        const txt = await res.text();
-        const m = txt.match(/APP_BUILD\s*=\s*'([^']+)'/);   // เขียนแบบนี้เพื่อไม่ให้ sed ตอน deploy มาแทนที่บรรทัดนี้
-        if (!m || m[1] === APP_BUILD) return;
+        let build = null;
+        const res = await fetch('version.txt?_=' + now, { cache: 'no-store' });
+        if (res.ok) {
+          const t = (await res.text()).trim();
+          if (t && t.length < 40) build = t;
+        }
+        if (!build) {
+          const res2 = await fetch('app.html?_=' + now, { cache: 'no-store' });
+          if (!res2.ok) return;
+          const m = (await res2.text()).match(/APP_BUILD\s*=\s*'([^']+)'/);   // เขียนแบบนี้กัน sed ตอน deploy ทับ
+          build = m ? m[1] : null;
+        }
+        if (!build || build === APP_BUILD) return;
         showUpdateBar();
       } catch (e) { /* ออฟไลน์ก็ข้ามไป */ }
     }
@@ -3145,7 +3160,7 @@ end $$;
         const v = parseFloat(rateCard.querySelector('#wRate').value) || 0;
         const { error } = await sb.from('settings').upsert({ key: 'fabric_cost_per_yard', value: String(v) }, { onConflict: 'key' });
         if (error) { m.textContent = 'บันทึกไม่สำเร็จ: ' + error.message; m.className = 'msg error'; return; }
-        SETTINGS = await loadSettings();
+        SETTINGS = await loadSettings(true);
         m.textContent = 'บันทึกแล้ว'; m.className = 'msg ok';
 
         // รายการเก่าคิดด้วยราคาเดิม -> ถามว่าจะคิดใหม่ตามราคาที่เพิ่งใส่ไหม
@@ -3469,7 +3484,7 @@ end $$;
             { key: 'shop_lng', value: String(e.latlng.lng) },
           ], { onConflict: 'key' });
           if (error) { alert('บันทึกไม่สำเร็จ: ' + error.message); return; }
-          SETTINGS = await loadSettings();
+          SETTINGS = await loadSettings(true);
           drawShop(L, e.latlng.lat, e.latlng.lng);
           await loadAttendance();
         });
@@ -3520,7 +3535,7 @@ end $$;
             { key: 'shop_lng', value: String(c.longitude) },
           ], { onConflict: 'key' });
           if (error) throw new Error(error.message);
-          SETTINGS = await loadSettings();
+          SETTINGS = await loadSettings(true);
           await loadAttendance();
         } catch (e) { msg.textContent = e.message; msg.className = 'msg error'; setHere.disabled = false; }
       });
@@ -3718,7 +3733,7 @@ end $$;
           const { error } = await sb.from('settings').upsert(rows, { onConflict: 'key' });
           if (error) { gMsg.textContent = 'บันทึกไม่สำเร็จ: ' + error.message; gMsg.className = 'msg error'; return; }
           gMsg.textContent = 'บันทึกแล้ว'; gMsg.className = 'msg ok';
-          SETTINGS = await loadSettings();
+          SETTINGS = await loadSettings(true);
         });
       }
     }
@@ -6634,11 +6649,16 @@ end $$;
       });
     }
 
-    async function loadSettings() {
+    // ค่าตั้งต้นแทบไม่เปลี่ยน -> ดึงครั้งเดียวแล้วจำไว้ หน้าอื่นจะได้ไม่ต้องรอ
+    let SETTINGS_CACHE = null;
+
+    async function loadSettings(force) {
+      if (SETTINGS_CACHE && !force) return SETTINGS_CACHE;
       const { data, error } = await sb.from('settings').select('key,value');
       if (error) throw error;
       const s = {};
       data.forEach(r => s[r.key] = Number(r.value));
+      SETTINGS_CACHE = s;
       return s;
     }
 
@@ -6697,17 +6717,20 @@ end $$;
 
     async function loadAll() {
       document.getElementById('statusMsg').textContent = 'กำลังโหลด...';
-      SETTINGS = await loadSettings();
-
-      const { data: lots, error: e1 } = await sb.from('lots').select('id,name,lot_date,created_at');
-      if (e1) throw e1;
-      const { data: pieces, error: e2 } = await sb.from('pieces').select('id,lot_id,width_cm,length_cm,label,price,paid,item_type,printed,printed_at,stock_move_id,redo_count');
-      if (e2) throw e2;
-      // ดึงทุกแถว (คอลัมน์ที่ใช้เท่านั้น) ยอดสรุปจะได้ตรงเสมอ ไม่ตัดที่ 300 แถวแบบเงียบๆ
-      const { data: waste } = await sb.from('fabric_waste')
-        .select('id,lot_id,piece_id,kind,reason,note,yards,cost,created_at')
-        .order('created_at', { ascending: false });
-      WASTE = waste || [];
+      // ยิงพร้อมกันทีเดียว ไม่ต้องรอต่อคิวทีละคำสั่ง
+      const [st, lotsRes, piecesRes, wasteRes] = await Promise.all([
+        loadSettings(),
+        sb.from('lots').select('id,name,lot_date,created_at'),
+        sb.from('pieces').select('id,lot_id,width_cm,length_cm,label,price,paid,item_type,printed,printed_at,stock_move_id,redo_count'),
+        // ดึงทุกแถว (เฉพาะคอลัมน์ที่ใช้) ยอดสรุปจะได้ตรงเสมอ ไม่ตัดที่ 300 แถวแบบเงียบๆ
+        sb.from('fabric_waste').select('id,lot_id,piece_id,kind,reason,note,yards,cost,created_at')
+          .order('created_at', { ascending: false }),
+      ]);
+      SETTINGS = st;
+      if (lotsRes.error) throw lotsRes.error;
+      if (piecesRes.error) throw piecesRes.error;
+      const lots = lotsRes.data, pieces = piecesRes.data;
+      WASTE = wasteRes.data || [];
 
       lots.sort((a, b) => lotSortKey(b.name) - lotSortKey(a.name));
       render(lots, pieces);
@@ -7665,9 +7688,9 @@ end $$;
         applyHash();   // เปิดลิงก์ตรงมา (เช่น #/order/xxx) ให้ไปหน้านั้นตามเดิม
       }
       await boot();
-      checkForUpdate();
-      setInterval(checkForUpdate, 10 * 60 * 1000);
-      window.addEventListener('focus', () => checkForUpdate());
+      checkForUpdate(true);
+      setInterval(() => checkForUpdate(true), 15 * 60 * 1000);
+      window.addEventListener('focus', () => checkForUpdate());   // มีตัวหรี่ 5 นาทีในตัวแล้ว
     }
 
     // ---- จุดเริ่มระบบ: รอไลบรารีให้พร้อมก่อน ----
