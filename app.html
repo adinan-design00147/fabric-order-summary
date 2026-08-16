@@ -2376,7 +2376,36 @@
       add('สำรองข้อมูลไม่เกิน 14 วัน', dbk !== null && dbk <= 14,
         dbk === null ? 'ยังไม่เคยสำรอง' : dbk + ' วันที่แล้ว');
 
-      // --- 11. ตัวกันโปรเจกต์ Supabase ถูก pause ---
+      // --- 11. ยอดรับเงินของออเดอร์ต้องตรงกับรายการรับเงินจริง ---
+      try {
+        const [oRes, pRes] = await Promise.all([
+          sb.from('orders').select('id,order_no,paid_amount'),
+          sb.from('order_payments').select('order_id,amount'),
+        ]);
+        const paid = {};
+        (pRes.data || []).forEach(p => { paid[p.order_id] = (paid[p.order_id] || 0) + Number(p.amount); });
+        const bad = (oRes.data || []).filter(o => Math.abs(Number(o.paid_amount || 0) - (paid[o.id] || 0)) > 0.01);
+        add('ยอดรับเงินตรงกับรายการรับเงิน', bad.length === 0,
+          bad.length ? 'ไม่ตรง ' + bad.length + ' ใบ: ' + bad.slice(0, 3).map(o => o.order_no).join(', ') : 'ตรงทุกใบ');
+      } catch (e) { add('ยอดรับเงินตรงกับรายการรับเงิน', false, e.message); }
+
+      // --- 12. ตัดสต็อกพร้อมกันหลายคนแล้วยอดต้องไม่หาย ---
+      try {
+        const item = await getDefaultFabric();
+        if (!item) add('ตัดสต็อกพร้อมกันแล้วยอดไม่หาย', false, 'ยังไม่มีผ้าดิบในสต็อก');
+        else {
+          const before = Number(item.used_qty);
+          // ยิงพร้อมกัน 4 ครั้ง ครั้งละ 0.25 -> ต้องเพิ่มขึ้น 1.00 พอดี
+          await Promise.all([0, 1, 2, 3].map(() => stockMove(item, 'out', 0.25, 'ตรวจระบบ (คืนให้อัตโนมัติ)')));
+          const { data: after } = await sb.from('stock_items').select('used_qty').eq('id', item.id).single();
+          const diff = round4(Number(after.used_qty) - before);
+          await stockMove(item, 'in', 1, 'ตรวจระบบ: คืนยอดที่ใช้ทดสอบ');
+          add('ตัดสต็อกพร้อมกัน 4 รายการแล้วยอดไม่หาย', Math.abs(diff - 1) < 0.001,
+            'ยอดใช้ไปเพิ่มขึ้น ' + diff.toFixed(2) + ' (ต้องได้ 1.00)');
+        }
+      } catch (e) { add('ตัดสต็อกพร้อมกันแล้วยอดไม่หาย', false, e.message); }
+
+      // --- 13. ตัวกันโปรเจกต์ Supabase ถูก pause ---
       // GitHub ปิด scheduled workflow อัตโนมัติถ้า repo เงียบเกิน 60 วัน -> ping หยุด -> ฐานข้อมูลหลับ
       try {
         const res = await fetch('https://api.github.com/repos/' + GH_REPO + '/commits?per_page=1');
@@ -2698,7 +2727,7 @@ end $$;
     // ===== เช็กว่ามีเวอร์ชันใหม่ไหม =====
     // เบราว์เซอร์ชอบจำไฟล์เก่าไว้ (cache) ทำให้ไม่เห็นของที่เพิ่งอัปเดต
     // ตัวนี้จะแอบเทียบเวอร์ชันกับไฟล์บนเซิร์ฟเวอร์ แล้วขึ้นแถบให้กดอัปเดต
-    const APP_BUILD = '20260816-1745';
+    const APP_BUILD = '20260816-2141';
 
     let lastUpdateCheck = 0;
 
@@ -3049,16 +3078,15 @@ end $$;
       const label = kind === 'defect'
         ? 'งานเสีย ' + (piece ? (piece.label || 'ไม่ระบุชื่อ') + ' · ' + piece.width_cm + 'x' + piece.length_cm : '')
         : 'เศษผ้า';
-      await stockMove(fabric, 'out', amount, label + (reason ? ' · ' + reason : '') + (lotName ? ' · ล็อต ' + lotName : ''));
-      const { data: mv } = await sb.from('stock_moves').select('id')
-        .eq('item_id', fabric.id).order('created_at', { ascending: false }).limit(1);
+      const moveId = await stockMove(fabric, 'out', amount,
+        label + (reason ? ' · ' + reason : '') + (lotName ? ' · ล็อต ' + lotName : ''));
 
       const { error } = await sb.from('fabric_waste').insert({
         lot_id: lotId || null,
         piece_id: piece ? piece.id : null,
         kind, reason: reason || null, note: note || null,
         yards: amount, cost: wasteCost(amount),
-        stock_move_id: mv && mv.length ? mv[0].id : null,
+        stock_move_id: moveId || null,
         created_by: (ME && ME.email) ? prettyLogin(ME.email) : null,
       });
       if (error) throw new Error(error.message);
@@ -4433,14 +4461,23 @@ end $$;
       return prefix + '-' + String(run).padStart(3, '0');
     }
 
+    // โหลดเฉพาะช่วงล่าสุดก่อน (ค่าเริ่มต้น 3 เดือน) กดปุ่มขยายช่วงได้
+    // พอข้อมูลโตขึ้นเป็นหลักพัน จะได้ไม่ดึงทั้งตารางทุกครั้งที่เปิดหน้า
+    let ordersMonths = 3;
+
+    function monthsAgoISO(n) {
+      const d = new Date();
+      d.setMonth(d.getMonth() - n);
+      return d.toISOString();
+    }
+
     async function loadOrders() {
       if (!CUSTOMERS.length) { try { await fetchCustomers(); } catch (e) {} }
       document.getElementById('statusMsg').textContent = 'กำลังโหลด...';
-      const [ordRes] = await Promise.all([
-        sb.from('orders').select('id,order_no,customer,customer_id,channel,status,due_date,total,paid_amount,phone,address,cover_file_id,created_at')
-          .order('created_at', { ascending: false }),
-        fetchProducts(),
-      ]);
+      let q = sb.from('orders').select('id,order_no,customer,customer_id,channel,status,due_date,total,paid_amount,phone,address,cover_file_id,created_at')
+        .order('created_at', { ascending: false });
+      if (ordersMonths) q = q.gte('created_at', monthsAgoISO(ordersMonths));
+      const [ordRes] = await Promise.all([q, fetchProducts()]);
       if (ordRes.error) throw ordRes.error;
       renderOrders(ordRes.data);
       document.getElementById('statusMsg').textContent = 'อัปเดตล่าสุด: ' + new Date().toLocaleString('th-TH');
@@ -4577,6 +4614,19 @@ end $$;
       countMsg.className = 'hint no-print';
       countMsg.style.margin = '-2px 0 10px';
       app.appendChild(countMsg);
+
+      // ปุ่มขยายช่วงเวลา (ค่าเริ่มต้นโหลดแค่ 3 เดือนล่าสุด)
+      if (ordersMonths) {
+        const more = document.createElement('div');
+        more.className = 'hint no-print';
+        more.style.margin = '0 0 10px';
+        more.innerHTML = `แสดงใบงาน ${ordersMonths} เดือนล่าสุด
+          <button class="btn secondary btn-sm" id="ordMore" style="margin-left:8px">${icon('chart', 14)}โหลดย้อนหลังทั้งหมด</button>`;
+        app.appendChild(more);
+        more.querySelector('#ordMore').addEventListener('click', async () => {
+          ordersMonths = 0; await loadOrders();
+        });
+      }
 
       let shown = orderFilter === 'all' ? list : list.filter(o => o.status === orderFilter);
       // ตัวกรองด่วนจากแถบทักทาย (กดตัวเลขบนหัวหน้า)
@@ -5588,7 +5638,8 @@ end $$;
       document.getElementById('statusMsg').textContent = 'กำลังโหลด...';
       const { data, error } = await sb.from('receipts')
         .select('id,receipt_no,recipient,note,total,item_count,created_at,order_id')
-        .order('created_at', { ascending: false });
+        .order('created_at', { ascending: false })
+        .limit(200);   // ใบเสร็จเก่ากว่านี้ดูได้จากไฟล์สำรอง — กันโหลดทั้งตารางตอนข้อมูลโต
       if (error) throw error;
       renderReceipts(data);
       document.getElementById('statusMsg').textContent = 'อัปเดตล่าสุด: ' + new Date().toLocaleString('th-TH');
@@ -6682,12 +6733,9 @@ end $$;
         if (yards > 0) {
           const fabric = await getDefaultFabric();
           if (!fabric) throw new Error('ยังไม่มีผ้าดิบในสต็อก — ไปเพิ่มที่เมนู "สต็อกของ" ก่อน');
-          await stockMove(fabric, 'out', yards,
+          moveId = await stockMove(fabric, 'out', yards,
             'ปริ้นงาน ' + (piece.label || 'ไม่ระบุชื่อ') + ' · ' + piece.width_cm + 'x' + piece.length_cm +
             (lotName ? ' · ล็อต ' + lotName : ''));
-          const { data: mv } = await sb.from('stock_moves').select('id')
-            .eq('item_id', fabric.id).order('created_at', { ascending: false }).limit(1);
-          moveId = mv && mv.length ? mv[0].id : null;
         }
         const { error } = await sb.from('pieces')
           .update({ printed: true, printed_at: new Date().toISOString(), stock_move_id: moveId })
