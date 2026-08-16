@@ -1204,6 +1204,51 @@
         .split('|').map(v => v.trim()).filter(Boolean);
     }
 
+    /** ถามว่างานชุดนี้ส่งร้านไหน — คืนชื่อร้าน ('' = ยังไม่ระบุ) หรือ null ถ้ากดยกเลิก */
+    function askVendor(title, sub) {
+      return new Promise(resolve => {
+        const back = document.createElement('div');
+        back.className = 'modal-back no-print';
+        back.innerHTML = `
+          <div class="modal-card" role="dialog" aria-modal="true">
+            <h3>${esc(title)}</h3>
+            <div class="modal-sub">${esc(sub || '')}</div>
+            <div class="field"><label for="avSel">ร้านที่ส่งผลิต</label>
+              <select id="avSel">
+                ${vendorList().map(v => `<option ${v === (lastVendor || vendorList()[0]) ? 'selected' : ''}>${esc(v)}</option>`).join('')}
+                <option value="${NEW_VENDOR}">+ พิมพ์ชื่อร้านอื่น...</option>
+                <option value="">— ยังไม่ระบุ —</option>
+              </select></div>
+            <div class="field" id="avNewField" hidden><label for="avNew">ชื่อร้านใหม่</label>
+              <input id="avNew" placeholder="พิมพ์ชื่อร้าน แล้วระบบจะจำไว้ให้"></div>
+            <div class="field-row" style="justify-content:flex-end;margin-top:6px">
+              <button class="btn secondary" id="avCancel">ยกเลิก</button>
+              <button class="btn" id="avOk">${icon('check', 15)}ถัดไป</button>
+            </div>
+          </div>`;
+        document.body.appendChild(back);
+        const sel = back.querySelector('#avSel');
+        const newField = back.querySelector('#avNewField');
+        sel.addEventListener('change', () => {
+          newField.hidden = sel.value !== NEW_VENDOR;
+          if (!newField.hidden) back.querySelector('#avNew').focus();
+        });
+        const close = (v) => { back.remove(); resolve(v); };
+        back.querySelector('#avCancel').addEventListener('click', () => close(null));
+        back.addEventListener('click', (e) => { if (e.target === back) close(null); });
+        back.querySelector('#avOk').addEventListener('click', async () => {
+          let v = sel.value;
+          if (v === NEW_VENDOR) {
+            v = back.querySelector('#avNew').value.trim();
+            if (!v) { back.querySelector('#avNew').focus(); return; }
+            await rememberVendor(v);
+          }
+          lastVendor = v || '';
+          close(v || '');
+        });
+      });
+    }
+
     /** พิมพ์ชื่อร้านใหม่เข้ามา -> เก็บเข้ารายชื่อไว้ใช้ครั้งหน้า */
     async function rememberVendor(name) {
       const v = String(name || '').trim();
@@ -2805,7 +2850,7 @@ end $$;
     // ===== เช็กว่ามีเวอร์ชันใหม่ไหม =====
     // เบราว์เซอร์ชอบจำไฟล์เก่าไว้ (cache) ทำให้ไม่เห็นของที่เพิ่งอัปเดต
     // ตัวนี้จะแอบเทียบเวอร์ชันกับไฟล์บนเซิร์ฟเวอร์ แล้วขึ้นแถบให้กดอัปเดต
-    const APP_BUILD = '20260816-2239';
+    const APP_BUILD = '20260816-2319';
 
     let lastUpdateCheck = 0;
 
@@ -7186,13 +7231,21 @@ end $$;
               alert('ชิ้นงานจากรูปทั้งหมดถูกเพิ่มเข้าล็อตนี้แล้ว (' + parsed.length + ' รูป)');
               return;
             }
+            // ล็อตนี้มีร้านอยู่แล้วให้ใช้ร้านนั้นเป็นค่าเริ่มต้น
+            const lotVendor = rows.map(r => r.vendor).find(Boolean);
+            if (lotVendor) lastVendor = lotVendor;
+            const vendor = await askVendor('งานชุดนี้ส่งร้านไหน',
+              'อ่านชื่อไฟล์ได้ ' + fresh.length + ' ชิ้น จากล็อต ' + lot.name + ' — เลือกร้านผลิตให้ทั้งชุดทีเดียว');
+            if (vendor === null) return;
+
             const preview = fresh.map(x => '· ' + (x.label || '(ไม่มีชื่อ)') + ' — ' + x.width_cm + ' x ' + x.length_cm +
               ' ซม. = ' + fmtBaht(Math.round(x.width_cm * x.length_cm * SETTINGS.price_rate)) + ' บาท').join('\n');
-            if (!confirm('เพิ่มชิ้นงาน ' + fresh.length + ' ชิ้นเข้าล็อต ' + lot.name + ' ?\n\n' + preview)) return;
+            if (!confirm('เพิ่มชิ้นงาน ' + fresh.length + ' ชิ้นเข้าล็อต ' + lot.name +
+              (vendor ? ' (ส่งร้าน ' + vendor + ')' : '') + ' ?\n\n' + preview)) return;
             const { error } = await sb.from('pieces').insert(fresh.map(x => ({
               lot_id: lot.id, label: x.label, width_cm: x.width_cm, length_cm: x.length_cm,
               price: Math.round(x.width_cm * x.length_cm * SETTINGS.price_rate),
-              paid: false, item_type: 'ป้ายผ้า',
+              paid: false, item_type: 'ป้ายผ้า', vendor: vendor || null,
             })));
             if (error) { alert('เพิ่มไม่สำเร็จ: ' + error.message); return; }
             await loadAll();
@@ -7247,9 +7300,36 @@ end $$;
           `;
           dailyEl.appendChild(card);
           card.querySelectorAll('.make-lot').forEach(b => b.addEventListener('click', async () => {
-            b.disabled = true; b.textContent = 'กำลังสร้าง...';
-            const { error } = await sb.from('lots').insert({ name: b.dataset.lot });
+            const folder = b.dataset.lot;
+            // อ่านชื่อไฟล์ในโฟลเดอร์ก่อน จะได้สร้างล็อต + ชิ้นงาน + ร้านผลิต ให้ครบในครั้งเดียว
+            b.disabled = true; b.textContent = 'กำลังอ่านชื่อไฟล์...';
+            let fresh = [];
+            try {
+              const files = await driveList(folder, 'fabric');
+              fresh = files.map(f => ({ file: f.name, ...(parsePieceFromFilename(f.name) || {}) }))
+                .filter(x => x.width_cm);
+            } catch (e) { /* อ่านไม่ได้ก็สร้างล็อตเปล่าไปก่อน */ }
+
+            let vendor = '';
+            if (fresh.length) {
+              const v = await askVendor('สร้างล็อต ' + folder,
+                'อ่านชื่อไฟล์ได้ ' + fresh.length + ' ชิ้น — เลือกร้านที่ส่งผลิตให้ทั้งชุด แล้วระบบจะสร้างล็อตพร้อมชิ้นงานให้เลย');
+              if (v === null) { b.disabled = false; b.innerHTML = icon('plus', 15) + 'สร้างล็อตนี้'; return; }
+              vendor = v;
+            }
+
+            b.textContent = 'กำลังสร้าง...';
+            const { data: newLot, error } = await sb.from('lots').insert({ name: folder }).select('id').single();
             if (error) { alert('สร้างล็อตไม่สำเร็จ: ' + error.message); b.disabled = false; return; }
+
+            if (fresh.length) {
+              const { error: e2 } = await sb.from('pieces').insert(fresh.map(x => ({
+                lot_id: newLot.id, label: x.label, width_cm: x.width_cm, length_cm: x.length_cm,
+                price: Math.round(x.width_cm * x.length_cm * SETTINGS.price_rate),
+                paid: false, item_type: 'ป้ายผ้า', vendor: vendor || null,
+              })));
+              if (e2) alert('สร้างล็อตแล้ว แต่เพิ่มชิ้นงานไม่สำเร็จ: ' + e2.message);
+            }
             await loadAll();
           }));
         } catch (e) { /* ไดรฟ์ล่มไม่ควรทำให้หน้าพัง */ }
