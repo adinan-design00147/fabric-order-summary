@@ -62,7 +62,7 @@
   html[data-theme="dark"] .switch-knob { background: #e8eaf0; }
   html[data-theme="dark"] .lot-actions { background: var(--accent-soft); }
   html[data-theme="dark"] .icon-btn { background: var(--card); }
-  html[data-theme="dark"] input:not([type="checkbox"]):not([type="radio"]),
+  html[data-theme="dark"] input:where(:not([type="checkbox"]):not([type="radio"])),
   html[data-theme="dark"] select,
   html[data-theme="dark"] textarea { background: var(--bg); color: var(--text); }
   html[data-theme="dark"] select {
@@ -71,14 +71,14 @@
 
   /* ===== ช่องกรอกทุกช่องในระบบใช้หน้าตาเดียวกัน =====
      เดิมสไตล์ผูกกับ .field เท่านั้น ช่องที่วางลอยๆ (เช่น ช่องจำนวนในสต็อก) เลยเป็นสไตล์ดิบของเบราว์เซอร์ */
-  input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
+  input:where(:not([type="checkbox"]):not([type="radio"]):not([type="file"])),
   select, textarea {
     font-family: inherit; font-size: 16px; color: var(--text);
     padding: 11px 12px; border: 1px solid var(--border); border-radius: 10px;
     background: var(--card); min-height: 44px; width: 100%;
     transition: border-color .15s ease, box-shadow .15s ease;
   }
-  input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):focus,
+  input:where(:not([type="checkbox"]):not([type="radio"]):not([type="file"])):focus,
   select:focus, textarea:focus {
     outline: none; border-color: var(--accent);
     box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
@@ -408,8 +408,10 @@
   .job-amt-num { font-size: 18px; font-weight: 700; font-variant-numeric: tabular-nums; }
 
   @media (max-width: 640px) {
-    .job-hero { flex-direction: column; align-items: stretch; gap: 12px; }
+    .job-hero-top { flex-direction: column; align-items: stretch; gap: 12px; }
     .job-hero-btn { width: 100%; justify-content: center; }
+    .hero-stats { gap: 8px; }
+    .hs-num { font-size: 17px; }
     .job-card { gap: 10px; padding: 10px; }
     .job-thumb { width: 62px; min-width: 62px; height: 62px; }
     .job-name { font-size: 15px; }
@@ -2676,7 +2678,7 @@ end $$;
     // ===== เช็กว่ามีเวอร์ชันใหม่ไหม =====
     // เบราว์เซอร์ชอบจำไฟล์เก่าไว้ (cache) ทำให้ไม่เห็นของที่เพิ่งอัปเดต
     // ตัวนี้จะแอบเทียบเวอร์ชันกับไฟล์บนเซิร์ฟเวอร์ แล้วขึ้นแถบให้กดอัปเดต
-    const APP_BUILD = '20260816-1712';
+    const APP_BUILD = '20260816-1717';
 
     async function checkForUpdate() {
       try {
