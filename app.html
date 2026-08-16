@@ -2778,7 +2778,7 @@ end $$;
     // ===== เช็กว่ามีเวอร์ชันใหม่ไหม =====
     // เบราว์เซอร์ชอบจำไฟล์เก่าไว้ (cache) ทำให้ไม่เห็นของที่เพิ่งอัปเดต
     // ตัวนี้จะแอบเทียบเวอร์ชันกับไฟล์บนเซิร์ฟเวอร์ แล้วขึ้นแถบให้กดอัปเดต
-    const APP_BUILD = '20260816-2205';
+    const APP_BUILD = '20260816-2207';
 
     let lastUpdateCheck = 0;
 
@@ -6358,8 +6358,8 @@ end $$;
       inactive:  { label: 'ไม่เคลื่อนไหว', cls: 'st-prod' },
       blacklist: { label: 'บัญชีดำ', cls: 'st-cancel' },
     };
-    const CUSTOMER_COLS = 'id,code,name,shop_name,phone,phone2,line_id,facebook,instagram,email,,tax_id,branch' +
-      'address,province,postcode,default_size,fav_color,fabric_type,team_name,design_ref,' +
+    const CUSTOMER_COLS = 'id,code,name,shop_name,phone,phone2,line_id,facebook,instagram,email,' +
+      'tax_id,branch,address,province,postcode,default_size,fav_color,fabric_type,team_name,design_ref,' +
       'customer_type,status,marketing_consent,note,first_order_at,created_at';
     let CUSTOMERS = [];
 
