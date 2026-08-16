@@ -1484,6 +1484,7 @@
         sb.from('orders').select('id,order_no,customer,customer_id,channel,status,total,paid_amount,due_date,created_at,cover_file_id,phone'),
         sb.from('stock_items').select('id,name,category,unit,total_qty,used_qty,threshold_pct,threshold_qty').eq('active', true),
       ]);
+      await fetchLastBackup();
       if (lotsRes.error) throw lotsRes.error;
       if (piecesRes.error) throw piecesRes.error;
       if (ordersRes.error) throw ordersRes.error;
@@ -1506,6 +1507,7 @@
         return new Date(s.due_date) < today0;
       });
       const lowStock = stock.filter(i => stockStatus(i).key !== 'ok');
+      const backupDays = daysSinceBackup();
       const notPrinted = pieces.filter(p => !p.printed && isFabricPiece(p));
       const notPrintedYard = round4(notPrinted.reduce((a, p) => a + pieceYard(p, SETTINGS), 0));
 
@@ -1519,6 +1521,12 @@
         cls: 'warn', ico: 'box', num: lowStock.length, lbl: 'วัตถุดิบใกล้หมด / ต้องสั่งเพิ่ม',
         sub: lowStock.map(i => i.name + ' เหลือ ' + fmtQty(stockRemain(i)) + ' ' + i.unit).join(' · '),
         href: routeFor('stock'),
+      });
+      if (backupDays === null || backupDays > 14) alerts.push({
+        cls: 'danger', ico: 'box', num: backupDays === null ? '!' : backupDays,
+        lbl: backupDays === null ? 'ยังไม่เคยสำรองข้อมูล' : 'ไม่ได้สำรองข้อมูลมา ' + backupDays + ' วัน',
+        sub: 'กดสำรองทั้งระบบเป็นไฟล์เดียว เก็บไว้ในเครื่อง',
+        href: routeFor('health'),
       });
       if (notPrinted.length) alerts.push({
         cls: 'info', ico: 'factory', num: notPrinted.length, lbl: 'ชิ้นงานที่ยังไม่ได้ปริ้น',
@@ -2179,9 +2187,22 @@
       } catch (e) { add('เชื่อมต่อ Google Drive', false, e.message); }
 
       // --- 10. เตือนเรื่องการสำรองข้อมูล ---
+      await fetchLastBackup();
       const dbk = daysSinceBackup();
-      add('สำรองข้อมูลไม่เกิน 30 วัน', dbk !== null && dbk <= 30,
+      add('สำรองข้อมูลไม่เกิน 14 วัน', dbk !== null && dbk <= 14,
         dbk === null ? 'ยังไม่เคยสำรอง' : dbk + ' วันที่แล้ว');
+
+      // --- 11. ตัวกันโปรเจกต์ Supabase ถูก pause ---
+      // GitHub ปิด scheduled workflow อัตโนมัติถ้า repo เงียบเกิน 60 วัน -> ping หยุด -> ฐานข้อมูลหลับ
+      try {
+        const res = await fetch('https://api.github.com/repos/' + GH_REPO + '/commits?per_page=1');
+        const j = await res.json();
+        const last = j && j[0] && j[0].commit && j[0].commit.committer && j[0].commit.committer.date;
+        if (!last) throw new Error('อ่านข้อมูล repo ไม่ได้');
+        const dRepo = Math.floor((Date.now() - new Date(last).getTime()) / 86400000);
+        add('ตัวปลุกฐานข้อมูลยังทำงาน (repo เคลื่อนไหวใน 45 วัน)', dRepo <= 45,
+          'แก้ไขล่าสุด ' + dRepo + ' วันที่แล้ว' + (dRepo > 45 ? ' — เข้าแท็บ Actions กด Run workflow สักครั้ง' : ''));
+      } catch (e) { add('ตัวปลุกฐานข้อมูลยังทำงาน', false, 'เช็กไม่ได้: ' + e.message); }
 
       return out;
     }
@@ -2238,6 +2259,7 @@
       'order_items', 'order_payments', 'receipts', 'receipt_items',
       'stock_items', 'stock_moves', 'activity_log'];
     const BACKUP_KEY = 'haifa_last_backup';
+    const GH_REPO = 'adinan-design00147/fabric-order-summary';   // ใช้เช็กว่า workflow ปลุกฐานข้อมูลยังไม่ถูกปิด
 
     async function fetchAllTables() {
       const out = {};
@@ -2269,16 +2291,31 @@
       return [cols.join(','), ...rows.map(r => cols.map(c => cell(r[c])).join(','))].join('\n');
     }
 
-    function markBackedUp() {
-      try { localStorage.setItem(BACKUP_KEY, new Date().toISOString()); } catch (e) {}
+    // เก็บวันสำรองไว้ในฐานข้อมูลด้วย เครื่องอื่นจะได้รู้ว่ามีคนสำรองไปแล้ว
+    // (เดิมเก็บใน localStorage เครื่องเดียว สำรองจากมือถือแล้วคอมยังเตือนอยู่)
+    let LAST_BACKUP_AT = null;
+
+    async function markBackedUp() {
+      const now = new Date().toISOString();
+      try { localStorage.setItem(BACKUP_KEY, now); } catch (e) {}
+      LAST_BACKUP_AT = now;
+      try { await sb.from('settings').upsert({ key: 'last_backup_at', value: now }, { onConflict: 'key' }); } catch (e) {}
+    }
+
+    async function fetchLastBackup() {
+      try {
+        const { data } = await sb.from('settings').select('value').eq('key', 'last_backup_at').maybeSingle();
+        if (data && data.value) LAST_BACKUP_AT = data.value;
+      } catch (e) {}
+      if (!LAST_BACKUP_AT) { try { LAST_BACKUP_AT = localStorage.getItem(BACKUP_KEY); } catch (e) {} }
+      return LAST_BACKUP_AT;
     }
 
     function daysSinceBackup() {
-      try {
-        const t = localStorage.getItem(BACKUP_KEY);
-        if (!t) return null;
-        return Math.floor((Date.now() - new Date(t).getTime()) / 86400000);
-      } catch (e) { return null; }
+      let t = LAST_BACKUP_AT;
+      if (!t) { try { t = localStorage.getItem(BACKUP_KEY); } catch (e) {} }
+      if (!t) return null;
+      return Math.floor((Date.now() - new Date(t).getTime()) / 86400000);
     }
 
     // ---- สร้างไฟล์ ZIP เอง (แบบ store ไม่บีบอัด) จะได้ไม่ต้องพึ่งไลบรารีนอก ----
@@ -2477,7 +2514,7 @@ end $$;
     // ===== เช็กว่ามีเวอร์ชันใหม่ไหม =====
     // เบราว์เซอร์ชอบจำไฟล์เก่าไว้ (cache) ทำให้ไม่เห็นของที่เพิ่งอัปเดต
     // ตัวนี้จะแอบเทียบเวอร์ชันกับไฟล์บนเซิร์ฟเวอร์ แล้วขึ้นแถบให้กดอัปเดต
-    const APP_BUILD = '20260813-1954';
+    const APP_BUILD = '20260816-0733';
 
     async function checkForUpdate() {
       try {
@@ -2961,11 +2998,11 @@ end $$;
       const card = document.createElement('div');
       card.className = 'lot-card';
       card.innerHTML = `
-        <div class="lot-head"><span>${icon('trash', 16)}รายการผ้าที่เสีย (${WASTE.length})</span></div>
+        <div class="lot-head"><span>${icon('trash', 16)}รายการผ้าที่เสีย (${WASTE.length})</span>
+          ${WASTE.length > 300 ? '<span class="hint">แสดง 300 รายการล่าสุด · ยอดสรุปด้านบนนับครบทุกรายการ</span>' : ''}</div>
         <div class="table-wrap"><table>
           <thead><tr><th>วันที่</th><th>ประเภท</th><th>งาน / ล็อต</th><th>สาเหตุ</th><th>หลา</th><th>มูลค่า</th><th></th></tr></thead>
-          <tbody>${WASTE.length ? WASTE.map(w => {
-            // eslint-disable-next-line
+          <tbody>${WASTE.length ? WASTE.slice(0, 300).map(w => {
             const p = w.piece_id ? pieceById[w.piece_id] : null;
             const lot = w.lot_id ? lotById[w.lot_id] : null;
             return `<tr>
@@ -3691,7 +3728,14 @@ end $$;
       await sb.from('trash').delete().eq('id', t.id);
     }
 
+    const TRASH_KEEP_DAYS = 90;
+
     async function loadTrash() {
+      // ของที่อยู่ในถังเกิน 90 วัน ถือว่าไม่กู้แล้ว ล้างทิ้งอัตโนมัติ ไม่ให้บวมไปเรื่อยๆ
+      if (isAdmin()) {
+        const cutoff = new Date(Date.now() - TRASH_KEEP_DAYS * 86400000).toISOString();
+        try { await sb.from('trash').delete().lt('deleted_at', cutoff); } catch (e) {}
+      }
       const { data, error } = await sb.from('trash').select('*').order('deleted_at', { ascending: false });
       if (error) throw error;
       renderTrash(data || []);
@@ -3712,7 +3756,7 @@ end $$;
       const bar = document.createElement('div');
       bar.className = 'no-print';
       bar.style.cssText = 'display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:14px';
-      bar.innerHTML = `<span class="hint">มีของในถัง <b>${list.length}</b> รายการ</span>
+      bar.innerHTML = `<span class="hint">มีของในถัง <b>${list.length}</b> รายการ · ของที่เกิน ${TRASH_KEEP_DAYS} วันระบบล้างให้เอง</span>
         ${list.length ? `<button class="btn secondary btn-sm admin-only" id="trEmpty">${icon('trash', 15)}ล้างถังทั้งหมด</button>` : ''}`;
       app.appendChild(bar);
 
@@ -6426,7 +6470,10 @@ end $$;
       if (e1) throw e1;
       const { data: pieces, error: e2 } = await sb.from('pieces').select('id,lot_id,width_cm,length_cm,label,price,paid,item_type,printed,printed_at,stock_move_id,redo_count');
       if (e2) throw e2;
-      const { data: waste } = await sb.from('fabric_waste').select('*').order('created_at', { ascending: false }).limit(300);
+      // ดึงทุกแถว (คอลัมน์ที่ใช้เท่านั้น) ยอดสรุปจะได้ตรงเสมอ ไม่ตัดที่ 300 แถวแบบเงียบๆ
+      const { data: waste } = await sb.from('fabric_waste')
+        .select('id,lot_id,piece_id,kind,reason,note,yards,cost,created_at')
+        .order('created_at', { ascending: false });
       WASTE = waste || [];
 
       lots.sort((a, b) => lotSortKey(b.name) - lotSortKey(a.name));
