@@ -626,6 +626,39 @@
     .item-row .line-sum { grid-column: 1 / -1; text-align: left; padding-bottom: 0; }
   }
 
+  /* ===== แถวรายการแบบหน้าตั้งค่า (ใช้ซ้ำได้ทั้งระบบ) ===== */
+  .list-group { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius);
+                overflow: hidden; margin-bottom: var(--space-4); }
+  .list-label { font-size: 12px; font-weight: 600; color: var(--sub); text-transform: none;
+                margin: 0 0 var(--space-2) 2px; }
+  .list-row { display: flex; align-items: center; gap: var(--space-3); width: 100%; min-height: 56px;
+              padding: 12px var(--space-4); background: none; border: none; border-top: 1px solid var(--border);
+              font-family: inherit; font-size: 15px; color: var(--text); text-align: left; cursor: pointer;
+              text-decoration: none; }
+  .list-row:first-child { border-top: none; }
+  .list-row:hover { background: var(--soft); }
+  .list-row .lr-ico { width: 34px; height: 34px; border-radius: 10px; background: var(--accent-soft); color: var(--accent);
+                      display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .list-row .lr-main { flex: 1; min-width: 0; }
+  .list-row .lr-title { font-weight: 600; }
+  .list-row .lr-sub { font-size: 12px; color: var(--sub); margin-top: 1px; }
+  .list-row .lr-value { font-size: 13px; color: var(--sub); white-space: nowrap; }
+  .list-row .lr-go { color: var(--sub); flex-shrink: 0; display: flex; transition: transform .18s ease; }
+  .list-row.open .lr-go { transform: rotate(90deg); }
+  .list-row.danger .lr-ico { background: #fdecea; color: #b42318; }
+  .list-row.danger .lr-title { color: #b42318; }
+  html[data-theme="dark"] .list-row.danger .lr-ico { background: #3a1d1b; color: #f4a49b; }
+  .list-panel { padding: 0 var(--space-4) var(--space-4); border-top: 1px solid var(--border); background: var(--soft); }
+  .list-panel[hidden] { display: none; }
+
+  /* การ์ดคนที่ล็อกอินอยู่ (หัวหน้าโปรไฟล์) */
+  .me-card { display: flex; align-items: center; gap: var(--space-3); background: var(--card);
+             border: 1px solid var(--border); border-radius: var(--radius); padding: var(--space-4); margin-bottom: var(--space-4); }
+  .me-avatar { width: 56px; height: 56px; border-radius: 50%; background: var(--accent); color: #fff;
+               display: flex; align-items: center; justify-content: center; font-size: 21px; font-weight: 700; flex-shrink: 0; }
+  .me-name { font-size: 17px; font-weight: 700; }
+  .me-mail { font-size: 12.5px; color: var(--sub); margin-top: 2px; word-break: break-all; }
+
   /* ===== ชีตเมนูเพิ่มเติม (มือถือ) ===== */
   .sheet-backdrop { position: fixed; inset: 0; z-index: 70; background: rgba(0,0,0,.45); display: flex; align-items: flex-end; }
   .sheet {
@@ -634,7 +667,10 @@
     max-height: 80vh; overflow-y: auto;
   }
   .sheet-bar { width: 42px; height: 4px; border-radius: 999px; background: var(--border); margin: 0 auto var(--space-3); }
-  .sheet-title { font-size: 13px; font-weight: 700; color: var(--sub); margin-bottom: var(--space-2); }
+  .sheet-title { font-size: 12px; font-weight: 700; color: var(--sub); margin: var(--space-3) 0 4px 2px; }
+  .sheet-title:first-of-type { margin-top: 0; }
+  .sheet-item .si-label { flex: 1; }
+  .sheet-item .si-go { color: var(--sub); display: flex; }
   .sheet-item {
     display: flex; align-items: center; gap: var(--space-3); width: 100%; min-height: 52px;
     background: none; border: none; border-radius: 12px; cursor: pointer; font-family: inherit;
@@ -1208,7 +1244,13 @@
     ];
     // แถบล่างมือถือ: 4 หน้าหลัก + ปุ่มเพิ่มเติมสำหรับที่เหลือ
     const MOBILE_NAV = ['dashboard', 'orders', 'calendar', 'fabric'];
-    const MOBILE_MORE = ['products', 'stock', 'customers', 'receipts', 'attendance', 'schedule', 'timesheet', 'users', 'trash', 'health', 'profile'];
+    // เมนูเพิ่มเติมบนมือถือ — แบ่งกลุ่มให้หาง่าย (ลำดับตามความถี่ที่ใช้จริง)
+    const MOBILE_MORE_GROUPS = [
+      { label: 'งานประจำวัน', keys: ['stock', 'customers', 'receipts'] },
+      { label: 'ลงเวลาทำงาน', keys: ['attendance', 'schedule', 'timesheet'] },
+      { label: 'ตั้งค่าร้าน',   keys: ['products', 'users', 'trash', 'health', 'profile'] },
+    ];
+    const MOBILE_MORE = MOBILE_MORE_GROUPS.flatMap(g => g.keys);
     const PAY_METHODS = ['เงินสด', 'โอนธนาคาร', 'พร้อมเพย์', 'เก็บปลายทาง', 'บัตรเครดิต', 'อื่นๆ'];
 
     // ช่องทางรับออเดอร์ (แก้เพิ่ม/ลดได้ที่นี่)
@@ -1325,13 +1367,17 @@
       wrap.innerHTML = `
         <div class="sheet">
           <div class="sheet-bar"></div>
-          <div class="sheet-title">เมนูเพิ่มเติม</div>
-          ${MOBILE_MORE.map(k => {
-            const m = viewMeta(k);
-            return `<button class="sheet-item ${currentView === k ? 'active' : ''}" data-key="${k}">
-                      <span class="nav-ico">${icon(m.icon, 20)}</span><span>${esc(m.label)}</span>
-                    </button>`;
-          }).join('')}
+          ${MOBILE_MORE_GROUPS.map(g => `
+            <div class="sheet-title">${esc(g.label)}</div>
+            ${g.keys.filter(k => k !== 'users' || isAdmin()).map(k => {
+              const m = viewMeta(k);
+              return `<button class="sheet-item ${currentView === k ? 'active' : ''}" data-key="${k}">
+                        <span class="nav-ico">${icon(m.icon, 20)}</span>
+                        <span class="si-label">${esc(m.label)}</span>
+                        <span class="si-go">${icon('chevron', 17)}</span>
+                      </button>`;
+            }).join('')}
+          `).join('')}
           <button class="btn secondary block" id="sheetClose" style="margin-top:var(--space-3)">ปิด</button>
         </div>
       `;
@@ -1380,6 +1426,64 @@
         if (opts.onCount) opts.onCount(found, els.length);
       });
       return wrap;
+    }
+
+    /**
+     * แถวรายการแบบหน้าตั้งค่า — ไอคอน + ชื่อ + ค่าปัจจุบัน + ลูกศร
+     * opts: { icon, title, sub, value, href, danger, onClick, panel }
+     *   href  = ไปหน้าอื่น (เป็นลิงก์จริง กดค้างเปิดแท็บใหม่ได้)
+     *   panel = element ที่จะกางออกใต้แถวเมื่อกด (ใช้กับฟอร์มที่ไม่อยากโชว์ค้างไว้)
+     */
+    function listRow(opts) {
+      const isLink = !!opts.href && !opts.panel;
+      const el = document.createElement(isLink ? 'a' : 'button');
+      if (isLink) el.href = opts.href; else el.type = 'button';
+      el.className = 'list-row' + (opts.danger ? ' danger' : '');
+      el.innerHTML = `
+        <span class="lr-ico">${icon(opts.icon || 'clipboard', 18)}</span>
+        <span class="lr-main">
+          <span class="lr-title">${esc(opts.title)}</span>
+          ${opts.sub ? `<span class="lr-sub">${esc(opts.sub)}</span>` : ''}
+        </span>
+        ${opts.value ? `<span class="lr-value">${esc(opts.value)}</span>` : ''}
+        <span class="lr-go">${icon('chevron', 18)}</span>`;
+      if (opts.onClick) el.addEventListener('click', opts.onClick);
+      return el;
+    }
+
+    /** กลุ่มของแถว: หัวข้อ + กล่องขาวที่มีเส้นคั่นระหว่างแถว */
+    function listGroup(label, rows) {
+      const frag = document.createDocumentFragment();
+      if (label) {
+        const h = document.createElement('div');
+        h.className = 'list-label';
+        h.textContent = label;
+        frag.appendChild(h);
+      }
+      const box = document.createElement('div');
+      box.className = 'list-group';
+      rows.filter(Boolean).forEach(r => {
+        box.appendChild(r.row || r);
+        if (r.panel) box.appendChild(r.panel);
+      });
+      frag.appendChild(box);
+      return frag;
+    }
+
+    /** แถวที่กดแล้วกางฟอร์มออกมาใต้แถว */
+    function expandRow(opts, buildPanel) {
+      const panel = document.createElement('div');
+      panel.className = 'list-panel';
+      panel.hidden = true;
+      let built = false;
+      const row = listRow(Object.assign({}, opts, {
+        onClick: () => {
+          if (!built) { panel.appendChild(buildPanel()); built = true; }
+          panel.hidden = !panel.hidden;
+          row.classList.toggle('open', !panel.hidden);
+        },
+      }));
+      return { row, panel };
     }
 
     function buildPageHead(title, sub) {
@@ -1811,72 +1915,116 @@
     async function loadProfile() {
       const app = document.getElementById('app');
       app.innerHTML = '';
-      app.appendChild(buildPageHead('โปรไฟล์ผู้ใช้', 'ชื่อเรียกและรหัสผ่านของคุณ'));
+      app.appendChild(buildPageHead('โปรไฟล์ผู้ใช้', 'บัญชี การตั้งค่า และทางลัดของคุณ'));
       document.getElementById('statusMsg').textContent = 'อัปเดตล่าสุด: ' + new Date().toLocaleString('th-TH');
 
-      // ---- ข้อมูลของฉัน ----
-      const me = document.createElement('div');
-      me.className = 'panel';
-      me.innerHTML = `
-        <h2>${icon('user', 17)}ข้อมูลของฉัน</h2>
-        <div class="form-grid">
-          <div class="field"><label>อีเมล (ใช้ล็อกอิน)</label><input value="${esc(ME ? ME.email : '')}" disabled></div>
-          <div class="field"><label for="pfName">ชื่อเรียก</label><input id="pfName" value="${esc(MY_NAME)}" placeholder="เช่น อดินัน"></div>
-        </div>
-        <button class="btn secondary" id="pfSaveName">${icon('check', 15)}บันทึกชื่อ</button>
-        <div class="msg" id="pfNameMsg"></div>
-        <div class="hint">สิทธิ์ของคุณ: <b>${esc(roleMeta(MY_ROLE).label)}</b> — ${esc(roleMeta(MY_ROLE).desc)}</div>
-      `;
-      app.appendChild(me);
-      me.querySelector('#pfSaveName').addEventListener('click', async () => {
-        const msg = me.querySelector('#pfNameMsg');
-        const name = me.querySelector('#pfName').value.trim();
-        const { error } = await sb.from('app_users').update({ display_name: name || null }).eq('user_id', ME.id);
-        if (error) { msg.textContent = 'บันทึกไม่สำเร็จ: ' + error.message; msg.className = 'msg error'; return; }
-        MY_NAME = name;
-        document.getElementById('whoami').innerHTML = esc(name || ME.email) +
-          ' <span class="st ' + (isAdmin() ? 'st-paid' : 'st-prod') + '">' + (isAdmin() ? 'ผู้ดูแล' : 'ดูอย่างเดียว') + '</span>';
-        msg.textContent = 'บันทึกแล้ว'; msg.className = 'msg ok';
-      });
+      const login = prettyLogin(ME ? ME.email : '') || '';
+      const shownName = MY_NAME || (login.includes('@') ? login.split('@')[0] : login) || 'ผู้ใช้';
 
-      // ---- เปลี่ยนรหัสผ่าน ----
-      const pw = document.createElement('div');
-      pw.className = 'panel';
-      pw.innerHTML = `
-        <h2>${icon('checkbox', 17)}เปลี่ยนรหัสผ่าน</h2>
-        <div class="form-grid">
-          <div class="field"><label for="pfPass1">รหัสผ่านใหม่</label>
-            <input id="pfPass1" type="password" autocomplete="new-password" placeholder="อย่างน้อย 8 ตัวอักษร"></div>
-          <div class="field"><label for="pfPass2">พิมพ์ซ้ำอีกครั้ง</label>
-            <input id="pfPass2" type="password" autocomplete="new-password" placeholder="พิมพ์ให้ตรงกัน"></div>
-        </div>
-        <button class="btn" id="pfSavePass">${icon('check', 15)}เปลี่ยนรหัสผ่าน</button>
-        <div class="msg" id="pfPassMsg"></div>
-        <div class="hint">เปลี่ยนได้ทันทีในหน้านี้ ไม่ต้องรอลิงก์ทางอีเมล · เครื่องอื่นที่ล็อกอินค้างไว้จะยังใช้ได้จนกว่าจะออกจากระบบ</div>
-      `;
-      app.appendChild(pw);
-      pw.querySelector('#pfSavePass').addEventListener('click', async () => {
-        const msg = pw.querySelector('#pfPassMsg');
-        const a = pw.querySelector('#pfPass1').value, b = pw.querySelector('#pfPass2').value;
-        msg.textContent = ''; msg.className = 'msg';
-        if (a.length < 8) { msg.textContent = 'รหัสผ่านต้องยาวอย่างน้อย 8 ตัวอักษร'; msg.className = 'msg error'; return; }
-        if (a !== b) { msg.textContent = 'รหัสผ่านสองช่องไม่ตรงกัน'; msg.className = 'msg error'; return; }
-        const btn = pw.querySelector('#pfSavePass');
-        btn.disabled = true;
-        const { error } = await sb.auth.updateUser({ password: a });
-        btn.disabled = false;
-        if (error) { msg.textContent = 'เปลี่ยนไม่สำเร็จ: ' + error.message; msg.className = 'msg error'; return; }
-        pw.querySelector('#pfPass1').value = ''; pw.querySelector('#pfPass2').value = '';
-        // เปลี่ยนรหัสเองแล้ว -> ลบรหัสชั่วคราวที่แอดมินตั้งไว้ทิ้ง (แอดมินจะไม่เห็นรหัสของคุณอีก)
-        try { await sb.from('user_temp_passwords').delete().eq('user_id', ME.id); } catch (e) {}
-        msg.textContent = 'เปลี่ยนรหัสผ่านเรียบร้อย ครั้งหน้าใช้รหัสใหม่'; msg.className = 'msg ok';
+      // ---- การ์ดคนที่ล็อกอินอยู่ ----
+      const card = document.createElement('div');
+      card.className = 'me-card';
+      card.innerHTML = `
+        <div class="me-avatar">${esc(shownName.trim().charAt(0).toUpperCase() || '?')}</div>
+        <div style="min-width:0">
+          <div class="me-name">${esc(shownName)}</div>
+          <div class="me-mail">${esc(login)}</div>
+          <div style="margin-top:6px"><span class="st ${roleMeta(MY_ROLE).cls}">${esc(roleMeta(MY_ROLE).label)}</span></div>
+        </div>`;
+      app.appendChild(card);
+
+      // ================= กลุ่ม 1: บัญชี =================
+      // แถวชื่อเรียก — กดแล้วกางฟอร์มออกมา ไม่โชว์ฟอร์มค้างไว้ตลอด
+      const nameRow = expandRow(
+        { icon: 'user', title: 'ชื่อเรียก', sub: 'ชื่อที่โชว์ในระบบและในรายการลงเวลา', value: MY_NAME || 'ยังไม่ตั้ง' },
+        () => {
+          const box = document.createElement('div');
+          box.innerHTML = `
+            <div class="field" style="padding-top:14px"><label for="pfName">ชื่อเรียก</label>
+              <input id="pfName" value="${esc(MY_NAME)}" placeholder="เช่น อดินัน"></div>
+            <button class="btn" id="pfSaveName">${icon('check', 15)}บันทึกชื่อ</button>
+            <div class="msg" id="pfNameMsg"></div>`;
+          box.querySelector('#pfSaveName').addEventListener('click', async () => {
+            const msg = box.querySelector('#pfNameMsg');
+            const name = box.querySelector('#pfName').value.trim();
+            const { error } = await sb.from('app_users').update({ display_name: name || null }).eq('user_id', ME.id);
+            if (error) { msg.textContent = 'บันทึกไม่สำเร็จ: ' + error.message; msg.className = 'msg error'; return; }
+            MY_NAME = name;
+            msg.textContent = 'บันทึกแล้ว'; msg.className = 'msg ok';
+            setTimeout(() => loadProfile(), 600);
+          });
+          return box;
+        });
+
+      const passRow = expandRow(
+        { icon: 'checkbox', title: 'รหัสผ่าน', sub: 'เปลี่ยนได้ทันที ไม่ต้องรอลิงก์ทางอีเมล' },
+        () => {
+          const box = document.createElement('div');
+          box.innerHTML = `
+            <div class="form-grid" style="padding-top:14px">
+              <div class="field"><label for="pfPass1">รหัสผ่านใหม่</label>
+                <input id="pfPass1" type="password" autocomplete="new-password" placeholder="อย่างน้อย 8 ตัวอักษร"></div>
+              <div class="field"><label for="pfPass2">พิมพ์ซ้ำอีกครั้ง</label>
+                <input id="pfPass2" type="password" autocomplete="new-password" placeholder="พิมพ์ให้ตรงกัน"></div>
+            </div>
+            <button class="btn" id="pfSavePass">${icon('check', 15)}เปลี่ยนรหัสผ่าน</button>
+            <div class="msg" id="pfPassMsg"></div>
+            <div class="hint">เครื่องอื่นที่ล็อกอินค้างไว้จะยังใช้ได้จนกว่าจะออกจากระบบ</div>`;
+          box.querySelector('#pfSavePass').addEventListener('click', async () => {
+            const msg = box.querySelector('#pfPassMsg');
+            const a = box.querySelector('#pfPass1').value, b = box.querySelector('#pfPass2').value;
+            msg.textContent = ''; msg.className = 'msg';
+            if (a.length < 8) { msg.textContent = 'รหัสผ่านต้องยาวอย่างน้อย 8 ตัวอักษร'; msg.className = 'msg error'; return; }
+            if (a !== b) { msg.textContent = 'รหัสผ่านสองช่องไม่ตรงกัน'; msg.className = 'msg error'; return; }
+            const btn = box.querySelector('#pfSavePass');
+            btn.disabled = true;
+            const { error } = await sb.auth.updateUser({ password: a });
+            btn.disabled = false;
+            if (error) { msg.textContent = 'เปลี่ยนไม่สำเร็จ: ' + error.message; msg.className = 'msg error'; return; }
+            box.querySelector('#pfPass1').value = ''; box.querySelector('#pfPass2').value = '';
+            // เปลี่ยนรหัสเองแล้ว -> ลบรหัสชั่วคราวที่แอดมินตั้งไว้ทิ้ง
+            try { await sb.from('user_temp_passwords').delete().eq('user_id', ME.id); } catch (e) {}
+            msg.textContent = 'เปลี่ยนรหัสผ่านเรียบร้อย ครั้งหน้าใช้รหัสใหม่'; msg.className = 'msg ok';
+          });
+          return box;
+        });
+
+      app.appendChild(listGroup('บัญชี', [
+        nameRow, passRow,
+        listRow({ icon: 'check', title: 'สิทธิ์การใช้งาน', sub: roleMeta(MY_ROLE).desc, value: roleMeta(MY_ROLE).label,
+                  onClick: () => {} }),
+      ]));
+
+      // ================= กลุ่ม 2: การตั้งค่า =================
+      const themeRow = listRow({
+        icon: 'moon', title: 'โหมดมืด', sub: 'สลับธีมสว่าง/มืดของทั้งระบบ',
+        value: (document.documentElement.getAttribute('data-theme') === 'dark') ? 'เปิดอยู่' : 'ปิดอยู่',
+        onClick: () => { document.getElementById('themeToggle')?.click(); setTimeout(() => loadProfile(), 100); },
       });
+      app.appendChild(listGroup('การตั้งค่า', [
+        themeRow,
+        listRow({ icon: 'clock', title: 'ลงเวลาของฉัน', sub: 'เข้างาน-ออกงานวันนี้', href: routeFor('attendance') }),
+        listRow({ icon: 'chart', title: 'ประวัติลงเวลา & โอที', sub: 'สรุปรายเดือนของคุณ', href: routeFor('timesheet') }),
+      ]));
+
+      // ================= กลุ่ม 3: ระบบ =================
+      const sysRows = [
+        listRow({ icon: 'check', title: 'ตรวจระบบ & สำรองข้อมูล', sub: 'เช็กว่าทุกอย่างปกติ + โหลดไฟล์สำรอง', href: routeFor('health') }),
+      ];
+      if (isAdmin()) {
+        sysRows.push(listRow({ icon: 'user', title: 'ผู้ใช้ & สิทธิ์', sub: 'จัดการบัญชีพนักงาน', href: routeFor('users') }));
+        sysRows.push(listRow({ icon: 'trash', title: 'ถังขยะ', sub: 'กู้คืนของที่ลบไป', href: routeFor('trash') }));
+      }
+      sysRows.push(listRow({
+        icon: 'back', title: 'ออกจากระบบ', danger: true,
+        onClick: async () => { if (confirm('ออกจากระบบ?')) await sb.auth.signOut(); },
+      }));
+      app.appendChild(listGroup('ระบบ', sysRows));
 
       const hint = document.createElement('div');
       hint.className = 'hint';
-      hint.style.marginTop = '4px';
-      hint.innerHTML = isAdmin()
-        ? 'จัดการบัญชีผู้ใช้และสิทธิ์ ย้ายไปที่เมนู <a href="' + routeFor('users') + '">ผู้ใช้ &amp; สิทธิ์</a> แล้ว'
+      hint.textContent = isAdmin()
+        ? 'ลืมรหัสของพนักงาน: ไปที่เมนู "ผู้ใช้ & สิทธิ์" แล้วกดตั้งรหัสใหม่ให้เขาได้'
         : 'ถ้าลืมรหัสผ่าน ให้แจ้งผู้ดูแลตั้งรหัสใหม่ให้';
       app.appendChild(hint);
     }
@@ -2514,7 +2662,7 @@ end $$;
     // ===== เช็กว่ามีเวอร์ชันใหม่ไหม =====
     // เบราว์เซอร์ชอบจำไฟล์เก่าไว้ (cache) ทำให้ไม่เห็นของที่เพิ่งอัปเดต
     // ตัวนี้จะแอบเทียบเวอร์ชันกับไฟล์บนเซิร์ฟเวอร์ แล้วขึ้นแถบให้กดอัปเดต
-    const APP_BUILD = '20260816-0733';
+    const APP_BUILD = '20260816-1657';
 
     async function checkForUpdate() {
       try {
