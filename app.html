@@ -2405,7 +2405,26 @@
         }
       } catch (e) { add('ตัดสต็อกพร้อมกันแล้วยอดไม่หาย', false, e.message); }
 
-      // --- 13. ตัวกันโปรเจกต์ Supabase ถูก pause ---
+      // --- 13. ยอดสต็อกต้องตรงกับประวัติรับเข้า/เบิกใช้ ---
+      try {
+        const [iRes, mRes] = await Promise.all([
+          sb.from('stock_items').select('id,name,total_qty,used_qty').eq('active', true),
+          sb.from('stock_moves').select('item_id,kind,qty'),
+        ]);
+        const sum = {};
+        (mRes.data || []).forEach(m => {
+          sum[m.item_id] = sum[m.item_id] || { in: 0, out: 0 };
+          sum[m.item_id][m.kind] += Number(m.qty);
+        });
+        const bad = (iRes.data || []).filter(i => {
+          const s2 = sum[i.id] || { in: 0, out: 0 };
+          return Math.abs(Number(i.used_qty) - s2.out) > 0.01 || Math.abs(Number(i.total_qty) - s2.in) > 0.01;
+        });
+        add('ยอดสต็อกตรงกับประวัติเบิก-รับเข้า', bad.length === 0,
+          bad.length ? 'ไม่ตรง: ' + bad.map(i => i.name).join(', ') : 'ตรงทุกรายการ');
+      } catch (e) { add('ยอดสต็อกตรงกับประวัติ', false, e.message); }
+
+      // --- 14. ตัวกันโปรเจกต์ Supabase ถูก pause ---
       // GitHub ปิด scheduled workflow อัตโนมัติถ้า repo เงียบเกิน 60 วัน -> ping หยุด -> ฐานข้อมูลหลับ
       try {
         const res = await fetch('https://api.github.com/repos/' + GH_REPO + '/commits?per_page=1');
@@ -2727,7 +2746,7 @@ end $$;
     // ===== เช็กว่ามีเวอร์ชันใหม่ไหม =====
     // เบราว์เซอร์ชอบจำไฟล์เก่าไว้ (cache) ทำให้ไม่เห็นของที่เพิ่งอัปเดต
     // ตัวนี้จะแอบเทียบเวอร์ชันกับไฟล์บนเซิร์ฟเวอร์ แล้วขึ้นแถบให้กดอัปเดต
-    const APP_BUILD = '20260816-2141';
+    const APP_BUILD = '20260816-2149';
 
     let lastUpdateCheck = 0;
 
@@ -4089,19 +4108,25 @@ end $$;
       return data;
     }
 
-    /** บันทึกการเคลื่อนไหวสต็อก แล้วอัปเดตยอดในตารางหลัก */
+    /**
+     * รับเข้า / เบิกใช้สต็อก — ให้ฐานข้อมูลบวกให้เอง (ฟังก์ชัน stock_apply_move)
+     * ห้ามกลับไปคิดยอดในเว็บแล้วเขียนทับ: ถ้า 2 คนกดพร้อมกัน รายการหนึ่งจะหายเงียบๆ
+     * kind: 'in' รับเข้า · 'out' เบิกใช้ · 'undo_out' ถอนการเบิก (ตอนยกเลิกปริ้น ไม่บันทึกประวัติใหม่)
+     * คืนค่า id ของแถวใน stock_moves ที่เพิ่งสร้าง
+     */
     async function stockMove(item, kind, qty, note, order) {
       const amount = Number(qty);
       if (!(amount > 0)) throw new Error('ใส่จำนวนก่อน');
-      const patch = kind === 'in'
-        ? { total_qty: Number(item.total_qty) + amount }
-        : { used_qty: Math.min(Number(item.total_qty), Number(item.used_qty) + amount) };
-      const { error } = await sb.from('stock_items').update(patch).eq('id', item.id);
-      if (error) throw new Error(error.message);
-      await sb.from('stock_moves').insert({
-        item_id: item.id, kind, qty: amount, note: note || null,
-        order_id: order ? order.id : null, order_no: order ? order.order_no : null,
+      const { data, error } = await sb.rpc('stock_apply_move', {
+        p_item_id: item.id,
+        p_kind: kind,
+        p_qty: amount,
+        p_note: note || null,
+        p_order_id: order ? order.id : null,
+        p_order_no: order ? order.order_no : null,
       });
+      if (error) throw new Error(error.message);
+      return data;
     }
 
     async function loadStock() {
@@ -6748,12 +6773,7 @@ end $$;
       if (piece.stock_move_id) {
         const { data: mv } = await sb.from('stock_moves').select('id,item_id,qty').eq('id', piece.stock_move_id).maybeSingle();
         if (mv) {
-          const { data: item } = await sb.from('stock_items').select('id,total_qty,used_qty').eq('id', mv.item_id).maybeSingle();
-          if (item) {
-            await sb.from('stock_items')
-              .update({ used_qty: Math.max(0, Number(item.used_qty) - Number(mv.qty)) })
-              .eq('id', item.id);
-          }
+          await stockMove({ id: mv.item_id }, 'undo_out', Number(mv.qty));
           await sb.from('stock_moves').delete().eq('id', mv.id);
         }
       }
