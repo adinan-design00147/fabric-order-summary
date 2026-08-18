@@ -2864,7 +2864,7 @@ end $$;
     // ===== เช็กว่ามีเวอร์ชันใหม่ไหม =====
     // เบราว์เซอร์ชอบจำไฟล์เก่าไว้ (cache) ทำให้ไม่เห็นของที่เพิ่งอัปเดต
     // ตัวนี้จะแอบเทียบเวอร์ชันกับไฟล์บนเซิร์ฟเวอร์ แล้วขึ้นแถบให้กดอัปเดต
-    const APP_BUILD = '20260818-1834';
+    const APP_BUILD = '20260818-1851';
 
     let lastUpdateCheck = 0;
 
@@ -3298,7 +3298,7 @@ end $$;
     // ===== หนี้ส่วนตัว (ไม่เกี่ยวกับร้าน · เห็นได้เฉพาะผู้ดูแลสูงสุด) =====
     // หน้าตาแบบสมุดบัญชีธนาคาร: วันที่ · รายการ · รับหนี้มา · จ่ายคืน · คงเหลือ
     // ตัวกันจริงคือ RLS ฝั่งฐานข้อมูล (policy "super admin only") ฝั่งเว็บแค่ซ่อนเมนูให้ตรงกัน
-    let DEBT_ENTRIES = [];
+    let DEBT_ENTRIES = [], DEBT_RECUR = [];
     let debtOpen = {};        // จำว่าเจ้าหนี้รายไหนกางสมุดอยู่
 
     async function loadDebts() {
@@ -3313,10 +3313,13 @@ end $$;
         document.getElementById('statusMsg').textContent = '';
         return;
       }
-      const { data, error } = await sb.from('debt_entries').select('*')
-        .order('entry_date').order('created_at');
-      if (error) throw error;
-      DEBT_ENTRIES = data || [];
+      const [eRes, rRes] = await Promise.all([
+        sb.from('debt_entries').select('*').order('entry_date').order('created_at'),
+        sb.from('debt_recurring').select('*').eq('active', true).order('created_at'),
+      ]);
+      if (eRes.error) throw eRes.error;
+      DEBT_ENTRIES = eRes.data || [];
+      DEBT_RECUR = rRes.data || [];
       renderDebts();
       document.getElementById('statusMsg').textContent = 'อัปเดตล่าสุด: ' + new Date().toLocaleString('th-TH');
     }
@@ -3419,6 +3422,87 @@ end $$;
         await loadDebts();
       });
 
+      // ---- รายการประจำทุกเดือน (ค่ารถ · สหกรณ์ ฯลฯ) ----
+      const now = new Date();
+      const monthLabel = now.toLocaleDateString('th-TH', { month: 'long' }) + ' ' + (now.getFullYear() + 543);
+      const monthPrefix = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');
+      const doneThisMonth = (r) => DEBT_ENTRIES.some(e => e.recurring_id === r.id && String(e.entry_date).startsWith(monthPrefix));
+      const pending = DEBT_RECUR.filter(r => !doneThisMonth(r));
+
+      const recCard = document.createElement('div');
+      recCard.className = 'lot-card';
+      recCard.innerHTML = `
+        <div class="lot-head"><span>${icon('calendar', 16)}รายการประจำทุกเดือน</span>
+          ${DEBT_RECUR.length ? `<span class="st ${pending.length ? 'st-prod' : 'st-paid'}">${pending.length
+            ? 'ยังไม่ได้ลง ' + pending.length + ' รายการ (' + monthLabel + ')'
+            : 'ลงครบแล้ว · ' + monthLabel}</span>` : ''}</div>
+        <div style="padding:var(--space-4)">
+          ${DEBT_RECUR.length ? `<div class="att-people" style="margin-bottom:12px">${DEBT_RECUR.map(r => `
+            <div class="att-person ${doneThisMonth(r) ? 'done' : 'on'}">
+              <div class="ap-main">
+                <div class="ap-name">${esc(r.item)} <span class="hint">· ${esc(r.creditor)}</span></div>
+                <div class="ap-sub">${r.kind === 'in' ? 'เพิ่มยอดหนี้' : 'จ่ายคืน'} ${fmtBaht(round2(r.amount))} บาท ทุกวันที่ ${r.day_of_month}</div>
+              </div>
+              <span class="ap-state">${doneThisMonth(r) ? 'ลงแล้วเดือนนี้' : 'ยังไม่ลง'}</span>
+              <button class="icon-btn icon-btn-delete rec-del" data-id="${r.id}" title="ลบรายการประจำ">${icon('trash', 16)}</button>
+            </div>`).join('')}</div>` : '<div class="hint" style="margin-bottom:12px">ยังไม่มีรายการประจำ — เช่น ค่ารถ 320 · สหกรณ์ 250 ที่ต้องลงทุกเดือน</div>'}
+
+          ${pending.length ? `<button class="btn" id="recRun">${icon('check', 15)}ลงรายการประจำของ ${esc(monthLabel)} (${pending.length} รายการ)</button>` : ''}
+
+          <details style="margin-top:12px">
+            <summary class="hint" style="cursor:pointer">+ เพิ่มรายการประจำใหม่</summary>
+            <div class="form-grid" style="margin-top:10px">
+              <div class="field"><label for="rcCred">เจ้าหนี้</label><input id="rcCred" list="deCreditorList" placeholder="เช่น สหกรณ์"></div>
+              <div class="field"><label for="rcItem">ชื่อรายการ</label><input id="rcItem" placeholder="เช่น ค่ารถ"></div>
+              <div class="field"><label for="rcAmt">จำนวนต่อเดือน (บาท)</label><input id="rcAmt" type="number" min="0" step="any" inputmode="decimal"></div>
+              <div class="field"><label for="rcKind">ประเภท</label>
+                <select id="rcKind"><option value="in">เพิ่มยอดหนี้ทุกเดือน</option><option value="out">จ่ายคืนทุกเดือน</option></select></div>
+              <div class="field"><label for="rcDay">ลงทุกวันที่</label><input id="rcDay" type="number" min="1" max="31" value="1" inputmode="numeric"></div>
+            </div>
+            <button class="btn secondary" id="rcAdd">${icon('plus', 15)}บันทึกรายการประจำ</button>
+            <div class="msg" id="rcMsg"></div>
+          </details>
+        </div>`;
+      app.appendChild(recCard);
+
+      recCard.querySelector('#rcAdd')?.addEventListener('click', async () => {
+        const msg = recCard.querySelector('#rcMsg');
+        const creditor = recCard.querySelector('#rcCred').value.trim();
+        const item = recCard.querySelector('#rcItem').value.trim();
+        const amount = parseFloat(recCard.querySelector('#rcAmt').value);
+        msg.textContent = ''; msg.className = 'msg';
+        if (!creditor || !item) { msg.textContent = 'ใส่เจ้าหนี้และชื่อรายการก่อน'; msg.className = 'msg error'; return; }
+        if (!(amount > 0)) { msg.textContent = 'ใส่จำนวนเงินก่อน'; msg.className = 'msg error'; return; }
+        const { error } = await sb.from('debt_recurring').insert({
+          creditor, item, amount,
+          kind: recCard.querySelector('#rcKind').value,
+          day_of_month: parseInt(recCard.querySelector('#rcDay').value) || 1,
+        });
+        if (error) { msg.textContent = 'บันทึกไม่สำเร็จ: ' + error.message; msg.className = 'msg error'; return; }
+        await loadDebts();
+      });
+
+      recCard.querySelector('#recRun')?.addEventListener('click', async () => {
+        const rows = pending.map(r => {
+          const day = Math.min(r.day_of_month, new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate());
+          return {
+            creditor: r.creditor, kind: r.kind, amount: r.amount,
+            entry_date: monthPrefix + '-' + String(day).padStart(2, '0'),
+            item: r.item, recurring_id: r.id,
+          };
+        });
+        const { error } = await sb.from('debt_entries').insert(rows);
+        if (error) { alert('ลงรายการไม่สำเร็จ: ' + error.message); return; }
+        await loadDebts();
+      });
+
+      recCard.querySelectorAll('.rec-del').forEach(b => b.addEventListener('click', async () => {
+        if (!confirm('ลบรายการประจำนี้? (รายการที่ลงไปแล้วในสมุดยังอยู่)')) return;
+        const { error } = await sb.from('debt_recurring').delete().eq('id', b.dataset.id);
+        if (error) { alert('ลบไม่สำเร็จ: ' + error.message); return; }
+        await loadDebts();
+      }));
+
       if (!DEBT_ENTRIES.length) {
         const empty = document.createElement('div');
         empty.className = 'lot-card';
@@ -3468,7 +3552,8 @@ end $$;
               <tbody>${c.rows.map(e => `<tr>
                 <td data-label="วันที่">${thDate(e.entry_date)}</td>
                 <td data-label="รายการ">${esc(e.item || (e.kind === 'in' ? 'รับหนี้มา' : 'จ่ายคืน'))}
-                  ${e.method ? `<span class="hint"> · ${esc(e.method)}</span>` : ''}</td>
+                  ${e.method ? `<span class="hint"> · ${esc(e.method)}</span>` : ''}
+                  ${e.recurring_id ? '<span class="st st-prod" style="margin-left:6px;font-size:10px">ประจำเดือน</span>' : ''}</td>
                 <td data-label="รับหนี้มา" class="num-col in">${e.kind === 'in' ? fmtBaht(round2(e.amount)) : ''}</td>
                 <td data-label="จ่ายคืน" class="num-col out">${e.kind === 'out' ? fmtBaht(round2(e.amount)) : ''}</td>
                 <td data-label="คงเหลือ" class="num-col bal">${fmtBaht(e.balance)}</td>
@@ -3508,7 +3593,7 @@ end $$;
       app.appendChild(bk);
       bk.querySelector('#deBackup').addEventListener('click', () => {
         downloadBlob('สมุดหนี้ส่วนตัว-' + dateKey() + '.json',
-          new Blob([JSON.stringify({ exported_at: new Date().toISOString(), entries: DEBT_ENTRIES }, null, 1)],
+          new Blob([JSON.stringify({ exported_at: new Date().toISOString(), entries: DEBT_ENTRIES, recurring: DEBT_RECUR }, null, 1)],
             { type: 'application/json' }));
       });
     }
