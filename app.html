@@ -506,33 +506,44 @@
                            background: linear-gradient(180deg, transparent, var(--soft)); }
   .passbook .pb-row:hover { background: var(--soft); }
 
-  /* มือถือ: 1 รายการ = 1 บรรทัด (ไอคอน · ชื่อ+วันที่ · จำนวน+คงเหลือ) แทนการไล่ป้ายทีละช่อง */
+  /* มือถือ: 1 รายการ = 2 บรรทัด — ซ้าย: ไอคอน+ชื่อ / วันที่ · ขวา: จำนวน / คงเหลือ
+     (ไม่ใช้ display:contents เพราะ td จะหลุดการจัดวาง ตัวหนังสือไปโผล่ผิดที่) */
   @media (max-width: 900px) {
     .table-wrap table.passbook tr.pb-row {
-      display: grid; grid-template-columns: auto 1fr auto; align-items: center;
-      column-gap: 12px; row-gap: 2px; padding: 12px var(--space-4);
+      display: grid; grid-template-columns: 1fr auto; align-items: center;
+      column-gap: 12px; row-gap: 2px; padding: 12px var(--space-4); position: relative;
     }
-    .table-wrap table.passbook tr.pb-row td { display: contents; }
+    .table-wrap table.passbook tr.pb-row td {
+      display: block; padding: 0; border: none; text-align: left;
+    }
     .table-wrap table.passbook tr.pb-row td::before { display: none; }
-    .passbook .pb-item { display: contents; }
-    .passbook .pb-ico { grid-column: 1; grid-row: 1 / span 2; width: 36px; height: 36px; }
-    .passbook .pb-text { grid-column: 2; grid-row: 1; font-size: 14.5px; font-weight: 600;
-                         overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .passbook .pb-date { grid-column: 2; grid-row: 2; font-size: 11.5px; color: var(--sub); text-align: left; }
-    .passbook .num-col.in, .passbook .num-col.out { grid-column: 3; grid-row: 1; font-size: 15.5px; font-weight: 700; }
+
+    .passbook .pb-item { grid-column: 1; grid-row: 1; display: flex; align-items: center; gap: 10px; min-width: 0; }
+    .passbook .pb-ico { width: 34px; height: 34px; flex-shrink: 0; }
+    .passbook .pb-text { font-size: 14.5px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .passbook .pb-date { grid-column: 1; grid-row: 2; padding-left: 44px; font-size: 11.5px; color: var(--sub); }
+
+    .passbook .num-col.in, .passbook .num-col.out {
+      grid-column: 2; grid-row: 1; text-align: right; font-size: 16px; font-weight: 700;
+    }
     .passbook .num-col:empty { display: none; }
-    .passbook .num-col.bal { grid-column: 3; grid-row: 2; font-size: 11.5px; font-weight: 500; color: var(--sub); }
-    .passbook .num-col.bal::after { content: ' คงเหลือ'; font-size: 10px; opacity: .75; }
-    .passbook .pb-act { grid-column: 3; grid-row: 3; justify-self: end; margin-top: 4px; }
-    .passbook .pb-act .icon-btn { width: 32px; height: 32px; border: none; background: none; opacity: .45; }
+    .passbook .num-col.bal {
+      grid-column: 2; grid-row: 2; text-align: right; font-size: 12px; font-weight: 600; color: var(--sub);
+    }
+    .passbook .num-col.bal::before { content: 'คงเหลือ '; font-weight: 400; opacity: .8; }
+
+    /* ปุ่มลบ: มุมขวาบนของแถว จางไว้ ไม่แย่งสายตา */
+    .passbook .pb-act { position: absolute; right: 6px; top: 6px; }
+    .passbook .pb-act .icon-btn { width: 30px; height: 30px; border: none; background: none; opacity: .3; }
     .passbook .pb-row .hint { display: none; }
 
-    .table-wrap table.passbook tr.pb-total { display: flex; justify-content: space-between; align-items: center;
-      padding: 12px var(--space-4); }
-    .table-wrap table.passbook tr.pb-total td { display: none; padding: 0; }
-    .table-wrap table.passbook tr.pb-total td:first-child,
-    .table-wrap table.passbook tr.pb-total td.bal { display: block; }
-    .table-wrap table.passbook tr.pb-total td.bal::before { content: 'คงเหลือ '; font-weight: 500; color: var(--sub); }
+    .table-wrap table.passbook tr.pb-total {
+      display: flex; justify-content: space-between; align-items: baseline; padding: 14px var(--space-4);
+    }
+    .table-wrap table.passbook tr.pb-total td { display: none; padding: 0; border: none; }
+    .table-wrap table.passbook tr.pb-total td:first-child { display: block; font-size: 13px; color: var(--sub); }
+    .table-wrap table.passbook tr.pb-total td.bal { display: block; font-size: 17px; }
+    .table-wrap table.passbook tr.pb-total td.bal::before { content: 'คงเหลือ '; font-size: 12px; font-weight: 500; color: var(--sub); }
   }
 
   /* กล่องกรอกกลางจอ (ใช้ตอนแจ้งงานเสีย/เศษผ้า) */
@@ -3012,7 +3023,7 @@ end $$;
     // ===== เช็กว่ามีเวอร์ชันใหม่ไหม =====
     // เบราว์เซอร์ชอบจำไฟล์เก่าไว้ (cache) ทำให้ไม่เห็นของที่เพิ่งอัปเดต
     // ตัวนี้จะแอบเทียบเวอร์ชันกับไฟล์บนเซิร์ฟเวอร์ แล้วขึ้นแถบให้กดอัปเดต
-    const APP_BUILD = '20260818-1938';
+    const APP_BUILD = '20260818-1943';
 
     let lastUpdateCheck = 0;
 
