@@ -530,8 +530,8 @@
     }
     .passbook .num-col.bal::before { content: 'คงเหลือ '; font-weight: 400; opacity: .8; }
 
-    .passbook .pb-act { grid-column: 3; grid-row: 1 / span 2; display: flex; gap: 2px; align-self: center; }
-    .passbook .pb-act .icon-btn { width: 32px; height: 32px; border: none; background: none; opacity: .45; }
+    .passbook .pb-act { grid-column: 3; grid-row: 1 / span 2; align-self: center; }
+    .passbook .pb-act .icon-btn { width: 34px; height: 34px; border: none; background: none; opacity: .4; }
     .passbook .pb-row .hint { display: none; }
 
     .table-wrap table.passbook tr.pb-total {
@@ -779,6 +779,9 @@
     font-size: 15px; font-weight: 600; color: var(--text); text-align: left; padding: 0 var(--space-3);
   }
   .sheet-item.active, .sheet-item:hover { background: var(--accent-soft); color: var(--accent); }
+  .sheet-item.danger { color: var(--err-text); }
+  .sheet-item.danger:hover { background: #fdecea; color: var(--err-text); }
+  html[data-theme="dark"] .sheet-item.danger:hover { background: #3a1d1b; }
 
   /* ===== การชำระเงิน / ใบปะหน้าพัสดุ ===== */
   .pay-line { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); padding: var(--space-2) 0; border-bottom: 1px solid var(--border); font-size: 13px; }
@@ -3027,7 +3030,7 @@ end $$;
     // ===== เช็กว่ามีเวอร์ชันใหม่ไหม =====
     // เบราว์เซอร์ชอบจำไฟล์เก่าไว้ (cache) ทำให้ไม่เห็นของที่เพิ่งอัปเดต
     // ตัวนี้จะแอบเทียบเวอร์ชันกับไฟล์บนเซิร์ฟเวอร์ แล้วขึ้นแถบให้กดอัปเดต
-    const APP_BUILD = '20260818-1951';
+    const APP_BUILD = '20260818-1955';
 
     let lastUpdateCheck = 0;
 
@@ -3487,6 +3490,27 @@ end $$;
       document.getElementById('statusMsg').textContent = 'อัปเดตล่าสุด: ' + new Date().toLocaleString('th-TH');
     }
 
+    /** ชีตเล็กๆ ให้เลือกว่าจะทำอะไรกับแถวนั้น — คืน 'edit' | 'delete' | null */
+    function pickRowAction(title, sub) {
+      return new Promise(resolve => {
+        const wrap = document.createElement('div');
+        wrap.className = 'sheet-backdrop no-print';
+        wrap.innerHTML = `
+          <div class="sheet">
+            <div class="sheet-bar"></div>
+            <div class="sheet-title">${esc(title)}</div>
+            ${sub ? `<div class="hint" style="margin:-4px 0 8px 2px">${esc(sub)}</div>` : ''}
+            <button class="sheet-item" data-a="edit"><span class="nav-ico">${icon('edit', 20)}</span><span class="si-label">แก้ไขรายการ</span></button>
+            <button class="sheet-item danger" data-a="delete"><span class="nav-ico">${icon('trash', 20)}</span><span class="si-label">ลบรายการ</span></button>
+            <button class="btn secondary block" data-a="" style="margin-top:var(--space-3)">ปิด</button>
+          </div>`;
+        document.body.appendChild(wrap);
+        const close = (v) => { wrap.remove(); resolve(v || null); };
+        wrap.addEventListener('click', (e) => { if (e.target === wrap) close(null); });
+        wrap.querySelectorAll('[data-a]').forEach(b => b.addEventListener('click', () => close(b.dataset.a)));
+      });
+    }
+
     /** แก้ไขรายการในสมุด — เปลี่ยนได้ทุกช่อง รวมถึงย้อนวันที่ไปเดือนก่อนๆ */
     function editDebtEntry(e) {
       return new Promise(resolve => {
@@ -3814,8 +3838,7 @@ end $$;
                 <td data-label="จ่ายคืน" class="num-col out">${e.kind === 'out' ? fmtBaht(round2(e.amount)) : ''}</td>
                 <td data-label="คงเหลือ" class="num-col bal">${fmtBaht(e.balance)}</td>
                 <td data-label="" class="pb-act">
-                  <button class="icon-btn icon-btn-edit de-edit" data-id="${e.id}" title="แก้ไขรายการนี้">${icon('edit', 16)}</button>
-                  <button class="icon-btn icon-btn-delete de-del" data-id="${e.id}" title="ลบรายการนี้">${icon('trash', 16)}</button>
+                  <button class="icon-btn de-more" data-id="${e.id}" aria-label="ตัวเลือกของรายการนี้" title="แก้ไข / ลบ">${icon('more', 16)}</button>
                 </td>
               </tr>`).join('')}
               <tr class="pb-total">
@@ -3835,21 +3858,25 @@ end $$;
           debtOpen[c.name] = !(debtOpen[c.name] !== false);
           renderDebts();
         });
-        card.querySelectorAll('.de-edit').forEach(b => b.addEventListener('click', async () => {
+        // ปุ่มจุดสามจุด -> เลือกว่าจะแก้ไขหรือลบ (เก็บปุ่มให้แถวสะอาด)
+        card.querySelectorAll('.de-more').forEach(b => b.addEventListener('click', async () => {
           const e = DEBT_ENTRIES.find(x => x.id === b.dataset.id);
           if (!e) return;
-          const patch = await editDebtEntry(e);
-          if (!patch) return;
-          const { error } = await sb.from('debt_entries').update(patch).eq('id', e.id);
-          if (error) { alert('บันทึกไม่สำเร็จ: ' + error.message); return; }
-          await loadDebts();
-        }));
-
-        card.querySelectorAll('.de-del').forEach(b => b.addEventListener('click', async () => {
-          if (!confirm('ลบรายการนี้ออกจากสมุด?')) return;
-          const { error } = await sb.from('debt_entries').delete().eq('id', b.dataset.id);
-          if (error) { alert('ลบไม่สำเร็จ: ' + error.message); return; }
-          await loadDebts();
+          const act = await pickRowAction(
+            (e.item || (e.kind === 'in' ? 'รับหนี้มา' : 'จ่ายคืน')) + ' · ' + fmtBaht(round2(e.amount)) + ' บาท',
+            thDate(e.entry_date));
+          if (act === 'edit') {
+            const patch = await editDebtEntry(e);
+            if (!patch) return;
+            const { error } = await sb.from('debt_entries').update(patch).eq('id', e.id);
+            if (error) { alert('บันทึกไม่สำเร็จ: ' + error.message); return; }
+            await loadDebts();
+          } else if (act === 'delete') {
+            if (!confirm('ลบรายการนี้ออกจากสมุด?')) return;
+            const { error } = await sb.from('debt_entries').delete().eq('id', e.id);
+            if (error) { alert('ลบไม่สำเร็จ: ' + error.message); return; }
+            await loadDebts();
+          }
         }));
       });
 
