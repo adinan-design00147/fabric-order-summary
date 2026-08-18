@@ -489,13 +489,51 @@
   .alert-sub { font-size: 11.5px; color: var(--sub); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .alert-go { color: var(--sub); flex-shrink: 0; }
 
-  /* ตารางแบบสมุดบัญชี */
+  /* ===== ตารางแบบสมุดบัญชี ===== */
   .passbook .num-col { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
   .passbook .in { color: #b42318; }
   .passbook .out { color: #067647; }
   .passbook .bal { font-weight: 700; }
-  .passbook .pb-total td { border-top: 2px solid var(--border); font-weight: 700; background: var(--soft); }
-  @media (max-width: 720px) { .passbook .num-col { text-align: left; } }
+  .passbook .pb-item { display: flex; align-items: center; gap: 10px; }
+  .passbook .pb-ico { width: 28px; height: 28px; border-radius: 50%; flex-shrink: 0;
+                      display: inline-flex; align-items: center; justify-content: center; }
+  .passbook .pb-row.in .pb-ico { background: #fdecea; color: #b42318; }
+  .passbook .pb-row.out .pb-ico { background: #e7f6ec; color: #067647; }
+  html[data-theme="dark"] .passbook .pb-row.in .pb-ico { background: #3a1d1b; color: #f4a49b; }
+  html[data-theme="dark"] .passbook .pb-row.out .pb-ico { background: #123324; color: #6ee7a8; }
+  .passbook .pb-tag { margin-left: 6px; font-size: 10px; }
+  .passbook .pb-total td { border-top: 2px solid var(--border); font-weight: 700;
+                           background: linear-gradient(180deg, transparent, var(--soft)); }
+  .passbook .pb-row:hover { background: var(--soft); }
+
+  /* มือถือ: 1 รายการ = 1 บรรทัด (ไอคอน · ชื่อ+วันที่ · จำนวน+คงเหลือ) แทนการไล่ป้ายทีละช่อง */
+  @media (max-width: 900px) {
+    .table-wrap table.passbook tr.pb-row {
+      display: grid; grid-template-columns: auto 1fr auto; align-items: center;
+      column-gap: 12px; row-gap: 2px; padding: 12px var(--space-4);
+    }
+    .table-wrap table.passbook tr.pb-row td { display: contents; }
+    .table-wrap table.passbook tr.pb-row td::before { display: none; }
+    .passbook .pb-item { display: contents; }
+    .passbook .pb-ico { grid-column: 1; grid-row: 1 / span 2; width: 36px; height: 36px; }
+    .passbook .pb-text { grid-column: 2; grid-row: 1; font-size: 14.5px; font-weight: 600;
+                         overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .passbook .pb-date { grid-column: 2; grid-row: 2; font-size: 11.5px; color: var(--sub); text-align: left; }
+    .passbook .num-col.in, .passbook .num-col.out { grid-column: 3; grid-row: 1; font-size: 15.5px; font-weight: 700; }
+    .passbook .num-col:empty { display: none; }
+    .passbook .num-col.bal { grid-column: 3; grid-row: 2; font-size: 11.5px; font-weight: 500; color: var(--sub); }
+    .passbook .num-col.bal::after { content: ' คงเหลือ'; font-size: 10px; opacity: .75; }
+    .passbook .pb-act { grid-column: 3; grid-row: 3; justify-self: end; margin-top: 4px; }
+    .passbook .pb-act .icon-btn { width: 32px; height: 32px; border: none; background: none; opacity: .45; }
+    .passbook .pb-row .hint { display: none; }
+
+    .table-wrap table.passbook tr.pb-total { display: flex; justify-content: space-between; align-items: center;
+      padding: 12px var(--space-4); }
+    .table-wrap table.passbook tr.pb-total td { display: none; padding: 0; }
+    .table-wrap table.passbook tr.pb-total td:first-child,
+    .table-wrap table.passbook tr.pb-total td.bal { display: block; }
+    .table-wrap table.passbook tr.pb-total td.bal::before { content: 'คงเหลือ '; font-weight: 500; color: var(--sub); }
+  }
 
   /* กล่องกรอกกลางจอ (ใช้ตอนแจ้งงานเสีย/เศษผ้า) */
   .modal-back { position: fixed; inset: 0; background: rgba(15,18,25,.45); z-index: 400;
@@ -2974,7 +3012,7 @@ end $$;
     // ===== เช็กว่ามีเวอร์ชันใหม่ไหม =====
     // เบราว์เซอร์ชอบจำไฟล์เก่าไว้ (cache) ทำให้ไม่เห็นของที่เพิ่งอัปเดต
     // ตัวนี้จะแอบเทียบเวอร์ชันกับไฟล์บนเซิร์ฟเวอร์ แล้วขึ้นแถบให้กดอัปเดต
-    const APP_BUILD = '20260818-1927';
+    const APP_BUILD = '20260818-1938';
 
     let lastUpdateCheck = 0;
 
@@ -3696,18 +3734,19 @@ end $$;
                 <th>วันที่</th><th>รายการ</th>
                 <th class="num-col">รับหนี้มา</th><th class="num-col">จ่ายคืน</th><th class="num-col">คงเหลือ</th><th></th>
               </tr></thead>
-              <tbody>${c.rows.map(e => `<tr>
-                <td data-label="วันที่">${thDate(e.entry_date)}</td>
-                <td data-label="รายการ">${esc(e.item || (e.kind === 'in' ? 'รับหนี้มา' : 'จ่ายคืน'))}
-                  ${e.method ? `<span class="hint"> · ${esc(e.method)}</span>` : ''}
-                  ${e.recurring_id ? '<span class="st st-prod" style="margin-left:6px;font-size:10px">ประจำเดือน</span>' : ''}</td>
+              <tbody>${c.rows.map(e => `<tr class="pb-row ${e.kind}">
+                <td data-label="วันที่" class="pb-date">${thDate(e.entry_date)}</td>
+                <td data-label="รายการ" class="pb-item">
+                  <span class="pb-ico">${icon(e.kind === 'in' ? 'back' : 'check', 15)}</span>
+                  <span class="pb-text">${esc(e.item || (e.kind === 'in' ? 'รับหนี้มา' : 'จ่ายคืน'))}${e.method ? `<span class="hint"> · ${esc(e.method)}</span>` : ''}${e.recurring_id ? '<span class="st st-prod pb-tag">ประจำเดือน</span>' : ''}</span>
+                </td>
                 <td data-label="รับหนี้มา" class="num-col in">${e.kind === 'in' ? fmtBaht(round2(e.amount)) : ''}</td>
                 <td data-label="จ่ายคืน" class="num-col out">${e.kind === 'out' ? fmtBaht(round2(e.amount)) : ''}</td>
                 <td data-label="คงเหลือ" class="num-col bal">${fmtBaht(e.balance)}</td>
-                <td data-label=""><button class="icon-btn icon-btn-delete de-del" data-id="${e.id}" title="ลบรายการนี้">${icon('trash', 16)}</button></td>
+                <td data-label="" class="pb-act"><button class="icon-btn icon-btn-delete de-del" data-id="${e.id}" title="ลบรายการนี้">${icon('trash', 16)}</button></td>
               </tr>`).join('')}
               <tr class="pb-total">
-                <td colspan="2">รวม</td>
+                <td colspan="2" data-label="">รวม</td>
                 <td class="num-col in">${fmtBaht(c.inSum)}</td>
                 <td class="num-col out">${fmtBaht(c.outSum)}</td>
                 <td class="num-col bal">${fmtBaht(c.balance)}</td>
