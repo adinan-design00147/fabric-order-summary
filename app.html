@@ -522,6 +522,10 @@
   .passbook .pb-total td { border-top: 2px solid var(--border); font-weight: 700;
                            background: linear-gradient(180deg, transparent, var(--soft)); }
   .passbook .pb-row:hover { background: var(--soft); }
+  /* ไม่มีปุ่มในแถวแล้ว — แตะที่ตัวเลขเงินเพื่อเปิดเมนูแก้ไข/ลบ (ใช้ได้ทุกขนาดจอ) */
+  .passbook .num-col { cursor: pointer; }
+  .passbook .num-col:active { opacity: .55; }
+  .passbook .pb-total .num-col { cursor: default; }
 
   /* จอแคบ (≤640px ตรงกับจุดที่ตารางทั้งระบบเปลี่ยนเป็นการ์ด):
      1 รายการ = 2 บรรทัด — ซ้าย: ไอคอน+ชื่อ / วันที่ · ขวา: จำนวน / คงเหลือ · สุดขวา: ปุ่มแก้ไข-ลบ */
@@ -547,10 +551,6 @@
     }
     .passbook .num-col.bal::before { content: 'คงเหลือ '; font-weight: 400; opacity: .8; }
 
-    /* ซ่อนปุ่มจุดสามจุดบนมือถือ — แตะที่ยอดเงินแทนเพื่อเปิดเมนูแก้ไข/ลบ */
-    .passbook .pb-act { display: none; }
-    .passbook .num-col.in, .passbook .num-col.out, .passbook .num-col.bal { cursor: pointer; }
-    .passbook .num-col.in:active, .passbook .num-col.out:active { opacity: .55; }
     .passbook .pb-row .hint { display: none; }
 
     .table-wrap table.passbook tr.pb-total {
@@ -562,10 +562,8 @@
     .table-wrap table.passbook tr.pb-total td.bal::before { content: 'คงเหลือ '; font-size: 12px; font-weight: 500; color: var(--sub); }
   }
 
-  /* แท็บเล็ต (641–900px): ยังเป็นตารางเต็ม แค่ให้ปุ่มเล็กลงและไม่ล้น */
+  /* แท็บเล็ต (641–900px): ยังเป็นตารางเต็ม แค่ลดขนาดตัวหนังสือลงนิด */
   @media (min-width: 641px) and (max-width: 900px) {
-    .passbook .pb-act { display: flex; gap: 4px; justify-content: flex-end; }
-    .passbook .pb-act .icon-btn { width: 34px; height: 34px; }
     .passbook .pb-text { font-size: 14px; }
   }
 
@@ -3049,7 +3047,7 @@ end $$;
     // ===== เช็กว่ามีเวอร์ชันใหม่ไหม =====
     // เบราว์เซอร์ชอบจำไฟล์เก่าไว้ (cache) ทำให้ไม่เห็นของที่เพิ่งอัปเดต
     // ตัวนี้จะแอบเทียบเวอร์ชันกับไฟล์บนเซิร์ฟเวอร์ แล้วขึ้นแถบให้กดอัปเดต
-    const APP_BUILD = '20260818-2130';
+    const APP_BUILD = '20260818-2245';
 
     let lastUpdateCheck = 0;
 
@@ -3871,7 +3869,7 @@ end $$;
             <div class="table-wrap"><table class="passbook">
               <thead><tr>
                 <th>วันที่</th><th>รายการ</th>
-                <th class="num-col">รับหนี้มา</th><th class="num-col">จ่ายคืน</th><th class="num-col">คงเหลือ</th><th></th>
+                <th class="num-col">รับหนี้มา</th><th class="num-col">จ่ายคืน</th><th class="num-col">คงเหลือ</th>
               </tr></thead>
               <tbody>${pageRows.map(e => `<tr class="pb-row ${e.kind}">
                 <td data-label="วันที่" class="pb-date">${thDate(e.entry_date)}</td>
@@ -3882,16 +3880,12 @@ end $$;
                 <td data-label="รับหนี้มา" class="num-col in">${e.kind === 'in' ? fmtBaht(round2(e.amount)) : ''}</td>
                 <td data-label="จ่ายคืน" class="num-col out">${e.kind === 'out' ? fmtBaht(round2(e.amount)) : ''}</td>
                 <td data-label="คงเหลือ" class="num-col bal">${fmtBaht(e.balance)}</td>
-                <td data-label="" class="pb-act">
-                  <button class="icon-btn de-more" data-id="${e.id}" aria-label="ตัวเลือกของรายการนี้" title="แก้ไข / ลบ">${icon('more', 16)}</button>
-                </td>
               </tr>`).join('')}
               <tr class="pb-total">
                 <td colspan="2" data-label="">รวม</td>
                 <td class="num-col in">${fmtBaht(c.inSum)}</td>
                 <td class="num-col out">${fmtBaht(c.outSum)}</td>
                 <td class="num-col bal">${fmtBaht(c.balance)}</td>
-                <td></td>
               </tr></tbody>
             </table></div>
           </div>`;
@@ -3931,19 +3925,12 @@ end $$;
           }
         };
 
-        // จอคอม: กดปุ่มจุดสามจุด
-        card.querySelectorAll('.de-more').forEach(b =>
-          b.addEventListener('click', () => openRowMenu(b.dataset.id)));
-
-        // มือถือ: ปุ่มถูกซ่อนไว้ — แตะที่ "ยอดเงิน" ของรายการนั้นเพื่อเปิดเมนูแทน
-        card.querySelectorAll('.pb-row').forEach(tr => {
-          tr.querySelectorAll('.num-col').forEach(cell => {
-            cell.addEventListener('click', () => {
-              if (window.innerWidth > 640) return;      // จอใหญ่ใช้ปุ่มจุดสามจุดตามเดิม
-              const b = tr.querySelector('.de-more');
-              if (b) openRowMenu(b.dataset.id);
-            });
-          });
+        // ไม่มีปุ่มในแถวแล้ว — แตะที่ "ยอดเงิน" ของรายการไหนก็ได้เพื่อเปิดเมนูแก้ไข/ลบ (ใช้ได้ทุกขนาดจอ)
+        pageRows.forEach((e, i) => {
+          const tr = card.querySelectorAll('.pb-row')[i];
+          if (!tr) return;
+          tr.querySelectorAll('.num-col').forEach(cell =>
+            cell.addEventListener('click', () => openRowMenu(e.id)));
         });
       });
 
