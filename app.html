@@ -506,16 +506,14 @@
                            background: linear-gradient(180deg, transparent, var(--soft)); }
   .passbook .pb-row:hover { background: var(--soft); }
 
-  /* มือถือ: 1 รายการ = 2 บรรทัด — ซ้าย: ไอคอน+ชื่อ / วันที่ · ขวา: จำนวน / คงเหลือ
-     (ไม่ใช้ display:contents เพราะ td จะหลุดการจัดวาง ตัวหนังสือไปโผล่ผิดที่) */
-  @media (max-width: 900px) {
+  /* จอแคบ (≤640px ตรงกับจุดที่ตารางทั้งระบบเปลี่ยนเป็นการ์ด):
+     1 รายการ = 2 บรรทัด — ซ้าย: ไอคอน+ชื่อ / วันที่ · ขวา: จำนวน / คงเหลือ · สุดขวา: ปุ่มแก้ไข-ลบ */
+  @media (max-width: 640px) {
     .table-wrap table.passbook tr.pb-row {
-      display: grid; grid-template-columns: 1fr auto; align-items: center;
-      column-gap: 12px; row-gap: 2px; padding: 12px var(--space-4); position: relative;
+      display: grid; grid-template-columns: 1fr auto auto; align-items: center;
+      column-gap: 10px; row-gap: 2px; padding: 12px var(--space-4);
     }
-    .table-wrap table.passbook tr.pb-row td {
-      display: block; padding: 0; border: none; text-align: left;
-    }
+    .table-wrap table.passbook tr.pb-row td { display: block; padding: 0; border: none; text-align: left; }
     .table-wrap table.passbook tr.pb-row td::before { display: none; }
 
     .passbook .pb-item { grid-column: 1; grid-row: 1; display: flex; align-items: center; gap: 10px; min-width: 0; }
@@ -532,9 +530,8 @@
     }
     .passbook .num-col.bal::before { content: 'คงเหลือ '; font-weight: 400; opacity: .8; }
 
-    /* ปุ่มลบ: มุมขวาบนของแถว จางไว้ ไม่แย่งสายตา */
-    .passbook .pb-act { position: absolute; right: 6px; top: 6px; }
-    .passbook .pb-act .icon-btn { width: 30px; height: 30px; border: none; background: none; opacity: .3; }
+    .passbook .pb-act { grid-column: 3; grid-row: 1 / span 2; display: flex; gap: 2px; align-self: center; }
+    .passbook .pb-act .icon-btn { width: 32px; height: 32px; border: none; background: none; opacity: .45; }
     .passbook .pb-row .hint { display: none; }
 
     .table-wrap table.passbook tr.pb-total {
@@ -544,6 +541,13 @@
     .table-wrap table.passbook tr.pb-total td:first-child { display: block; font-size: 13px; color: var(--sub); }
     .table-wrap table.passbook tr.pb-total td.bal { display: block; font-size: 17px; }
     .table-wrap table.passbook tr.pb-total td.bal::before { content: 'คงเหลือ '; font-size: 12px; font-weight: 500; color: var(--sub); }
+  }
+
+  /* แท็บเล็ต (641–900px): ยังเป็นตารางเต็ม แค่ให้ปุ่มเล็กลงและไม่ล้น */
+  @media (min-width: 641px) and (max-width: 900px) {
+    .passbook .pb-act { display: flex; gap: 4px; justify-content: flex-end; }
+    .passbook .pb-act .icon-btn { width: 34px; height: 34px; }
+    .passbook .pb-text { font-size: 14px; }
   }
 
   /* กล่องกรอกกลางจอ (ใช้ตอนแจ้งงานเสีย/เศษผ้า) */
@@ -3023,7 +3027,7 @@ end $$;
     // ===== เช็กว่ามีเวอร์ชันใหม่ไหม =====
     // เบราว์เซอร์ชอบจำไฟล์เก่าไว้ (cache) ทำให้ไม่เห็นของที่เพิ่งอัปเดต
     // ตัวนี้จะแอบเทียบเวอร์ชันกับไฟล์บนเซิร์ฟเวอร์ แล้วขึ้นแถบให้กดอัปเดต
-    const APP_BUILD = '20260818-1943';
+    const APP_BUILD = '20260818-1951';
 
     let lastUpdateCheck = 0;
 
@@ -3483,6 +3487,61 @@ end $$;
       document.getElementById('statusMsg').textContent = 'อัปเดตล่าสุด: ' + new Date().toLocaleString('th-TH');
     }
 
+    /** แก้ไขรายการในสมุด — เปลี่ยนได้ทุกช่อง รวมถึงย้อนวันที่ไปเดือนก่อนๆ */
+    function editDebtEntry(e) {
+      return new Promise(resolve => {
+        const back = document.createElement('div');
+        back.className = 'modal-back no-print';
+        back.innerHTML = `
+          <div class="modal-card" role="dialog" aria-modal="true">
+            <h3>แก้ไขรายการ</h3>
+            <div class="modal-sub">แก้ได้ทุกช่อง · เปลี่ยนวันที่ย้อนไปเดือนก่อนได้ ยอดคงเหลือจะคิดใหม่ให้เอง</div>
+            <div class="field"><label for="edKind">ประเภท</label>
+              <select id="edKind">
+                <option value="in" ${e.kind === 'in' ? 'selected' : ''}>รับหนี้มา</option>
+                <option value="out" ${e.kind === 'out' ? 'selected' : ''}>จ่ายคืน</option>
+              </select></div>
+            <div class="field"><label for="edCred">เจ้าหนี้</label>
+              <input id="edCred" value="${esc(e.creditor)}"></div>
+            <div class="field"><label for="edAmt">จำนวนเงิน (บาท)</label>
+              <input id="edAmt" type="number" min="0" step="any" inputmode="decimal" value="${e.amount}"></div>
+            <div class="field"><label for="edDate">วันที่</label>
+              <input id="edDate" type="date" value="${esc(e.entry_date)}"></div>
+            <div class="field"><label for="edItem">รายการ</label>
+              <input id="edItem" value="${esc(e.item || '')}" placeholder="เช่น ค่ารถ · ยืมค่าผ้า"></div>
+            <div class="field" id="edMethodField" ${e.kind === 'out' ? '' : 'hidden'}><label for="edMethod">ช่องทาง</label>
+              <select id="edMethod">${PAY_METHODS.map(m => `<option ${m === e.method ? 'selected' : ''}>${esc(m)}</option>`).join('')}</select></div>
+            <div class="msg" id="edMsg"></div>
+            <div class="field-row" style="justify-content:flex-end;margin-top:6px">
+              <button class="btn secondary" id="edCancel">ยกเลิก</button>
+              <button class="btn" id="edOk">${icon('check', 15)}บันทึกการแก้ไข</button>
+            </div>
+          </div>`;
+        document.body.appendChild(back);
+        const close = (v) => { back.remove(); resolve(v); };
+        back.querySelector('#edKind').addEventListener('change', (ev) => {
+          back.querySelector('#edMethodField').hidden = ev.target.value !== 'out';
+        });
+        back.querySelector('#edCancel').addEventListener('click', () => close(null));
+        back.addEventListener('click', (ev) => { if (ev.target === back) close(null); });
+        back.querySelector('#edOk').addEventListener('click', () => {
+          const msg = back.querySelector('#edMsg');
+          const creditor = back.querySelector('#edCred').value.trim();
+          const amount = parseFloat(back.querySelector('#edAmt').value);
+          const kind = back.querySelector('#edKind').value;
+          if (!creditor) { msg.textContent = 'ใส่ชื่อเจ้าหนี้ก่อน'; msg.className = 'msg error'; return; }
+          if (!(amount > 0)) { msg.textContent = 'ใส่จำนวนเงินก่อน'; msg.className = 'msg error'; return; }
+          close({
+            creditor, kind, amount,
+            entry_date: back.querySelector('#edDate').value || e.entry_date,
+            item: back.querySelector('#edItem').value.trim() || null,
+            method: kind === 'out' ? back.querySelector('#edMethod').value : null,
+          });
+        });
+        setTimeout(() => back.querySelector('#edAmt').focus(), 50);
+      });
+    }
+
     /** กล่องยืนยันยอดของรายการประจำเดือนนี้ — ยอดคงที่เติมให้ ยอดไม่คงที่ต้องกรอก */
     function askMonthlyAmounts(list, monthLabel) {
       return new Promise(resolve => {
@@ -3754,7 +3813,10 @@ end $$;
                 <td data-label="รับหนี้มา" class="num-col in">${e.kind === 'in' ? fmtBaht(round2(e.amount)) : ''}</td>
                 <td data-label="จ่ายคืน" class="num-col out">${e.kind === 'out' ? fmtBaht(round2(e.amount)) : ''}</td>
                 <td data-label="คงเหลือ" class="num-col bal">${fmtBaht(e.balance)}</td>
-                <td data-label="" class="pb-act"><button class="icon-btn icon-btn-delete de-del" data-id="${e.id}" title="ลบรายการนี้">${icon('trash', 16)}</button></td>
+                <td data-label="" class="pb-act">
+                  <button class="icon-btn icon-btn-edit de-edit" data-id="${e.id}" title="แก้ไขรายการนี้">${icon('edit', 16)}</button>
+                  <button class="icon-btn icon-btn-delete de-del" data-id="${e.id}" title="ลบรายการนี้">${icon('trash', 16)}</button>
+                </td>
               </tr>`).join('')}
               <tr class="pb-total">
                 <td colspan="2" data-label="">รวม</td>
@@ -3773,6 +3835,16 @@ end $$;
           debtOpen[c.name] = !(debtOpen[c.name] !== false);
           renderDebts();
         });
+        card.querySelectorAll('.de-edit').forEach(b => b.addEventListener('click', async () => {
+          const e = DEBT_ENTRIES.find(x => x.id === b.dataset.id);
+          if (!e) return;
+          const patch = await editDebtEntry(e);
+          if (!patch) return;
+          const { error } = await sb.from('debt_entries').update(patch).eq('id', e.id);
+          if (error) { alert('บันทึกไม่สำเร็จ: ' + error.message); return; }
+          await loadDebts();
+        }));
+
         card.querySelectorAll('.de-del').forEach(b => b.addEventListener('click', async () => {
           if (!confirm('ลบรายการนี้ออกจากสมุด?')) return;
           const { error } = await sb.from('debt_entries').delete().eq('id', b.dataset.id);
