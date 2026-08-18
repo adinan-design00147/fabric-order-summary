@@ -489,6 +489,23 @@
   .alert-sub { font-size: 11.5px; color: var(--sub); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .alert-go { color: var(--sub); flex-shrink: 0; }
 
+  /* แถบเปลี่ยนหน้า */
+  .pager { display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+           padding: 10px var(--space-4); border-bottom: 1px solid var(--border); }
+  .pg-btn { min-width: 34px; height: 34px; padding: 0 8px; border-radius: 10px; cursor: pointer;
+            border: 1px solid var(--border); background: var(--card); color: var(--text);
+            font-family: inherit; font-size: 13px; font-weight: 600;
+            display: inline-flex; align-items: center; justify-content: center; }
+  .pg-btn:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+  .pg-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .pg-btn:disabled { opacity: .35; cursor: default; }
+  .pg-dots { color: var(--sub); padding: 0 2px; }
+  .pg-info { margin-left: auto; font-size: 12px; color: var(--sub); }
+  @media (max-width: 640px) {
+    .pager { gap: 4px; padding: 10px var(--space-3); }
+    .pg-info { width: 100%; margin: 4px 0 0; order: 9; }
+  }
+
   /* ===== ตารางแบบสมุดบัญชี ===== */
   .passbook .num-col { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
   .passbook .in { color: #b42318; }
@@ -3030,7 +3047,7 @@ end $$;
     // ===== เช็กว่ามีเวอร์ชันใหม่ไหม =====
     // เบราว์เซอร์ชอบจำไฟล์เก่าไว้ (cache) ทำให้ไม่เห็นของที่เพิ่งอัปเดต
     // ตัวนี้จะแอบเทียบเวอร์ชันกับไฟล์บนเซิร์ฟเวอร์ แล้วขึ้นแถบให้กดอัปเดต
-    const APP_BUILD = '20260818-1955';
+    const APP_BUILD = '20260818-2003';
 
     let lastUpdateCheck = 0;
 
@@ -3466,6 +3483,8 @@ end $$;
     // ตัวกันจริงคือ RLS ฝั่งฐานข้อมูล (policy "super admin only") ฝั่งเว็บแค่ซ่อนเมนูให้ตรงกัน
     let DEBT_ENTRIES = [], DEBT_RECUR = [];
     let debtOpen = {};        // จำว่าเจ้าหนี้รายไหนกางสมุดอยู่
+    let debtPage = {};        // จำว่าเจ้าหนี้รายไหนเปิดสมุดหน้าที่เท่าไร
+    const DEBT_PER_PAGE = 10; // แสดงทีละ 10 รายการ
 
     async function loadDebts() {
       const app = document.getElementById('app');
@@ -3806,6 +3825,27 @@ end $$;
 
       cards.forEach(c => {
         const clear = c.balance <= 0.009;
+
+        // ---- แบ่งหน้า 10 รายการ (ยอดคงเหลือคิดจากทั้งเล่มก่อนแล้ว หน้าไหนก็ตรง) ----
+        const totalPages = Math.max(1, Math.ceil(c.rows.length / DEBT_PER_PAGE));
+        if (debtPage[c.name] === undefined) debtPage[c.name] = totalPages;   // เปิดมาที่หน้าล่าสุด
+        const page = Math.min(Math.max(1, debtPage[c.name]), totalPages);
+        debtPage[c.name] = page;
+        const pageRows = c.rows.slice((page - 1) * DEBT_PER_PAGE, page * DEBT_PER_PAGE);
+
+        // เลขหน้า: 1 … (หน้าที่อยู่ใกล้ๆ) … หน้าสุดท้าย
+        const nums = [];
+        for (let i = 1; i <= totalPages; i++) {
+          if (i === 1 || i === totalPages || Math.abs(i - page) <= 1) nums.push(i);
+          else if (nums[nums.length - 1] !== '…') nums.push('…');
+        }
+        const pageBar = totalPages > 1 ? `<div class="pager no-print">
+          <button class="pg-btn pg-nav" data-c="${esc(c.name)}" data-p="${page - 1}" ${page === 1 ? 'disabled' : ''} aria-label="หน้าก่อนหน้า">${icon('back', 15)}</button>
+          ${nums.map(n => n === '…' ? '<span class="pg-dots">…</span>'
+            : `<button class="pg-btn ${n === page ? 'active' : ''}" data-c="${esc(c.name)}" data-p="${n}">${n}</button>`).join('')}
+          <button class="pg-btn pg-nav" data-c="${esc(c.name)}" data-p="${page + 1}" ${page === totalPages ? 'disabled' : ''} aria-label="หน้าถัดไป">${icon('chevron', 15)}</button>
+          <span class="pg-info">${(page - 1) * DEBT_PER_PAGE + 1}–${Math.min(page * DEBT_PER_PAGE, c.rows.length)} จาก ${c.rows.length}</span>
+        </div>` : '';
         const card = document.createElement('div');
         card.className = 'lot-card';
         const open = debtOpen[c.name] !== false;
@@ -3823,12 +3863,13 @@ end $$;
             <button class="btn secondary btn-sm de-toggle" data-c="${esc(c.name)}">${icon('chart', 15)}${open ? 'ซ่อนสมุด' : 'ดูสมุด'} (${c.rows.length})</button>
           </div>
           <div class="de-book" ${open ? '' : 'hidden'}>
+            ${pageBar}
             <div class="table-wrap"><table class="passbook">
               <thead><tr>
                 <th>วันที่</th><th>รายการ</th>
                 <th class="num-col">รับหนี้มา</th><th class="num-col">จ่ายคืน</th><th class="num-col">คงเหลือ</th><th></th>
               </tr></thead>
-              <tbody>${c.rows.map(e => `<tr class="pb-row ${e.kind}">
+              <tbody>${pageRows.map(e => `<tr class="pb-row ${e.kind}">
                 <td data-label="วันที่" class="pb-date">${thDate(e.entry_date)}</td>
                 <td data-label="รายการ" class="pb-item">
                   <span class="pb-ico">${icon(e.kind === 'in' ? 'back' : 'check', 15)}</span>
@@ -3854,6 +3895,13 @@ end $$;
 
         card.querySelector('.de-in').addEventListener('click', () => openForm('in', c.name));
         card.querySelector('.de-out').addEventListener('click', () => openForm('out', c.name));
+        card.querySelectorAll('.pg-btn').forEach(b => b.addEventListener('click', () => {
+          const p = parseInt(b.dataset.p);
+          if (!p || b.disabled) return;
+          debtPage[b.dataset.c] = p;
+          renderDebts();
+        }));
+
         card.querySelector('.de-toggle').addEventListener('click', () => {
           debtOpen[c.name] = !(debtOpen[c.name] !== false);
           renderDebts();
