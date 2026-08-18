@@ -3818,6 +3818,8 @@ end $$;
           bal = round2(bal + (e.kind === 'in' ? 1 : -1) * Number(e.amount));
           return { ...e, balance: bal };
         });
+        // ไล่ยอดคงเหลือตามเวลาจริงก่อน แล้วค่อยกลับด้าน — รายการใหม่สุดจะได้อยู่บนสุดเสมอ
+        withBal.reverse();
         return { name, rows: withBal, balance: bal,
           inSum: round2(rows.filter(e => e.kind === 'in').reduce((a, e) => a + Number(e.amount), 0)),
           outSum: round2(rows.filter(e => e.kind === 'out').reduce((a, e) => a + Number(e.amount), 0)) };
@@ -3828,7 +3830,7 @@ end $$;
 
         // ---- แบ่งหน้า 10 รายการ (ยอดคงเหลือคิดจากทั้งเล่มก่อนแล้ว หน้าไหนก็ตรง) ----
         const totalPages = Math.max(1, Math.ceil(c.rows.length / DEBT_PER_PAGE));
-        if (debtPage[c.name] === undefined) debtPage[c.name] = totalPages;   // เปิดมาที่หน้าล่าสุด
+        if (debtPage[c.name] === undefined) debtPage[c.name] = 1;   // หน้าแรก = รายการใหม่สุด
         const page = Math.min(Math.max(1, debtPage[c.name]), totalPages);
         debtPage[c.name] = page;
         const pageRows = c.rows.slice((page - 1) * DEBT_PER_PAGE, page * DEBT_PER_PAGE);
