@@ -2864,7 +2864,7 @@ end $$;
     // ===== เช็กว่ามีเวอร์ชันใหม่ไหม =====
     // เบราว์เซอร์ชอบจำไฟล์เก่าไว้ (cache) ทำให้ไม่เห็นของที่เพิ่งอัปเดต
     // ตัวนี้จะแอบเทียบเวอร์ชันกับไฟล์บนเซิร์ฟเวอร์ แล้วขึ้นแถบให้กดอัปเดต
-    const APP_BUILD = '20260818-1851';
+    const APP_BUILD = '20260818-1919';
 
     let lastUpdateCheck = 0;
 
@@ -3324,6 +3324,39 @@ end $$;
       document.getElementById('statusMsg').textContent = 'อัปเดตล่าสุด: ' + new Date().toLocaleString('th-TH');
     }
 
+    /** กล่องยืนยันยอดของรายการประจำเดือนนี้ — ยอดคงที่เติมให้ ยอดไม่คงที่ต้องกรอก */
+    function askMonthlyAmounts(list, monthLabel) {
+      return new Promise(resolve => {
+        const back = document.createElement('div');
+        back.className = 'modal-back no-print';
+        back.innerHTML = `
+          <div class="modal-card" role="dialog" aria-modal="true">
+            <h3>ยอดของ ${esc(monthLabel)}</h3>
+            <div class="modal-sub">แก้ยอดได้ก่อนลงสมุด · เว้นว่างหรือใส่ 0 = ข้ามรายการนั้นไปก่อน</div>
+            ${list.map(r => `<div class="field">
+              <label for="mo_${r.id}">${esc(r.item)} <span class="hint">· ${esc(r.creditor)}</span></label>
+              <input id="mo_${r.id}" data-id="${r.id}" class="mo-amt" type="number" min="0" step="any"
+                inputmode="decimal" value="${r.amount || ''}" placeholder="ใส่ยอดเดือนนี้">
+            </div>`).join('')}
+            <div class="field-row" style="justify-content:flex-end;margin-top:6px">
+              <button class="btn secondary" id="moCancel">ยกเลิก</button>
+              <button class="btn" id="moOk">${icon('check', 15)}ลงสมุด</button>
+            </div>
+          </div>`;
+        document.body.appendChild(back);
+        const close = (v) => { back.remove(); resolve(v); };
+        back.querySelector('#moCancel').addEventListener('click', () => close(null));
+        back.addEventListener('click', (e) => { if (e.target === back) close(null); });
+        back.querySelector('#moOk').addEventListener('click', () => {
+          const out = {};
+          back.querySelectorAll('.mo-amt').forEach(i => { out[i.dataset.id] = parseFloat(i.value) || 0; });
+          close(out);
+        });
+        const first = back.querySelector('.mo-amt:not([value]), .mo-amt[value=""]') || back.querySelector('.mo-amt');
+        setTimeout(() => first && first.focus(), 50);
+      });
+    }
+
     const thDate = (d) => new Date(d + 'T00:00:00').toLocaleDateString('th-TH', { day: '2-digit', month: 'short', year: '2-digit' });
 
     function renderDebts() {
@@ -3441,20 +3474,23 @@ end $$;
             <div class="att-person ${doneThisMonth(r) ? 'done' : 'on'}">
               <div class="ap-main">
                 <div class="ap-name">${esc(r.item)} <span class="hint">· ${esc(r.creditor)}</span></div>
-                <div class="ap-sub">${r.kind === 'in' ? 'เพิ่มยอดหนี้' : 'จ่ายคืน'} ${fmtBaht(round2(r.amount))} บาท ทุกวันที่ ${r.day_of_month}</div>
+                <div class="ap-sub">${r.kind === 'in' ? 'เพิ่มยอดหนี้' : 'จ่ายคืน'} ${r.amount
+                  ? fmtBaht(round2(r.amount)) + ' บาท' : '<b>ยอดไม่คงที่ — กรอกตอนลงแต่ละเดือน</b>'} ทุกวันที่ ${r.day_of_month}</div>
               </div>
               <span class="ap-state">${doneThisMonth(r) ? 'ลงแล้วเดือนนี้' : 'ยังไม่ลง'}</span>
               <button class="icon-btn icon-btn-delete rec-del" data-id="${r.id}" title="ลบรายการประจำ">${icon('trash', 16)}</button>
             </div>`).join('')}</div>` : '<div class="hint" style="margin-bottom:12px">ยังไม่มีรายการประจำ — เช่น ค่ารถ 320 · สหกรณ์ 250 ที่ต้องลงทุกเดือน</div>'}
 
-          ${pending.length ? `<button class="btn" id="recRun">${icon('check', 15)}ลงรายการประจำของ ${esc(monthLabel)} (${pending.length} รายการ)</button>` : ''}
+          ${pending.length ? `<button class="btn" id="recRun">${icon('check', 15)}ลงรายการประจำของ ${esc(monthLabel)} (${pending.length} รายการ)</button>
+            ${pending.some(r => !r.amount) ? '<div class="hint">มีรายการที่ยอดไม่คงที่ ระบบจะให้กรอกยอดก่อนลงสมุด</div>' : ''}` : ''}
 
           <details style="margin-top:12px">
             <summary class="hint" style="cursor:pointer">+ เพิ่มรายการประจำใหม่</summary>
             <div class="form-grid" style="margin-top:10px">
               <div class="field"><label for="rcCred">เจ้าหนี้</label><input id="rcCred" list="deCreditorList" placeholder="เช่น สหกรณ์"></div>
               <div class="field"><label for="rcItem">ชื่อรายการ</label><input id="rcItem" placeholder="เช่น ค่ารถ"></div>
-              <div class="field"><label for="rcAmt">จำนวนต่อเดือน (บาท)</label><input id="rcAmt" type="number" min="0" step="any" inputmode="decimal"></div>
+              <div class="field"><label for="rcAmt">จำนวนต่อเดือน (บาท)</label>
+                <input id="rcAmt" type="number" min="0" step="any" inputmode="decimal" placeholder="เว้นว่าง = ยอดไม่คงที่"></div>
               <div class="field"><label for="rcKind">ประเภท</label>
                 <select id="rcKind"><option value="in">เพิ่มยอดหนี้ทุกเดือน</option><option value="out">จ่ายคืนทุกเดือน</option></select></div>
               <div class="field"><label for="rcDay">ลงทุกวันที่</label><input id="rcDay" type="number" min="1" max="31" value="1" inputmode="numeric"></div>
@@ -3472,9 +3508,8 @@ end $$;
         const amount = parseFloat(recCard.querySelector('#rcAmt').value);
         msg.textContent = ''; msg.className = 'msg';
         if (!creditor || !item) { msg.textContent = 'ใส่เจ้าหนี้และชื่อรายการก่อน'; msg.className = 'msg error'; return; }
-        if (!(amount > 0)) { msg.textContent = 'ใส่จำนวนเงินก่อน'; msg.className = 'msg error'; return; }
         const { error } = await sb.from('debt_recurring').insert({
-          creditor, item, amount,
+          creditor, item, amount: amount > 0 ? amount : null,
           kind: recCard.querySelector('#rcKind').value,
           day_of_month: parseInt(recCard.querySelector('#rcDay').value) || 1,
         });
@@ -3483,14 +3518,16 @@ end $$;
       });
 
       recCard.querySelector('#recRun')?.addEventListener('click', async () => {
-        const rows = pending.map(r => {
-          const day = Math.min(r.day_of_month, new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate());
-          return {
-            creditor: r.creditor, kind: r.kind, amount: r.amount,
-            entry_date: monthPrefix + '-' + String(day).padStart(2, '0'),
-            item: r.item, recurring_id: r.id,
-          };
-        });
+        // รายการที่ยอดไม่คงที่ (ค่าไฟ ฯลฯ) ต้องกรอกยอดของเดือนนี้ก่อน
+        const amounts = await askMonthlyAmounts(pending, monthLabel);
+        if (!amounts) return;
+        const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+        const rows = pending.map(r => ({
+          creditor: r.creditor, kind: r.kind, amount: amounts[r.id],
+          entry_date: monthPrefix + '-' + String(Math.min(r.day_of_month, lastDay)).padStart(2, '0'),
+          item: r.item, recurring_id: r.id,
+        })).filter(x => x.amount > 0);
+        if (!rows.length) return;
         const { error } = await sb.from('debt_entries').insert(rows);
         if (error) { alert('ลงรายการไม่สำเร็จ: ' + error.message); return; }
         await loadDebts();
