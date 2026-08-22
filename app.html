@@ -3047,7 +3047,7 @@ end $$;
     // ===== เช็กว่ามีเวอร์ชันใหม่ไหม =====
     // เบราว์เซอร์ชอบจำไฟล์เก่าไว้ (cache) ทำให้ไม่เห็นของที่เพิ่งอัปเดต
     // ตัวนี้จะแอบเทียบเวอร์ชันกับไฟล์บนเซิร์ฟเวอร์ แล้วขึ้นแถบให้กดอัปเดต
-    const APP_BUILD = '20260822-1937';
+    const APP_BUILD = '20260822-2015';
 
     let lastUpdateCheck = 0;
 
@@ -3796,8 +3796,13 @@ end $$;
 
       recCard.querySelectorAll('.rec-del').forEach(b => b.addEventListener('click', async () => {
         if (!confirm('ลบรายการประจำนี้? (รายการที่ลงไปแล้วในสมุดยังอยู่)')) return;
-        const { error } = await sb.from('debt_recurring').delete().eq('id', b.dataset.id);
-        if (error) { alert('ลบไม่สำเร็จ: ' + error.message); return; }
+        const r = DEBT_RECUR.find(x => x.id === b.dataset.id);
+        try {
+          await trashDelete('debt_recurring', b.dataset.id, {
+            label: r ? r.item + ' · ' + r.creditor : 'รายการประจำ',
+            detail: r ? (r.kind === 'in' ? 'เพิ่มยอดหนี้' : 'จ่ายคืน') + ' ทุกวันที่ ' + r.day_of_month : '',
+          });
+        } catch (err) { alert('ลบไม่สำเร็จ: ' + err.message); return; }
         await loadDebts();
       }));
 
@@ -3919,8 +3924,12 @@ end $$;
             await loadDebts();
           } else if (act === 'delete') {
             if (!confirm('ลบรายการนี้ออกจากสมุด?')) return;
-            const { error } = await sb.from('debt_entries').delete().eq('id', e.id);
-            if (error) { alert('ลบไม่สำเร็จ: ' + error.message); return; }
+            try {
+              await trashDelete('debt_entries', e.id, {
+                label: (e.item || (e.kind === 'in' ? 'รับหนี้มา' : 'จ่ายคืน')) + ' · ' + fmtBaht(round2(e.amount)) + ' บาท',
+                detail: (e.creditor || '') + ' · ' + thDate(e.entry_date),
+              });
+            } catch (err) { alert('ลบไม่สำเร็จ: ' + err.message); return; }
             await loadDebts();
           }
         };
@@ -4161,8 +4170,12 @@ end $$;
               await sb.from('pieces').update({ redo_count: Number(p.redo_count) - 1 }).eq('id', p.id);
             }
           }
-          const { error } = await sb.from('fabric_waste').delete().eq('id', w.id);
-          if (error) throw new Error(error.message);
+          await trashDelete('fabric_waste', w.id, {
+            label: Number(w.yards).toFixed(2) + ' หลา · ' + (w.reason || 'ไม่ระบุสาเหตุ'),
+            detail: (w.kind === 'defect' ? 'งานเสีย' : 'เศษผ้า') +
+              (giveBack ? ' · คืนผ้าเข้าสต็อกแล้ว' : ' · ไม่ได้คืนผ้า') +
+              ' · กู้คืนจากถังขยะจะไม่ตัดสต็อกซ้ำให้',
+          });
           await loadAll();
         } catch (e) { alert('ลบไม่สำเร็จ: ' + e.message); b.disabled = false; }
       }));
@@ -4793,6 +4806,10 @@ end $$;
       stock_items:    { label: 'วัตถุดิบ',     view: 'stock',     children: [{ table: 'stock_moves', fk: 'item_id' }] },
       product_orders: { label: 'ออเดอร์สินค้า', view: 'products',  children: [] },
       receipts:       { label: 'ใบเสร็จ',      view: 'receipts',  children: [{ table: 'receipt_items', fk: 'receipt_id' }] },
+      order_payments: { label: 'รายการรับเงิน', view: 'orders',    children: [] },
+      fabric_waste:   { label: 'ผ้าเสีย',      view: 'fabric',    children: [] },
+      debt_entries:   { label: 'รายการหนี้',   view: 'debts',     children: [] },
+      debt_recurring: { label: 'หนี้รายเดือน', view: 'debts',     children: [] },
     };
 
     /** ลบแบบกู้คืนได้ — เก็บแถวหลัก + แถวลูกลงถังขยะก่อน แล้วค่อยลบของจริง */
@@ -6307,8 +6324,12 @@ end $$;
       payPanel.querySelectorAll('.del-pay').forEach(b => b.addEventListener('click', async () => {
         if (!confirm('ลบรายการรับเงินนี้?')) return;
         const rec = payments.find(p => p.id === b.dataset.id);
-        const { error } = await sb.from('order_payments').delete().eq('id', b.dataset.id);
-        if (error) { alert('ลบไม่สำเร็จ: ' + error.message); return; }
+        try {
+          await trashDelete('order_payments', b.dataset.id, {
+            label: 'รับเงิน ' + fmtBaht(round2(rec ? rec.amount : 0)) + ' บาท',
+            detail: 'ออเดอร์ ' + o.order_no + (rec && rec.method ? ' · ' + rec.method : ''),
+          });
+        } catch (err) { alert('ลบไม่สำเร็จ: ' + err.message); return; }
         await syncPaidAmount();
         await logActivity('order', o.id, o.order_no, 'payment_delete',
           'ลบรายการรับเงิน ' + fmtBaht(round2(rec ? rec.amount : 0)) + ' บาท');
