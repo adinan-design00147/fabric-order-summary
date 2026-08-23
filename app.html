@@ -2829,7 +2829,7 @@
     // แพลนฟรีของ Supabase โหลด backup เองไม่ได้ -> ต้องดึงข้อมูลออกมาเก็บไว้เอง
     const BACKUP_TABLES = ['lots', 'pieces', 'settings', 'shop_info', 'products', 'orders',
       'order_items', 'order_payments', 'receipts', 'receipt_items',
-      'stock_items', 'stock_moves', 'purchases', 'activity_log'];
+      'stock_items', 'stock_moves', 'purchases', 'purchase_orders', 'activity_log'];
     const BACKUP_KEY = 'haifa_last_backup';
     const GH_REPO = 'adinan-design00147/fabric-order-summary';   // ใช้เช็กว่า workflow ปลุกฐานข้อมูลยังไม่ถูกปิด
 
@@ -3086,7 +3086,7 @@ end $$;
     // ===== เช็กว่ามีเวอร์ชันใหม่ไหม =====
     // เบราว์เซอร์ชอบจำไฟล์เก่าไว้ (cache) ทำให้ไม่เห็นของที่เพิ่งอัปเดต
     // ตัวนี้จะแอบเทียบเวอร์ชันกับไฟล์บนเซิร์ฟเวอร์ แล้วขึ้นแถบให้กดอัปเดต
-    const APP_BUILD = '20260823-1830';
+    const APP_BUILD = '20260823-1935';
 
     let lastUpdateCheck = 0;
 
@@ -4846,7 +4846,7 @@ end $$;
       product_orders: { label: 'ออเดอร์สินค้า', view: 'products',  children: [] },
       receipts:       { label: 'ใบเสร็จ',      view: 'receipts',  children: [{ table: 'receipt_items', fk: 'receipt_id' }] },
       order_payments: { label: 'รายการรับเงิน', view: 'orders',    children: [] },
-      purchases:      { label: 'รายจ่าย',      view: 'purchases', children: [] },
+      purchases:      { label: 'รายจ่าย',      view: 'purchases', children: [{ table: 'purchase_orders', fk: 'purchase_id' }] },
       fabric_waste:   { label: 'ผ้าเสีย',      view: 'fabric',    children: [] },
       debt_entries:   { label: 'รายการหนี้',   view: 'debts',     children: [] },
       debt_recurring: { label: 'หนี้รายเดือน', view: 'debts',     children: [] },
@@ -5019,11 +5019,8 @@ end $$;
               <div class="field"><label for="epCat">หมวดรายจ่าย</label>
                 <input id="epCat" list="epCatList" value="${esc(p.category || '')}" autocomplete="off">
                 <datalist id="epCatList">${expenseCats().map(c => `<option value="${esc(c)}"></option>`).join('')}</datalist></div>
-              <div class="field"><label for="epOrder">ผูกกับออเดอร์</label>
-                <input id="epOrder" list="epOrderList" autocomplete="off" placeholder="พิมพ์เลขออเดอร์ หรือชื่อลูกค้า"
-                  value="${esc((() => { const o = PURCH_ORDERS.find(x => x.id === p.order_id); return o ? orderPickLabel(o) : ''; })())}">
-                ${orderPickDatalist('epOrderList')}
-                <div class="hint" id="epOrderHint"></div></div>
+              <div class="field"><label for="epOrderInput">ผูกกับออเดอร์ (ใส่ได้หลายใบ)</label>
+                ${orderMultiHTML('epOrder', 'epOrderList')}</div>
             `}
             <div class="field"><label for="epTotal">ยอดที่จ่ายจริง (บาท)</label>
               <input id="epTotal" type="number" min="0" step="any" inputmode="decimal" value="${p.total}"></div>
@@ -5055,7 +5052,12 @@ end $$;
           q('epTotal').addEventListener('input', () => { totalTouched = true; });
         }
 
-        if (!isStock) wireOrderPick(q('epOrder'), q('epOrderHint'));
+        let epOrders = null;
+        if (!isStock) {
+          epOrders = wireOrderMulti(back, 'epOrder', orderLinksOf(p.id).map(l => l.order_id),
+            () => parseFloat(q('epTotal').value));
+          q('epTotal').addEventListener('input', epOrders.refresh);
+        }
         q('epCancel').addEventListener('click', () => close(null));
         back.addEventListener('click', (ev) => { if (ev.target === back) close(null); });
         q('epOk').addEventListener('click', () => {
@@ -5068,7 +5070,7 @@ end $$;
             p_total: total,
             p_vendor: q('epVendor').value.trim() || null,
             p_note: q('epNote').value.trim() || null,
-            p_qty: null, p_unit_price: null, p_category: null, p_order_id: null,
+            p_qty: null, p_unit_price: null, p_category: null, p_order_ids: null,
           };
           if (isStock) {
             const qty = parseFloat(q('epQty').value);
@@ -5079,10 +5081,9 @@ end $$;
           } else {
             const cat = q('epCat').value.trim();
             if (!cat) { msg.textContent = 'ใส่หมวดรายจ่ายก่อน'; msg.className = 'msg error'; return; }
-            const ord = findOrderByText(q('epOrder').value);
-            if (ord === undefined) { msg.textContent = 'หาออเดอร์ที่พิมพ์ไม่เจอ — แก้ให้ตรง หรือลบข้อความในช่องนั้นทิ้ง'; msg.className = 'msg error'; return; }
+            if (epOrders.hasPending()) { msg.textContent = 'ยังมีออเดอร์ที่พิมพ์ค้างไว้ — กด Enter เพื่อเพิ่ม หรือลบข้อความทิ้ง'; msg.className = 'msg error'; return; }
             patch.p_category = cat;
-            patch.p_order_id = ord ? ord.id : null;
+            patch.p_order_ids = epOrders.getIds();
           }
           close(patch);
         });
@@ -5097,6 +5098,7 @@ end $$;
     // ลบ = ผ่านถังขยะเสมอ · ของเข้าสต็อกจะถามแยกอีกทีว่าถอนของออกด้วยไหม
     let PURCHASES = [];
     let PURCH_ORDERS = [];
+    let PURCH_LINKS = [];   // purchase_orders — 1 รายจ่าย ผูกได้หลายออเดอร์ พร้อมส่วนแบ่งเงิน
     let purchaseMonth = '';            // '' = ทั้งหมด · 'YYYY-MM' = เฉพาะเดือนนั้น
     let purchaseTab = 'stock';         // stock | expense | summary
 
@@ -5109,15 +5111,17 @@ end $$;
 
     async function loadPurchases() {
       document.getElementById('statusMsg').textContent = 'กำลังโหลด...';
-      const [pRes, oRes] = await Promise.all([
+      const [pRes, oRes, lRes] = await Promise.all([
         sb.from('purchases').select('*')
           .order('purchase_date', { ascending: false }).order('created_at', { ascending: false }),
         sb.from('orders').select('id,order_no,customer').order('created_at', { ascending: false }),
+        sb.from('purchase_orders').select('purchase_id,order_id,share_amount'),
         fetchStock(),
       ]);
       if (pRes.error) throw pRes.error;
       PURCHASES = pRes.data || [];
       PURCH_ORDERS = oRes.data || [];
+      PURCH_LINKS = lRes.data || [];
       renderPurchases();
       document.getElementById('statusMsg').textContent = 'อัปเดตล่าสุด: ' + new Date().toLocaleString('th-TH');
     }
@@ -5144,18 +5148,71 @@ end $$;
       return `<datalist id="${id}">${PURCH_ORDERS.map(o => `<option value="${esc(orderPickLabel(o))}"></option>`).join('')}</datalist>`;
     }
 
-    /** ผูกช่องพิมพ์ออเดอร์กับบรรทัดบอกผลค้นหาใต้ช่อง */
-    function wireOrderPick(inputEl, hintEl) {
-      const sync = () => {
-        const v = inputEl.value.trim();
-        if (!v) { hintEl.textContent = 'เว้นว่าง = ไม่ผูกออเดอร์'; hintEl.style.color = ''; return; }
-        const hit = findOrderByText(v);
-        if (hit) { hintEl.textContent = 'ผูกกับ ' + orderPickLabel(hit); hintEl.style.color = 'var(--ok-text)'; }
-        else { hintEl.textContent = 'ยังหาออเดอร์นี้ไม่เจอ — พิมพ์เลขออเดอร์หรือชื่อลูกค้าให้ตรงกว่านี้'; hintEl.style.color = 'var(--err-text)'; }
+    function orderLinksOf(purchaseId) {
+      return PURCH_LINKS.filter(l => l.purchase_id === purchaseId);
+    }
+
+    /** HTML ของกล่องเลือกออเดอร์หลายใบ — ใช้ทั้งฟอร์มบันทึกและกล่องแก้ไข */
+    function orderMultiHTML(prefix, listId) {
+      return `<input id="${prefix}Input" list="${listId}" autocomplete="off" placeholder="พิมพ์เลขออเดอร์ หรือชื่อลูกค้า แล้วกด Enter">
+        ${orderPickDatalist(listId)}
+        <div class="chips" id="${prefix}Chips" style="margin:8px 0 0"></div>
+        <div class="hint" id="${prefix}Hint"></div>`;
+    }
+
+    /**
+     * ผูกกล่องเลือกออเดอร์หลายใบ · คืน () => uuid[]
+     * ค่าส่งก้อนเดียวที่ไปส่งหลายเจ้า -> หารเท่ากันทุกใบ เศษยกให้ใบสุดท้าย (ฝั่ง SQL เป็นคนหาร)
+     * ตรงนี้แค่โชว์ให้เห็นล่วงหน้าว่าจะได้ใบละเท่าไหร่
+     */
+    function wireOrderMulti(root, prefix, initialIds, getTotal) {
+      const inputEl = root.querySelector('#' + prefix + 'Input');
+      const chipsEl = root.querySelector('#' + prefix + 'Chips');
+      const hintEl = root.querySelector('#' + prefix + 'Hint');
+      const ids = [...(initialIds || [])];
+
+      const draw = () => {
+        chipsEl.innerHTML = ids.map(id => {
+          const o = PURCH_ORDERS.find(x => x.id === id);
+          return `<button type="button" class="chip active" data-rm="${id}">${esc(o ? orderPickLabel(o) : id)} ✕</button>`;
+        }).join('');
+        chipsEl.querySelectorAll('[data-rm]').forEach(b => b.addEventListener('click', () => {
+          const i = ids.indexOf(b.dataset.rm);
+          if (i >= 0) ids.splice(i, 1);
+          draw();
+        }));
+
+        const total = Number(getTotal()) || 0;
+        if (!ids.length) { hintEl.textContent = 'เว้นว่าง = ไม่ผูกออเดอร์'; hintEl.style.color = ''; return; }
+        if (!(total > 0)) { hintEl.textContent = 'ผูกไว้ ' + ids.length + ' ใบ — ใส่ยอดเงินแล้วจะบอกว่าหารใบละเท่าไหร่'; hintEl.style.color = ''; return; }
+        const base = round2(total / ids.length);
+        const last = round2(total - base * (ids.length - 1));
+        hintEl.textContent = ids.length === 1
+          ? 'ผูก 1 ใบ · ลงเต็ม ' + fmtBaht(total) + ' บาท'
+          : 'หาร ' + ids.length + ' ใบ · ใบละ ' + fmtBaht(base) + ' บาท' +
+            (last !== base ? ' (ใบสุดท้าย ' + fmtBaht(last) + ' รับเศษไป)' : '');
+        hintEl.style.color = 'var(--ok-text)';
       };
-      inputEl.addEventListener('input', sync);
-      inputEl.addEventListener('change', sync);
-      sync();
+
+      const add = () => {
+        const v = inputEl.value.trim();
+        if (!v) return;
+        const hit = findOrderByText(v);
+        if (!hit) {
+          hintEl.textContent = 'ยังหาออเดอร์นี้ไม่เจอ — พิมพ์เลขออเดอร์หรือชื่อลูกค้าให้ตรงกว่านี้';
+          hintEl.style.color = 'var(--err-text)';
+          return;
+        }
+        if (!ids.includes(hit.id)) ids.push(hit.id);
+        inputEl.value = '';
+        draw();
+      };
+
+      inputEl.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); add(); } });
+      inputEl.addEventListener('change', add);      // เลือกจาก datalist
+      inputEl.addEventListener('blur', () => { if (inputEl.value.trim()) add(); });
+      draw();
+      return { getIds: () => [...ids], refresh: draw, hasPending: () => inputEl.value.trim() !== '' };
     }
 
     function purchaseMonthLabel(ym) {
@@ -5340,10 +5397,8 @@ end $$;
             <div class="hint" id="exDateTh"></div></div>
           <div class="field"><label for="exVendor">จ่ายให้ใคร</label>
             <input id="exVendor" placeholder="เช่น ปั๊ม ปตท. · Flash"></div>
-          <div class="field"><label for="exOrder">ผูกกับออเดอร์ (${PURCH_ORDERS.length} รายการ)</label>
-            <input id="exOrder" list="exOrderList" placeholder="พิมพ์เลขออเดอร์ หรือชื่อลูกค้า" autocomplete="off">
-            ${orderPickDatalist('exOrderList')}
-            <div class="hint" id="exOrderHint"></div></div>
+          <div class="field pu-wide"><label for="exOrderInput">ผูกกับออเดอร์ (มี ${PURCH_ORDERS.length} ใบ · ใส่ได้หลายใบ)</label>
+            ${orderMultiHTML('exOrder', 'exOrderList')}</div>
           <div class="field pu-wide"><label for="exNote">หมายเหตุ</label>
             <input id="exNote" placeholder="เช่น ไปส่งของที่ยะลา"></div>
         </div>
@@ -5355,7 +5410,8 @@ end $$;
       const syncDate = () => { $('exDateTh').textContent = $('exDate').value ? thDate($('exDate').value) : ''; };
       $('exDate').addEventListener('change', syncDate);
       syncDate();
-      wireOrderPick($('exOrder'), $('exOrderHint'));
+      const exOrders = wireOrderMulti(form, 'exOrder', [], () => parseFloat($('exTotal').value));
+      $('exTotal').addEventListener('input', exOrders.refresh);
 
       $('exSave').addEventListener('click', async () => {
         const msg = $('exMsg');
@@ -5364,8 +5420,7 @@ end $$;
         const total = parseFloat($('exTotal').value);
         if (!cat) { msg.textContent = 'ใส่หมวดรายจ่ายก่อน'; msg.className = 'msg error'; return; }
         if (!(total >= 0)) { msg.textContent = 'ใส่ยอดที่จ่ายก่อน'; msg.className = 'msg error'; return; }
-        const ord = findOrderByText($('exOrder').value);
-        if (ord === undefined) { msg.textContent = 'หาออเดอร์ที่พิมพ์ไม่เจอ — แก้ให้ตรง หรือลบข้อความในช่องนั้นทิ้ง'; msg.className = 'msg error'; return; }
+        if (exOrders.hasPending()) { msg.textContent = 'ยังมีออเดอร์ที่พิมพ์ค้างไว้ — กด Enter เพื่อเพิ่ม หรือลบข้อความทิ้ง'; msg.className = 'msg error'; return; }
 
         $('exSave').disabled = true;
         const { error } = await sb.rpc('expense_create', {
@@ -5374,7 +5429,7 @@ end $$;
           p_total: total,
           p_vendor: $('exVendor').value.trim() || null,
           p_note: $('exNote').value.trim() || null,
-          p_order_id: ord ? ord.id : null,
+          p_order_ids: exOrders.getIds(),
           p_by: (ME && ME.email) ? prettyLogin(ME.email) : null,
         });
         $('exSave').disabled = false;
@@ -5400,7 +5455,14 @@ end $$;
                 ${p.note ? `<div class="hint">${esc(p.note)}</div>` : ''}
                 ${isExp ? '' : (p.stock_move_id ? '<div class="hint">รับเข้าสต็อกแล้ว</div>' : '<div class="hint">ไม่ได้รับเข้าสต็อก</div>')}</td>
               <td data-label="${isExp ? 'ผูกออเดอร์' : 'จำนวน'}">${isExp
-                ? esc(p.order_no || '-')
+                ? (() => {
+                    const ls = orderLinksOf(p.id);
+                    if (!ls.length) return '-';
+                    return ls.map(l => {
+                      const o = PURCH_ORDERS.find(x => x.id === l.order_id);
+                      return esc(o ? o.order_no : '?') + ' <span class="hint">฿' + fmtBaht(round2(l.share_amount)) + '</span>';
+                    }).join('<br>');
+                  })()
                 : Number(p.qty) + ' ' + esc(p.unit || '')}</td>
               <td data-label="ยอด (บาท)"><b>${fmtBaht(round2(p.total))}</b>
                 ${!isExp && p.unit_price ? `<div class="hint">@ ${fmtBaht(round2(p.unit_price))}</div>` : ''}</td>
