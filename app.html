@@ -823,6 +823,31 @@
     .receipt-paper { padding: var(--space-4); }
   }
 
+  /* ===== ฟอร์มรายจ่ายซื้อของ =====
+     ใช้คลาสของตัวเอง ไม่ใช้ .form-grid / .field-row กลาง เพราะ 2 อันนั้นมีอีก 8 ที่ในระบบใช้อยู่
+     และกฎ .field-row > input { flex: 1 1 170px } จะไปยืดช่องติ๊กจนข้อความตกบรรทัด */
+  .pu-form { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--space-2); margin-bottom: var(--space-3); }
+  .pu-form[hidden] { display: none; }
+  .pu-wide { grid-column: 1 / -1; }
+  /* กล่องนี้โผล่เฉพาะตอนพิมพ์ชื่อของที่ยังไม่มีในสต็อก — ต้องมี [hidden] ของตัวเอง
+     ไม่งั้น display: grid จะชนะ hidden แล้วซ่อนไม่ลง */
+  .pu-new { display: grid; grid-template-columns: repeat(2, 1fr); gap: var(--space-2);
+            background: var(--accent-soft); border: 1px dashed var(--accent);
+            border-radius: var(--radius); padding: var(--space-3); margin-bottom: var(--space-3); }
+  .pu-new[hidden] { display: none; }
+  .pu-new-hint { grid-column: 1 / -1; color: var(--accent); font-size: 12.5px; font-weight: 600; line-height: 1.5; }
+  .pu-check { display: flex; align-items: center; gap: 12px; min-height: 46px; padding: 8px 14px;
+              margin: 0 0 var(--space-3); border: 1px solid var(--border); border-radius: var(--radius);
+              background: var(--card); cursor: pointer; font-size: 13.5px; line-height: 1.4; }
+  .pu-check input { flex: 0 0 auto; width: 20px; height: 20px; margin: 0; }
+  @media (max-width: 900px) { .pu-form { grid-template-columns: repeat(2, 1fr); } }
+  @media (max-width: 560px) {
+    .pu-form, .pu-new { grid-template-columns: 1fr; }
+    /* 16px ขึ้นไป iOS จะไม่ซูมหน้าจอเองตอนแตะช่องกรอก */
+    .pu-form input, .pu-form select, .pu-new select { font-size: 16px; }
+    #puSave { width: 100%; justify-content: center; }
+  }
+
   @media print {
     .sidebar, .bottom-nav, header, .selbar, .no-print { display: none !important; }
     .container { margin: 0 !important; padding: 0 !important; max-width: none !important; }
@@ -3052,7 +3077,7 @@ end $$;
     // ===== เช็กว่ามีเวอร์ชันใหม่ไหม =====
     // เบราว์เซอร์ชอบจำไฟล์เก่าไว้ (cache) ทำให้ไม่เห็นของที่เพิ่งอัปเดต
     // ตัวนี้จะแอบเทียบเวอร์ชันกับไฟล์บนเซิร์ฟเวอร์ แล้วขึ้นแถบให้กดอัปเดต
-    const APP_BUILD = '20260823-1330';
+    const APP_BUILD = '20260823-1415';
 
     let lastUpdateCheck = 0;
 
@@ -5010,33 +5035,34 @@ end $$;
       form.className = 'panel no-print';
       form.innerHTML = `
         <h2>${icon('plus', 16)}บันทึกรายจ่ายใหม่</h2>
-        <div class="form-grid">
-          <div class="field"><label for="puDate">วันที่ซื้อ</label>
-            <input id="puDate" type="date" value="${dateKey()}"></div>
-          <div class="field"><label for="puItem">ซื้ออะไร</label>
-            <input id="puItem" list="puItemList" placeholder="พิมพ์ชื่อ หรือเลือกจากที่มีอยู่" autocomplete="off">
+        <div class="pu-form">
+          <div class="field pu-wide"><label for="puItem">ซื้ออะไร</label>
+            <input id="puItem" list="puItemList" placeholder="พิมพ์ชื่อของ" autocomplete="off">
             <datalist id="puItemList">${STOCK.map(s => `<option value="${esc(s.name)}">${esc(s.category || '')} · ${esc(s.unit || '')}</option>`).join('')}</datalist></div>
           <div class="field"><label for="puQty">จำนวน <span class="hint" id="puUnit"></span></label>
             <input id="puQty" type="number" min="0" step="any" inputmode="decimal" placeholder="เช่น 2"></div>
-          <div class="field"><label for="puPrice">ราคาต่อหน่วย (บาท)</label>
+          <div class="field"><label for="puPrice">ราคาต่อหน่วย</label>
             <input id="puPrice" type="number" min="0" step="any" inputmode="decimal" placeholder="เช่น 350"></div>
-          <div class="field"><label for="puTotal">ยอดที่จ่ายจริง (บาท)</label>
-            <input id="puTotal" type="number" min="0" step="any" inputmode="decimal" placeholder="คิดให้อัตโนมัติ · แก้ได้"></div>
+          <div class="field"><label for="puTotal">ยอดที่จ่ายจริง</label>
+            <input id="puTotal" type="number" min="0" step="any" inputmode="decimal" placeholder="คิดให้เอง · แก้ได้"></div>
           <div class="field"><label for="puVendor">ซื้อจากร้าน</label>
-            <input id="puVendor" placeholder="เช่น ร้านเครื่องเขียนหน้าปากซอย"></div>
-          <div class="field" style="grid-column:1/-1"><label for="puNote">หมายเหตุ</label>
+            <input id="puVendor" placeholder="เช่น ร้านเครื่องเขียน"></div>
+          <div class="field"><label for="puDate">วันที่ซื้อ</label>
+            <input id="puDate" type="date" value="${dateKey()}">
+            <div class="hint" id="puDateTh"></div></div>
+          <div class="field pu-wide"><label for="puNote">หมายเหตุ</label>
             <input id="puNote" placeholder="เว้นว่างได้"></div>
         </div>
-        <div class="form-grid" id="puNewBox" hidden>
-          <div class="field" style="grid-column:1/-1"><div class="hint" id="puNewHint"></div></div>
+        <div class="pu-new" id="puNewBox" hidden>
+          <div class="pu-new-hint" id="puNewHint"></div>
           <div class="field"><label for="puNewUnit">หน่วยนับ</label>
             <select id="puNewUnit">${STOCK_UNITS.map(u => `<option>${esc(u)}</option>`).join('')}</select></div>
           <div class="field"><label for="puNewCat">หมวด</label>
             <select id="puNewCat">${STOCK_CATS.map(c => `<option>${esc(c)}</option>`).join('')}</select></div>
         </div>
-        <label class="field-row" style="gap:8px;align-items:center;margin:10px 0">
-          <input id="puAddStock" type="checkbox" checked style="width:auto;flex:none">
-          <span>รับเข้าสต็อกให้เลย (ไม่ต้องไปกดรับเข้าที่หน้าสต็อกอีกรอบ)</span>
+        <label class="pu-check">
+          <input id="puAddStock" type="checkbox" checked>
+          <span>รับเข้าสต็อกให้เลย — ไม่ต้องไปกดรับเข้าที่หน้าสต็อกอีกรอบ</span>
         </label>
         <button class="btn" id="puSave">${icon('check', 15)}บันทึกรายจ่าย</button>
         <div class="msg" id="puMsg"></div>`;
@@ -5068,6 +5094,13 @@ end $$;
       };
       $('puItem').addEventListener('input', syncItem);
       $('puItem').addEventListener('change', syncItem);
+
+      const syncDate = () => {
+        const v = $('puDate').value;
+        $('puDateTh').textContent = v ? thDate(v) : '';
+      };
+      $('puDate').addEventListener('change', syncDate);
+      syncDate();
 
       $('puSave').addEventListener('click', async () => {
         const msg = $('puMsg');
