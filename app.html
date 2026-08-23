@@ -1526,6 +1526,7 @@
       { sep: true },
       { key: 'fabric',    label: 'งานผลิต',     icon: 'factory' },
       { key: 'stock',     label: 'สต็อกของ',   icon: 'box' },
+      { key: 'purchases', label: 'รายจ่ายซื้อของ', icon: 'cash', adminOnly: true },
       { sep: true },
       { key: 'customers', label: 'ลูกค้า',     icon: 'user' },
       { key: 'receipts',  label: 'ใบเสร็จ',    icon: 'receipt' },
@@ -1545,7 +1546,7 @@
     const MOBILE_NAV = ['dashboard', 'orders', 'calendar', 'fabric'];
     // เมนูเพิ่มเติมบนมือถือ — แบ่งกลุ่มให้หาง่าย (ลำดับตามความถี่ที่ใช้จริง)
     const MOBILE_MORE_GROUPS = [
-      { label: 'งานประจำวัน', keys: ['stock', 'customers', 'receipts'] },
+      { label: 'งานประจำวัน', keys: ['stock', 'purchases', 'customers', 'receipts'] },
       { label: 'ลงเวลาทำงาน', keys: ['attendance', 'schedule', 'timesheet'] },
       { label: 'ตั้งค่าร้าน',   keys: ['products', 'users', 'trash', 'health', 'profile'] },
       { label: 'ส่วนตัว',      keys: ['debts'], superOnly: true },
@@ -1576,6 +1577,7 @@
       if (key === 'fabric') return { label: 'งานผลิต', icon: 'factory' };
       if (key === 'stock') return { label: 'สต็อกของ', icon: 'box' };
       if (key === 'stockreport') return { label: 'ตารางวัตถุดิบคงเหลือ', icon: 'box' };
+      if (key === 'purchases') return { label: 'รายจ่ายซื้อของ', icon: 'cash' };
       if (key === 'attendance') return { label: 'ลงเวลา', icon: 'clock' };
       if (key === 'schedule') return { label: 'ตารางงาน', icon: 'calendar' };
       if (key === 'timesheet') return { label: 'ประวัติลงเวลา', icon: 'chart' };
@@ -1592,7 +1594,7 @@
     let jobQuick = null;      // ตัวกรองด่วนจากแถบทักทาย: today | due | unpaid
 
     // ===== URL routing (ทำให้กดค้าง/คลิกขวา → เปิดในแท็บใหม่ได้ และปุ่ม back ใช้งานได้) =====
-    const VALID_VIEWS = ['dashboard', 'calendar', 'orders', 'products', 'fabric', 'stock', 'stockreport', 'customers', 'receipts', 'attendance', 'schedule', 'timesheet', 'users', 'debts', 'trash', 'health', 'profile'];
+    const VALID_VIEWS = ['dashboard', 'calendar', 'orders', 'products', 'fabric', 'stock', 'stockreport', 'purchases', 'customers', 'receipts', 'attendance', 'schedule', 'timesheet', 'users', 'debts', 'trash', 'health', 'profile'];
 
     function routeFor(view, id) {
       if (view === 'orderView') return '#/order/' + id;
@@ -1637,7 +1639,7 @@
 
     function renderNav() {
       const list = document.getElementById('navList');
-      list.innerHTML = NAV_ITEMS.filter(it => !it.superOnly || isSuperAdmin()).map(it => it.sep
+      list.innerHTML = NAV_ITEMS.filter(it => (!it.superOnly || isSuperAdmin()) && (!it.adminOnly || isAdmin())).map(it => it.sep
         ? '<div class="nav-sep"></div>'
         : `<a class="nav-item ${currentView === it.key ? 'active' : ''}" href="${routeFor(it.key)}" data-key="${it.key}">
              <span class="nav-ico">${icon(it.icon, 19)}</span><span>${esc(it.label)}</span>
@@ -1671,7 +1673,7 @@
           <div class="sheet-bar"></div>
           ${MOBILE_MORE_GROUPS.filter(g => !g.superOnly || isSuperAdmin()).map(g => `
             <div class="sheet-title">${esc(g.label)}</div>
-            ${g.keys.filter(k => k !== 'users' || isAdmin()).map(k => {
+            ${g.keys.filter(k => (k !== 'users' && k !== 'purchases') || isAdmin()).map(k => {
               const m = viewMeta(k);
               return `<button class="sheet-item ${currentView === k ? 'active' : ''}" data-key="${k}">
                         <span class="nav-ico">${icon(m.icon, 20)}</span>
@@ -1874,6 +1876,9 @@
           await loadStockReport();
         } else if (currentView === 'stock') {
           await loadStock();
+        } else if (currentView === 'purchases') {
+          if (!isAdmin()) { currentView = HOME_VIEW; syncHash(); return boot(); }
+          await loadPurchases();
         } else if (currentView === 'health') {
           await loadHealth();
         } else if (currentView === 'profile') {
@@ -2790,7 +2795,7 @@
     // แพลนฟรีของ Supabase โหลด backup เองไม่ได้ -> ต้องดึงข้อมูลออกมาเก็บไว้เอง
     const BACKUP_TABLES = ['lots', 'pieces', 'settings', 'shop_info', 'products', 'orders',
       'order_items', 'order_payments', 'receipts', 'receipt_items',
-      'stock_items', 'stock_moves', 'activity_log'];
+      'stock_items', 'stock_moves', 'purchases', 'activity_log'];
     const BACKUP_KEY = 'haifa_last_backup';
     const GH_REPO = 'adinan-design00147/fabric-order-summary';   // ใช้เช็กว่า workflow ปลุกฐานข้อมูลยังไม่ถูกปิด
 
@@ -3047,7 +3052,7 @@ end $$;
     // ===== เช็กว่ามีเวอร์ชันใหม่ไหม =====
     // เบราว์เซอร์ชอบจำไฟล์เก่าไว้ (cache) ทำให้ไม่เห็นของที่เพิ่งอัปเดต
     // ตัวนี้จะแอบเทียบเวอร์ชันกับไฟล์บนเซิร์ฟเวอร์ แล้วขึ้นแถบให้กดอัปเดต
-    const APP_BUILD = '20260822-2015';
+    const APP_BUILD = '20260822-2140';
 
     let lastUpdateCheck = 0;
 
@@ -4807,6 +4812,7 @@ end $$;
       product_orders: { label: 'ออเดอร์สินค้า', view: 'products',  children: [] },
       receipts:       { label: 'ใบเสร็จ',      view: 'receipts',  children: [{ table: 'receipt_items', fk: 'receipt_id' }] },
       order_payments: { label: 'รายการรับเงิน', view: 'orders',    children: [] },
+      purchases:      { label: 'รายจ่ายซื้อของ', view: 'purchases', children: [] },
       fabric_waste:   { label: 'ผ้าเสีย',      view: 'fabric',    children: [] },
       debt_entries:   { label: 'รายการหนี้',   view: 'debts',     children: [] },
       debt_recurring: { label: 'หนี้รายเดือน', view: 'debts',     children: [] },
@@ -4951,6 +4957,196 @@ end $$;
         if (error) { alert('ล้างไม่สำเร็จ: ' + error.message); return; }
         await loadTrash();
       });
+    }
+
+    // ===== รายจ่ายซื้อของเข้าร้าน (#/purchases) =====
+    // ตาราง purchases = เงินที่จ่ายออกไปตอนซื้อของเข้าร้าน
+    // ถ้าติ๊ก "รับเข้าสต็อกให้เลย" -> RPC purchase_create ยิง stock_apply_move ให้ในคำสั่งเดียว ล้มก็ล้มทั้งคู่
+    // ลบ = ผ่านถังขยะเสมอ · จะถอนของออกจากสต็อกด้วยไหม ถามแยกอีกที (เหมือนหน้าผ้าเสีย)
+    let PURCHASES = [];
+    let purchaseMonth = '';          // '' = ทั้งหมด · 'YYYY-MM' = เฉพาะเดือนนั้น
+
+    async function loadPurchases() {
+      document.getElementById('statusMsg').textContent = 'กำลังโหลด...';
+      const [pRes] = await Promise.all([
+        sb.from('purchases').select('*')
+          .order('purchase_date', { ascending: false }).order('created_at', { ascending: false }),
+        fetchStock(),
+      ]);
+      if (pRes.error) throw pRes.error;
+      PURCHASES = pRes.data || [];
+      renderPurchases();
+      document.getElementById('statusMsg').textContent = 'อัปเดตล่าสุด: ' + new Date().toLocaleString('th-TH');
+    }
+
+    function purchaseMonthLabel(ym) {
+      const d = new Date(ym + '-01T00:00:00');
+      return d.toLocaleDateString('th-TH', { month: 'short', year: '2-digit' });
+    }
+
+    function renderPurchases() {
+      const app = document.getElementById('app');
+      app.innerHTML = '';
+      app.appendChild(buildPageHead('รายจ่ายซื้อของ', 'เงินที่จ่ายตอนซื้อวัตถุดิบเข้าร้าน · บันทึกครั้งเดียว รับเข้าสต็อกให้เลย'));
+
+      const now = new Date();
+      const thisMonth = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');
+      const thisYear = String(now.getFullYear());
+      const sum = (arr) => arr.reduce((a, p) => a + Number(p.total || 0), 0);
+      const ofMonth = PURCHASES.filter(p => String(p.purchase_date).startsWith(thisMonth));
+      const ofYear = PURCHASES.filter(p => String(p.purchase_date).startsWith(thisYear));
+
+      const stats = document.createElement('div');
+      stats.className = 'month-stats';
+      stats.style.marginBottom = 'var(--space-4)';
+      stats.innerHTML =
+        `<div class="stat"><div class="num">${fmtBaht(round2(sum(ofMonth)))}</div><div class="lbl">เดือนนี้ (บาท)</div></div>
+         <div class="stat"><div class="num">${fmtBaht(round2(sum(ofYear)))}</div><div class="lbl">ปีนี้ (บาท)</div></div>
+         <div class="stat"><div class="num">${ofMonth.length}</div><div class="lbl">ครั้งเดือนนี้</div></div>`;
+      app.appendChild(stats);
+
+      // ---- ฟอร์มบันทึก ----
+      const form = document.createElement('div');
+      form.className = 'panel no-print';
+      form.innerHTML = `
+        <h2>${icon('plus', 16)}บันทึกรายจ่ายใหม่</h2>
+        <div class="form-grid">
+          <div class="field"><label for="puDate">วันที่ซื้อ</label>
+            <input id="puDate" type="date" value="${dateKey()}"></div>
+          <div class="field"><label for="puItem">ซื้ออะไร</label>
+            <select id="puItem">
+              <option value="">— เลือกวัตถุดิบ —</option>
+              ${STOCK.map(s => `<option value="${s.id}">${esc(s.name)} (${esc(s.unit || '')})</option>`).join('')}
+            </select></div>
+          <div class="field"><label for="puQty">จำนวน <span class="hint" id="puUnit"></span></label>
+            <input id="puQty" type="number" min="0" step="any" inputmode="decimal" placeholder="เช่น 2"></div>
+          <div class="field"><label for="puPrice">ราคาต่อหน่วย (บาท)</label>
+            <input id="puPrice" type="number" min="0" step="any" inputmode="decimal" placeholder="เช่น 350"></div>
+          <div class="field"><label for="puTotal">ยอดที่จ่ายจริง (บาท)</label>
+            <input id="puTotal" type="number" min="0" step="any" inputmode="decimal" placeholder="คิดให้อัตโนมัติ · แก้ได้"></div>
+          <div class="field"><label for="puVendor">ซื้อจากร้าน</label>
+            <input id="puVendor" placeholder="เช่น ร้านเครื่องเขียนหน้าปากซอย"></div>
+          <div class="field" style="grid-column:1/-1"><label for="puNote">หมายเหตุ</label>
+            <input id="puNote" placeholder="เว้นว่างได้"></div>
+        </div>
+        <label class="field-row" style="gap:8px;align-items:center;margin:10px 0">
+          <input id="puAddStock" type="checkbox" checked style="width:auto;flex:none">
+          <span>รับเข้าสต็อกให้เลย (ไม่ต้องไปกดรับเข้าที่หน้าสต็อกอีกรอบ)</span>
+        </label>
+        <button class="btn" id="puSave">${icon('check', 15)}บันทึกรายจ่าย</button>
+        <div class="msg" id="puMsg"></div>`;
+      app.appendChild(form);
+
+      const $ = (id) => form.querySelector('#' + id);
+      let totalTouched = false;
+      const recalc = () => {
+        if (totalTouched) return;
+        const q = parseFloat($('puQty').value), pr = parseFloat($('puPrice').value);
+        $('puTotal').value = (q > 0 && pr >= 0) ? round2(q * pr) : '';
+      };
+      $('puQty').addEventListener('input', recalc);
+      $('puPrice').addEventListener('input', recalc);
+      $('puTotal').addEventListener('input', () => { totalTouched = $('puTotal').value !== ''; });
+      $('puItem').addEventListener('change', () => {
+        const it = STOCK.find(s => s.id === $('puItem').value);
+        $('puUnit').textContent = it && it.unit ? '(' + it.unit + ')' : '';
+      });
+
+      $('puSave').addEventListener('click', async () => {
+        const msg = $('puMsg');
+        msg.textContent = ''; msg.className = 'msg';
+        const itemId = $('puItem').value;
+        const qty = parseFloat($('puQty').value);
+        const price = parseFloat($('puPrice').value);
+        const total = parseFloat($('puTotal').value);
+        if (!itemId) { msg.textContent = 'เลือกวัตถุดิบก่อน'; msg.className = 'msg error'; return; }
+        if (!(qty > 0)) { msg.textContent = 'ใส่จำนวนก่อน'; msg.className = 'msg error'; return; }
+        if (!(total >= 0)) { msg.textContent = 'ใส่ยอดที่จ่ายจริงก่อน'; msg.className = 'msg error'; return; }
+
+        $('puSave').disabled = true;
+        const { error } = await sb.rpc('purchase_create', {
+          p_date: $('puDate').value || dateKey(),
+          p_item_id: itemId,
+          p_qty: qty,
+          p_unit_price: price >= 0 ? price : null,
+          p_total: total,
+          p_vendor: $('puVendor').value.trim() || null,
+          p_note: $('puNote').value.trim() || null,
+          p_add_stock: $('puAddStock').checked,
+          p_by: (ME && ME.email) ? prettyLogin(ME.email) : null,
+        });
+        $('puSave').disabled = false;
+        if (error) { msg.textContent = 'บันทึกไม่สำเร็จ: ' + error.message; msg.className = 'msg error'; return; }
+        await loadPurchases();
+      });
+
+      // ---- ตัวกรองเดือน ----
+      const months = [...new Set(PURCHASES.map(p => String(p.purchase_date).slice(0, 7)))].sort().reverse();
+      if (months.length) {
+        const tabs = document.createElement('div');
+        tabs.className = 'chips no-print';
+        tabs.innerHTML = `<button class="chip ${purchaseMonth === '' ? 'active' : ''}" data-m="">ทั้งหมด (${PURCHASES.length})</button>` +
+          months.map(m => {
+            const n = PURCHASES.filter(p => String(p.purchase_date).startsWith(m)).length;
+            return `<button class="chip ${purchaseMonth === m ? 'active' : ''}" data-m="${m}">${esc(purchaseMonthLabel(m))} (${n})</button>`;
+          }).join('');
+        app.appendChild(tabs);
+        tabs.querySelectorAll('.chip').forEach(b => b.addEventListener('click', () => {
+          purchaseMonth = b.dataset.m; renderPurchases();
+        }));
+      }
+
+      const list = purchaseMonth ? PURCHASES.filter(p => String(p.purchase_date).startsWith(purchaseMonth)) : PURCHASES;
+
+      const card = document.createElement('div');
+      card.className = 'lot-card';
+      card.innerHTML = !list.length
+        ? '<div class="empty-cell" style="padding:28px">ยังไม่มีรายจ่ายในช่วงนี้</div>'
+        : `<div class="table-wrap"><table>
+            <thead><tr><th>วันที่</th><th>รายการ</th><th class="num-col">จำนวน</th><th class="num-col">ยอด (บาท)</th><th>ซื้อจาก</th><th></th></tr></thead>
+            <tbody>${list.map(p => `<tr>
+              <td data-label="วันที่">${esc(thDate(p.purchase_date))}</td>
+              <td data-label="รายการ">${esc(p.item_name)}
+                ${p.note ? `<div class="hint">${esc(p.note)}</div>` : ''}
+                ${p.stock_move_id ? '<div class="hint">รับเข้าสต็อกแล้ว</div>' : '<div class="hint">ไม่ได้รับเข้าสต็อก</div>'}</td>
+              <td data-label="จำนวน" class="num-col">${Number(p.qty)} ${esc(p.unit || '')}</td>
+              <td data-label="ยอด (บาท)" class="num-col"><b>${fmtBaht(round2(p.total))}</b>
+                ${p.unit_price ? `<div class="hint">@ ${fmtBaht(round2(p.unit_price))}</div>` : ''}</td>
+              <td data-label="ซื้อจาก">${esc(p.vendor || '-')}</td>
+              <td data-label="" class="admin-only"><div class="field-row" style="justify-content:flex-end">
+                <button class="icon-btn icon-btn-delete pu-del" data-id="${p.id}" aria-label="ลบรายจ่าย" title="ลบรายจ่าย">${icon('trash', 18)}</button>
+              </div></td>
+            </tr>`).join('')}
+            <tr><td colspan="3"><b>รวมที่แสดง</b></td>
+              <td class="num-col"><b>${fmtBaht(round2(sum(list)))}</b></td><td colspan="2"></td></tr>
+            </tbody></table></div>`;
+      app.appendChild(card);
+
+      card.querySelectorAll('.pu-del').forEach(b => b.addEventListener('click', async () => {
+        const p = PURCHASES.find(x => x.id === b.dataset.id);
+        if (!p) return;
+        if (!confirm('ลบรายจ่าย "' + p.item_name + ' · ' + fmtBaht(round2(p.total)) + ' บาท" ?')) return;
+
+        // ถอนของออกจากสต็อกด้วยไหม — ถามแยก เพราะบางทีของเข้าร้านจริง แค่บันทึกเงินผิด
+        let pull = false;
+        if (p.stock_move_id) {
+          pull = confirm('เอาของ ' + Number(p.qty) + ' ' + (p.unit || '') + ' ออกจากสต็อกด้วยไหม?\n\n' +
+            'ตกลง = บันทึกผิด ถอนของออก\nยกเลิก = ของเข้าร้านจริง เก็บยอดสต็อกไว้เหมือนเดิม');
+        }
+        b.disabled = true;
+        try {
+          if (pull) {
+            const { error } = await sb.rpc('stock_undo_in', { p_move_id: p.stock_move_id });
+            if (error) throw new Error(error.message);
+          }
+          await trashDelete('purchases', p.id, {
+            label: p.item_name + ' · ' + fmtBaht(round2(p.total)) + ' บาท',
+            detail: thDate(p.purchase_date) + (p.vendor ? ' · ' + p.vendor : '') +
+              (pull ? ' · ถอนของออกจากสต็อกแล้ว' : '') + ' · กู้คืนแล้วไม่รับเข้าสต็อกซ้ำให้',
+          });
+          await loadPurchases();
+        } catch (e) { alert('ลบไม่สำเร็จ: ' + e.message); b.disabled = false; }
+      }));
     }
 
     // ===== สต็อกวัตถุดิบ =====
