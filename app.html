@@ -47,7 +47,7 @@
     --accent: #3454d1; --accent-soft: #eef1fd; --border: #e6e3dd;
     --warn-bg: #fff6ed; --warn-border: #f5b77e; --warn-text: #92400e;
     --ok-bg: #eefbf3; --ok-text: #067647;
-    --err-text: #b42318;
+    --err-bg: #fdecea; --err-text: #b42318;
     --radius: 14px;
     --space-1: 4px; --space-2: 8px; --space-3: 12px; --space-4: 16px;
     --space-5: 20px; --space-6: 24px; --space-8: 32px;
@@ -57,7 +57,7 @@
     --accent: #6b87ff; --accent-soft: #232a3d; --border: #2a303c;
     --warn-bg: #3a2a17; --warn-border: #7a5320; --warn-text: #f0b866;
     --ok-bg: #16301f; --ok-text: #5fd497;
-    --err-text: #ff8b7d;
+    --err-bg: #3a1a16; --err-text: #ff8b7d;
   }
   html[data-theme="dark"] .switch-knob { background: #e8eaf0; }
   html[data-theme="dark"] .lot-actions { background: var(--accent-soft); }
@@ -585,8 +585,8 @@
   .att-plan { font-size: 13px; margin-top: 10px; color: var(--text); }
   .att-geo { margin: 14px auto 0; display: inline-flex; align-items: center; gap: 6px; padding: 7px 14px;
              border-radius: 999px; background: var(--soft); color: var(--sub); font-size: 12.5px; }
-  .att-geo.in-range { background: #e7f6ec; color: #067647; }
-  .att-geo.out-range { background: #fdecea; color: #b42318; }
+  .att-geo.in-range { background: var(--ok-bg); color: var(--ok-text); }
+  .att-geo.out-range { background: var(--err-bg); color: var(--err-text); }
   html[data-theme="dark"] .att-geo.in-range { background: #123324; color: #6ee7a8; }
   html[data-theme="dark"] .att-geo.out-range { background: #3a1d1b; color: #f4a49b; }
   .att-actions { display: flex; gap: var(--space-4); justify-content: center; flex-wrap: wrap; margin: 20px 0 6px; }
@@ -604,17 +604,32 @@
                  border-top: 1px solid var(--border); padding-top: 16px; }
   .att-summary .lbl { display: block; font-size: 11.5px; color: var(--sub); }
   .att-summary .val { display: block; font-size: 17px; font-weight: 700; font-variant-numeric: tabular-nums; }
-  .att-summary .val.ok { color: #067647; }
-  .att-summary .val.danger { color: #b42318; }
+  .att-summary .val.ok { color: var(--ok-text); }
+  .att-summary .val.danger { color: var(--err-text); }
   @media (max-width: 560px) {
     .att-time { font-size: 34px; }
     .att-btn { width: 200px; height: 200px; font-size: 20px; }
     .att-summary { grid-template-columns: repeat(2, 1fr); }
+    /* บนมือถือปุ่มลงเวลาต้องอยู่บนสุด ไม่ต้องเลื่อนผ่านแผนที่ก่อน
+       ใช้ order สลับที่ ไม่ต้องแตะลำดับใน HTML (จอคอมยังเรียงเหมือนเดิม) */
+    .att-clock { display: flex; flex-direction: column; }
+    .att-now     { order: 1; }
+    .att-actions { order: 2; margin-top: 14px; }
+    .att-clock > .msg  { order: 3; }
+    .att-clock > .hint { order: 3; }
+    .att-geo-row { order: 4; }
+    .att-summary { order: 5; }
+    .att-map-box { order: 6; }
   }
 
   .att-geo-row { display: flex; align-items: center; justify-content: center; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
   .att-geo-row .att-geo { margin: 0; }
-  .att-map { height: 210px; margin: 12px 0 4px; border-radius: var(--radius); overflow: hidden;
+  .att-map-box { margin-top: 12px; }
+  .att-map-box > summary { cursor: pointer; font-size: 13px; color: var(--accent); font-weight: 600;
+                           list-style: none; padding: 10px; min-height: 44px; display: flex;
+                           align-items: center; justify-content: center; gap: 6px; }
+  .att-map-box > summary::-webkit-details-marker { display: none; }
+  .att-map { height: 210px; margin: 4px 0; border-radius: var(--radius); overflow: hidden;
              border: 1px solid var(--border); background: var(--soft); }
   .att-map-hint { font-size: 12px; color: var(--sub); display: flex; align-items: center; justify-content: center;
                   gap: 10px; flex-wrap: wrap; margin-bottom: 6px; }
@@ -3098,7 +3113,7 @@ end $$;
     // ===== เช็กว่ามีเวอร์ชันใหม่ไหม =====
     // เบราว์เซอร์ชอบจำไฟล์เก่าไว้ (cache) ทำให้ไม่เห็นของที่เพิ่งอัปเดต
     // ตัวนี้จะแอบเทียบเวอร์ชันกับไฟล์บนเซิร์ฟเวอร์ แล้วขึ้นแถบให้กดอัปเดต
-    const APP_BUILD = '20260823-2135';
+    const APP_BUILD = '20260823-2245';
 
     let lastUpdateCheck = 0;
 
@@ -4447,9 +4462,12 @@ end $$;
           <div class="att-geo" id="attGeo">${icon('pin', 15)}<span id="attGeoTxt">${shopSet ? 'กด "Sync GPS" เพื่อเช็กตำแหน่ง' : 'ยังไม่ได้ตั้งพิกัดร้าน'}</span></div>
           <button class="btn secondary btn-sm" id="attSync">${icon('refresh', 15)}Sync GPS</button>
         </div>
-        <div class="att-map" id="attMap"></div>
-        ${isAdmin() ? `<div class="att-map-hint">${shopSet ? 'แตะบนแผนที่เพื่อย้ายจุดร้าน' : 'ยังไม่ได้ตั้งจุดร้าน — แตะบนแผนที่ตรงที่ตั้งร้าน หรือกดปุ่มด้านล่าง'}
-          <button class="btn secondary btn-sm" id="attSetHere">${icon('pin', 15)}ใช้ตำแหน่งปัจจุบันเป็นที่ตั้งร้าน</button></div>` : ''}
+        <details class="att-map-box" id="attMapBox">
+          <summary>${icon('pin', 15)}แผนที่ · ตำแหน่งของฉัน</summary>
+          <div class="att-map" id="attMap"></div>
+          ${isAdmin() ? `<div class="att-map-hint">${shopSet ? 'แตะบนแผนที่เพื่อย้ายจุดร้าน' : 'ยังไม่ได้ตั้งจุดร้าน — แตะบนแผนที่ตรงที่ตั้งร้าน หรือกดปุ่มด้านล่าง'}
+            <button class="btn secondary btn-sm" id="attSetHere">${icon('pin', 15)}ใช้ตำแหน่งปัจจุบันเป็นที่ตั้งร้าน</button></div>` : ''}
+        </details>
         ${!shopSet && !isAdmin() ? '<div class="hint" style="margin-top:8px">แจ้งผู้ดูแลให้ตั้งพิกัดร้านก่อน ถึงจะกดลงเวลาได้</div>' : ''}
         <div class="att-actions">
           <button class="att-btn ${phase}" id="attPunch" ${phase === 'finished' ? 'disabled' : ''}>
@@ -4502,6 +4520,10 @@ end $$;
         }).addTo(map).bindTooltip('คุณอยู่ตรงนี้');
       };
 
+      // จอคอมกางแผนที่ไว้เลย · มือถือยุบไว้ก่อน จะได้เห็นปุ่มลงเวลาทันทีที่เปิดหน้า
+      const mapBox = card.querySelector('#attMapBox');
+      mapBox.open = window.matchMedia('(min-width: 561px)').matches;
+
       loadLeaflet().then(L => {
         const el = card.querySelector('#attMap');
         if (!el) return;
@@ -4509,6 +4531,8 @@ end $$;
         L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(map);
         if (shopSet) drawShop(L, ...shopLL());
         setTimeout(() => map.invalidateSize(), 200);
+        // แผนที่ที่ถูกยุบไว้จะมีขนาด 0 ต้องสั่งวัดใหม่ทุกครั้งที่กางออก ไม่งั้นขึ้นเป็นแผ่นเทา
+        mapBox.addEventListener('toggle', () => { if (mapBox.open) setTimeout(() => map.invalidateSize(), 60); });
 
         // ผู้ดูแลแตะบนแผนที่เพื่อย้ายจุดร้าน
         if (isAdmin()) map.on('click', async (e) => {
@@ -4548,6 +4572,11 @@ end $$;
         }
         return { c, dist, inRange };
       };
+
+      // เช็กตำแหน่งให้เองตอนเปิดหน้า จะได้รู้ล่วงหน้าว่ากดลงเวลาผ่านไหม ไม่ต้องกด Sync ก่อน
+      if (shopSet && phase !== 'finished') {
+        syncGps().catch(e => { geoTxt.textContent = e.message || 'เช็กตำแหน่งไม่ได้ — กด "Sync GPS" ลองใหม่'; });
+      }
 
       card.querySelector('#attSync').addEventListener('click', async () => {
         const b = card.querySelector('#attSync');
