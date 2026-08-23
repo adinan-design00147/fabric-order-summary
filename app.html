@@ -1551,7 +1551,7 @@
       { sep: true },
       { key: 'fabric',    label: 'งานผลิต',     icon: 'factory' },
       { key: 'stock',     label: 'สต็อกของ',   icon: 'box' },
-      { key: 'purchases', label: 'รายจ่ายซื้อของ', icon: 'cash', adminOnly: true },
+      { key: 'purchases', label: 'รายจ่าย', icon: 'cash', adminOnly: true },
       { sep: true },
       { key: 'customers', label: 'ลูกค้า',     icon: 'user' },
       { key: 'receipts',  label: 'ใบเสร็จ',    icon: 'receipt' },
@@ -1602,7 +1602,7 @@
       if (key === 'fabric') return { label: 'งานผลิต', icon: 'factory' };
       if (key === 'stock') return { label: 'สต็อกของ', icon: 'box' };
       if (key === 'stockreport') return { label: 'ตารางวัตถุดิบคงเหลือ', icon: 'box' };
-      if (key === 'purchases') return { label: 'รายจ่ายซื้อของ', icon: 'cash' };
+      if (key === 'purchases') return { label: 'รายจ่าย', icon: 'cash' };
       if (key === 'attendance') return { label: 'ลงเวลา', icon: 'clock' };
       if (key === 'schedule') return { label: 'ตารางงาน', icon: 'calendar' };
       if (key === 'timesheet') return { label: 'ประวัติลงเวลา', icon: 'chart' };
@@ -3077,7 +3077,7 @@ end $$;
     // ===== เช็กว่ามีเวอร์ชันใหม่ไหม =====
     // เบราว์เซอร์ชอบจำไฟล์เก่าไว้ (cache) ทำให้ไม่เห็นของที่เพิ่งอัปเดต
     // ตัวนี้จะแอบเทียบเวอร์ชันกับไฟล์บนเซิร์ฟเวอร์ แล้วขึ้นแถบให้กดอัปเดต
-    const APP_BUILD = '20260823-1520';
+    const APP_BUILD = '20260823-1650';
 
     let lastUpdateCheck = 0;
 
@@ -4837,7 +4837,7 @@ end $$;
       product_orders: { label: 'ออเดอร์สินค้า', view: 'products',  children: [] },
       receipts:       { label: 'ใบเสร็จ',      view: 'receipts',  children: [{ table: 'receipt_items', fk: 'receipt_id' }] },
       order_payments: { label: 'รายการรับเงิน', view: 'orders',    children: [] },
-      purchases:      { label: 'รายจ่ายซื้อของ', view: 'purchases', children: [] },
+      purchases:      { label: 'รายจ่าย',      view: 'purchases', children: [] },
       fabric_waste:   { label: 'ผ้าเสีย',      view: 'fabric',    children: [] },
       debt_entries:   { label: 'รายการหนี้',   view: 'debts',     children: [] },
       debt_recurring: { label: 'หนี้รายเดือน', view: 'debts',     children: [] },
@@ -4984,26 +4984,42 @@ end $$;
       });
     }
 
-    /** กล่องแก้ไขรายจ่าย — เปลี่ยน "ซื้ออะไร" ไม่ได้ ชื่อของเป็น snapshot ถ้าจะเปลี่ยนของให้ลบแล้วบันทึกใหม่ */
+    /** กล่องแก้ไขรายจ่าย
+     *  ของเข้าสต็อก — แก้จำนวน/ราคา/ยอด · เปลี่ยน "ซื้ออะไร" ไม่ได้ (item_name เป็น snapshot)
+     *  รายจ่ายอื่น   — แก้หมวด/ยอด/ออเดอร์ที่ผูก · ไม่แตะสต็อก
+     */
     function editPurchase(p) {
+      const isStock = p.kind !== 'expense';
       return new Promise(resolve => {
         const back = document.createElement('div');
         back.className = 'modal-back no-print';
         back.innerHTML = `
           <div class="modal-card" role="dialog" aria-modal="true">
             <h3>แก้ไขรายจ่าย</h3>
-            <div class="modal-sub">${esc(p.item_name)}${p.stock_move_id
-              ? ' · แก้จำนวนแล้วยอดในสต็อกจะขยับตามให้เอง'
-              : ' · รายการนี้ไม่ได้รับเข้าสต็อก แก้แล้วไม่กระทบสต็อก'}</div>
-            <div class="field"><label for="epQty">จำนวน (${esc(p.unit || '')})</label>
-              <input id="epQty" type="number" min="0" step="any" inputmode="decimal" value="${p.qty}"></div>
-            <div class="field"><label for="epPrice">ราคาต่อหน่วย (บาท)</label>
-              <input id="epPrice" type="number" min="0" step="any" inputmode="decimal" value="${p.unit_price != null ? p.unit_price : ''}"></div>
+            <div class="modal-sub">${isStock
+              ? esc(p.item_name || '') + (p.stock_move_id
+                  ? ' · แก้จำนวนแล้วยอดในสต็อกจะขยับตามให้เอง'
+                  : ' · รายการนี้ไม่ได้รับเข้าสต็อก แก้แล้วไม่กระทบสต็อก')
+              : 'รายจ่ายอื่น · ไม่เกี่ยวกับสต็อก'}</div>
+            ${isStock ? `
+              <div class="field"><label for="epQty">จำนวน (${esc(p.unit || '')})</label>
+                <input id="epQty" type="number" min="0" step="any" inputmode="decimal" value="${p.qty}"></div>
+              <div class="field"><label for="epPrice">ราคาต่อหน่วย (บาท)</label>
+                <input id="epPrice" type="number" min="0" step="any" inputmode="decimal" value="${p.unit_price != null ? p.unit_price : ''}"></div>
+            ` : `
+              <div class="field"><label for="epCat">หมวดรายจ่าย</label>
+                <input id="epCat" list="epCatList" value="${esc(p.category || '')}" autocomplete="off">
+                <datalist id="epCatList">${expenseCats().map(c => `<option value="${esc(c)}"></option>`).join('')}</datalist></div>
+              <div class="field"><label for="epOrder">ผูกกับออเดอร์ (เว้นว่างได้)</label>
+                <select id="epOrder"><option value="">— ไม่ผูกออเดอร์ —</option>
+                  ${PURCH_ORDERS.map(o => `<option value="${o.id}" ${o.id === p.order_id ? 'selected' : ''}>${esc(o.order_no)} · ${esc(o.customer || '')}</option>`).join('')}
+                </select></div>
+            `}
             <div class="field"><label for="epTotal">ยอดที่จ่ายจริง (บาท)</label>
               <input id="epTotal" type="number" min="0" step="any" inputmode="decimal" value="${p.total}"></div>
-            <div class="field"><label for="epDate">วันที่ซื้อ</label>
+            <div class="field"><label for="epDate">วันที่</label>
               <input id="epDate" type="date" value="${esc(p.purchase_date)}"></div>
-            <div class="field"><label for="epVendor">ซื้อจากร้าน</label>
+            <div class="field"><label for="epVendor">${isStock ? 'ซื้อจากร้าน' : 'จ่ายให้ใคร'}</label>
               <input id="epVendor" value="${esc(p.vendor || '')}" placeholder="เว้นว่างได้"></div>
             <div class="field"><label for="epNote">หมายเหตุ</label>
               <input id="epNote" value="${esc(p.note || '')}" placeholder="เว้นว่างได้"></div>
@@ -5017,74 +5033,95 @@ end $$;
         const close = (v) => { back.remove(); resolve(v); };
         const q = (id) => back.querySelector('#' + id);
 
-        // แก้จำนวนหรือราคา -> คิดยอดรวมให้ใหม่ เว้นแต่ผู้ใช้พิมพ์ยอดเองแล้ว
-        let totalTouched = false;
-        const recalc = () => {
-          if (totalTouched) return;
-          const a = parseFloat(q('epQty').value), b = parseFloat(q('epPrice').value);
-          if (a > 0 && b >= 0) q('epTotal').value = round2(a * b);
-        };
-        q('epQty').addEventListener('input', recalc);
-        q('epPrice').addEventListener('input', recalc);
-        q('epTotal').addEventListener('input', () => { totalTouched = true; });
+        if (isStock) {
+          let totalTouched = false;
+          const recalc = () => {
+            if (totalTouched) return;
+            const a = parseFloat(q('epQty').value), b = parseFloat(q('epPrice').value);
+            if (a > 0 && b >= 0) q('epTotal').value = round2(a * b);
+          };
+          q('epQty').addEventListener('input', recalc);
+          q('epPrice').addEventListener('input', recalc);
+          q('epTotal').addEventListener('input', () => { totalTouched = true; });
+        }
 
         q('epCancel').addEventListener('click', () => close(null));
         back.addEventListener('click', (ev) => { if (ev.target === back) close(null); });
         q('epOk').addEventListener('click', () => {
           const msg = q('epMsg');
-          const qty = parseFloat(q('epQty').value);
           const total = parseFloat(q('epTotal').value);
-          const price = parseFloat(q('epPrice').value);
-          if (!(qty > 0)) { msg.textContent = 'ใส่จำนวนก่อน'; msg.className = 'msg error'; return; }
           if (!(total >= 0)) { msg.textContent = 'ใส่ยอดที่จ่ายจริงก่อน'; msg.className = 'msg error'; return; }
-          close({
+          const patch = {
             p_id: p.id,
             p_date: q('epDate').value || p.purchase_date,
-            p_qty: qty,
-            p_unit_price: price >= 0 ? price : null,
             p_total: total,
             p_vendor: q('epVendor').value.trim() || null,
             p_note: q('epNote').value.trim() || null,
-          });
+            p_qty: null, p_unit_price: null, p_category: null, p_order_id: null,
+          };
+          if (isStock) {
+            const qty = parseFloat(q('epQty').value);
+            const price = parseFloat(q('epPrice').value);
+            if (!(qty > 0)) { msg.textContent = 'ใส่จำนวนก่อน'; msg.className = 'msg error'; return; }
+            patch.p_qty = qty;
+            patch.p_unit_price = price >= 0 ? price : null;
+          } else {
+            const cat = q('epCat').value.trim();
+            if (!cat) { msg.textContent = 'ใส่หมวดรายจ่ายก่อน'; msg.className = 'msg error'; return; }
+            patch.p_category = cat;
+            patch.p_order_id = q('epOrder').value || null;
+          }
+          close(patch);
         });
-        setTimeout(() => q('epQty').focus(), 50);
+        setTimeout(() => q(isStock ? 'epQty' : 'epCat').focus(), 50);
       });
     }
 
     // ===== รายจ่ายซื้อของเข้าร้าน (#/purchases) =====
-    // ตาราง purchases = เงินที่จ่ายออกไปตอนซื้อของเข้าร้าน
-    // ถ้าติ๊ก "รับเข้าสต็อกให้เลย" -> RPC purchase_create ยิง stock_apply_move ให้ในคำสั่งเดียว ล้มก็ล้มทั้งคู่
-    // ลบ = ผ่านถังขยะเสมอ · จะถอนของออกจากสต็อกด้วยไหม ถามแยกอีกที (เหมือนหน้าผ้าเสีย)
+    // ตาราง purchases เก็บเงินที่จ่ายออก 2 ชนิด (คอลัมน์ kind)
+    //   'stock'   = ซื้อของเข้าสต็อก · ติ๊กแล้ว RPC purchase_create ยิง stock_apply_move ให้ในคำสั่งเดียว
+    //   'expense' = รายจ่ายอื่น (ค่าส่ง ค่าน้ำมัน ฯลฯ) · ไม่แตะสต็อกเลย · ผูกกับออเดอร์ได้
+    // ลบ = ผ่านถังขยะเสมอ · ของเข้าสต็อกจะถามแยกอีกทีว่าถอนของออกด้วยไหม
     let PURCHASES = [];
-    let purchaseMonth = '';          // '' = ทั้งหมด · 'YYYY-MM' = เฉพาะเดือนนั้น
+    let PURCH_ORDERS = [];
+    let purchaseMonth = '';            // '' = ทั้งหมด · 'YYYY-MM' = เฉพาะเดือนนั้น
+    let purchaseTab = 'stock';         // stock | expense | summary
+
+    const EXPENSE_CATS = ['ค่าน้ำมัน', 'ค่าส่งพัสดุ', 'ค่ารถ/ทางด่วน', 'ค่าไฟ-น้ำ', 'ค่าจ้างผลิต', 'อื่นๆ'];
+    // หมวดที่เคยพิมพ์เองไว้ ให้เด้งขึ้นมาให้เลือกครั้งต่อไปด้วย
+    function expenseCats() {
+      const used = PURCHASES.filter(p => p.kind === 'expense' && p.category).map(p => p.category);
+      return [...new Set([...EXPENSE_CATS, ...used])];
+    }
 
     async function loadPurchases() {
       document.getElementById('statusMsg').textContent = 'กำลังโหลด...';
-      const [pRes] = await Promise.all([
+      const [pRes, oRes] = await Promise.all([
         sb.from('purchases').select('*')
           .order('purchase_date', { ascending: false }).order('created_at', { ascending: false }),
+        sb.from('orders').select('id,order_no,customer').order('created_at', { ascending: false }).limit(200),
         fetchStock(),
       ]);
       if (pRes.error) throw pRes.error;
       PURCHASES = pRes.data || [];
+      PURCH_ORDERS = oRes.data || [];
       renderPurchases();
       document.getElementById('statusMsg').textContent = 'อัปเดตล่าสุด: ' + new Date().toLocaleString('th-TH');
     }
 
     function purchaseMonthLabel(ym) {
-      const d = new Date(ym + '-01T00:00:00');
-      return d.toLocaleDateString('th-TH', { month: 'short', year: '2-digit' });
+      return new Date(ym + '-01T00:00:00').toLocaleDateString('th-TH', { month: 'short', year: '2-digit' });
     }
+    const purchSum = (arr) => arr.reduce((a, p) => a + Number(p.total || 0), 0);
 
     function renderPurchases() {
       const app = document.getElementById('app');
       app.innerHTML = '';
-      app.appendChild(buildPageHead('รายจ่ายซื้อของ', 'เงินที่จ่ายตอนซื้อวัตถุดิบเข้าร้าน · บันทึกครั้งเดียว รับเข้าสต็อกให้เลย'));
+      app.appendChild(buildPageHead('รายจ่าย', 'เงินที่จ่ายออกทั้งหมด — ซื้อของเข้าสต็อก และรายจ่ายอื่นเช่นค่าส่ง ค่าน้ำมัน'));
 
       const now = new Date();
       const thisMonth = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');
       const thisYear = String(now.getFullYear());
-      const sum = (arr) => arr.reduce((a, p) => a + Number(p.total || 0), 0);
       const ofMonth = PURCHASES.filter(p => String(p.purchase_date).startsWith(thisMonth));
       const ofYear = PURCHASES.filter(p => String(p.purchase_date).startsWith(thisYear));
 
@@ -5092,16 +5129,54 @@ end $$;
       stats.className = 'month-stats';
       stats.style.marginBottom = 'var(--space-4)';
       stats.innerHTML =
-        `<div class="stat"><div class="num">${fmtBaht(round2(sum(ofMonth)))}</div><div class="lbl">เดือนนี้ (บาท)</div></div>
-         <div class="stat"><div class="num">${fmtBaht(round2(sum(ofYear)))}</div><div class="lbl">ปีนี้ (บาท)</div></div>
+        `<div class="stat"><div class="num">${fmtBaht(round2(purchSum(ofMonth)))}</div><div class="lbl">เดือนนี้ (บาท)</div></div>
+         <div class="stat"><div class="num">${fmtBaht(round2(purchSum(ofYear)))}</div><div class="lbl">ปีนี้ (บาท)</div></div>
          <div class="stat"><div class="num">${ofMonth.length}</div><div class="lbl">ครั้งเดือนนี้</div></div>`;
       app.appendChild(stats);
 
-      // ---- ฟอร์มบันทึก ----
+      const tabs = document.createElement('div');
+      tabs.className = 'tabs no-print';
+      tabs.innerHTML = [
+        ['stock', 'ซื้อของเข้าสต็อก'],
+        ['expense', 'รายจ่ายอื่น'],
+        ['summary', 'สรุปรายเดือน'],
+      ].map(([k, l]) => `<button class="tab-btn ${purchaseTab === k ? 'active' : ''}" data-t="${k}">${esc(l)}</button>`).join('');
+      app.appendChild(tabs);
+      tabs.querySelectorAll('.tab-btn').forEach(b => b.addEventListener('click', () => {
+        purchaseTab = b.dataset.t; renderPurchases();
+      }));
+
+      if (purchaseTab === 'summary') { renderPurchaseSummary(app); return; }
+      if (purchaseTab === 'stock') renderStockPurchaseForm(app);
+      else renderExpenseForm(app);
+
+      // ---- ตัวกรองเดือน (เฉพาะชนิดที่เปิดอยู่) ----
+      const kindRows = PURCHASES.filter(p => (p.kind === 'expense') === (purchaseTab === 'expense'));
+      const months = [...new Set(kindRows.map(p => String(p.purchase_date).slice(0, 7)))].sort().reverse();
+      if (months.length) {
+        const chips = document.createElement('div');
+        chips.className = 'chips no-print';
+        chips.innerHTML = `<button class="chip ${purchaseMonth === '' ? 'active' : ''}" data-m="">ทั้งหมด (${kindRows.length})</button>` +
+          months.map(m => {
+            const n = kindRows.filter(p => String(p.purchase_date).startsWith(m)).length;
+            return `<button class="chip ${purchaseMonth === m ? 'active' : ''}" data-m="${m}">${esc(purchaseMonthLabel(m))} (${n})</button>`;
+          }).join('');
+        app.appendChild(chips);
+        chips.querySelectorAll('.chip').forEach(b => b.addEventListener('click', () => {
+          purchaseMonth = b.dataset.m; renderPurchases();
+        }));
+      }
+
+      const list = purchaseMonth ? kindRows.filter(p => String(p.purchase_date).startsWith(purchaseMonth)) : kindRows;
+      renderPurchaseTable(app, list);
+    }
+
+    // ---- ฟอร์มซื้อของเข้าสต็อก ----
+    function renderStockPurchaseForm(app) {
       const form = document.createElement('div');
       form.className = 'panel no-print';
       form.innerHTML = `
-        <h2>${icon('plus', 16)}บันทึกรายจ่ายใหม่</h2>
+        <h2>${icon('plus', 16)}บันทึกซื้อของเข้าสต็อก</h2>
         <div class="pu-form">
           <div class="field pu-wide"><label for="puItem">ซื้ออะไร</label>
             <input id="puItem" list="puItemList" placeholder="พิมพ์ชื่อของ" autocomplete="off">
@@ -5145,7 +5220,8 @@ end $$;
       $('puQty').addEventListener('input', recalc);
       $('puPrice').addEventListener('input', recalc);
       $('puTotal').addEventListener('input', () => { totalTouched = $('puTotal').value !== ''; });
-      // ชื่อที่พิมพ์ตรงกับของเดิมไหม (ไม่สนตัวพิมพ์ใหญ่เล็ก/ช่องว่างหัวท้าย — กติกาเดียวกับหน้าสต็อก)
+
+      // ชื่อที่พิมพ์ตรงกับของเดิมไหม (ไม่สนตัวพิมพ์ใหญ่เล็ก/ช่องว่างหัวท้าย — กติกาเดียวกับหน้าสต็อกและฝั่ง SQL)
       const findItem = (name) => {
         const key = String(name || '').trim().toLowerCase();
         return key ? STOCK.find(s => String(s.name).trim().toLowerCase() === key) : null;
@@ -5154,7 +5230,6 @@ end $$;
         const it = findItem($('puItem').value);
         const typed = $('puItem').value.trim();
         $('puUnit').textContent = it && it.unit ? '(' + it.unit + ')' : '';
-        // พิมพ์ชื่อที่ยังไม่มีในสต็อก -> ขอหน่วยกับหมวด แล้วจะสร้างให้ตอนบันทึก
         const isNew = !it && typed !== '';
         $('puNewBox').hidden = !isNew;
         if (isNew) $('puNewHint').textContent = '"' + typed + '" ยังไม่มีในสต็อก — บันทึกแล้วจะสร้างให้อัตโนมัติ เลือกหน่วยกับหมวดด้วย';
@@ -5162,10 +5237,7 @@ end $$;
       $('puItem').addEventListener('input', syncItem);
       $('puItem').addEventListener('change', syncItem);
 
-      const syncDate = () => {
-        const v = $('puDate').value;
-        $('puDateTh').textContent = v ? thDate(v) : '';
-      };
+      const syncDate = () => { $('puDateTh').textContent = $('puDate').value ? thDate($('puDate').value) : ''; };
       $('puDate').addEventListener('change', syncDate);
       syncDate();
 
@@ -5200,47 +5272,94 @@ end $$;
         if (error) { msg.textContent = 'บันทึกไม่สำเร็จ: ' + error.message; msg.className = 'msg error'; return; }
         await loadPurchases();
       });
+    }
 
-      // ---- ตัวกรองเดือน ----
-      const months = [...new Set(PURCHASES.map(p => String(p.purchase_date).slice(0, 7)))].sort().reverse();
-      if (months.length) {
-        const tabs = document.createElement('div');
-        tabs.className = 'chips no-print';
-        tabs.innerHTML = `<button class="chip ${purchaseMonth === '' ? 'active' : ''}" data-m="">ทั้งหมด (${PURCHASES.length})</button>` +
-          months.map(m => {
-            const n = PURCHASES.filter(p => String(p.purchase_date).startsWith(m)).length;
-            return `<button class="chip ${purchaseMonth === m ? 'active' : ''}" data-m="${m}">${esc(purchaseMonthLabel(m))} (${n})</button>`;
-          }).join('');
-        app.appendChild(tabs);
-        tabs.querySelectorAll('.chip').forEach(b => b.addEventListener('click', () => {
-          purchaseMonth = b.dataset.m; renderPurchases();
-        }));
-      }
+    // ---- ฟอร์มรายจ่ายอื่น (ค่าส่ง ค่าน้ำมัน ฯลฯ) ----
+    function renderExpenseForm(app) {
+      const form = document.createElement('div');
+      form.className = 'panel no-print';
+      form.innerHTML = `
+        <h2>${icon('plus', 16)}บันทึกรายจ่ายอื่น</h2>
+        <div class="pu-form">
+          <div class="field pu-wide"><label for="exCat">หมวดรายจ่าย</label>
+            <input id="exCat" list="exCatList" placeholder="เช่น ค่าน้ำมัน · พิมพ์หมวดใหม่เองได้" autocomplete="off">
+            <datalist id="exCatList">${expenseCats().map(c => `<option value="${esc(c)}"></option>`).join('')}</datalist></div>
+          <div class="field"><label for="exTotal">จ่ายไปเท่าไหร่ (บาท)</label>
+            <input id="exTotal" type="number" min="0" step="any" inputmode="decimal" placeholder="เช่น 120"></div>
+          <div class="field"><label for="exDate">วันที่</label>
+            <input id="exDate" type="date" value="${dateKey()}">
+            <div class="hint" id="exDateTh"></div></div>
+          <div class="field"><label for="exVendor">จ่ายให้ใคร</label>
+            <input id="exVendor" placeholder="เช่น ปั๊ม ปตท. · Flash"></div>
+          <div class="field"><label for="exOrder">ผูกกับออเดอร์</label>
+            <select id="exOrder"><option value="">— ไม่ผูกออเดอร์ —</option>
+              ${PURCH_ORDERS.map(o => `<option value="${o.id}">${esc(o.order_no)} · ${esc(o.customer || '')}</option>`).join('')}
+            </select></div>
+          <div class="field pu-wide"><label for="exNote">หมายเหตุ</label>
+            <input id="exNote" placeholder="เช่น ไปส่งของที่ยะลา"></div>
+        </div>
+        <button class="btn" id="exSave">${icon('check', 15)}บันทึกรายจ่าย</button>
+        <div class="msg" id="exMsg"></div>`;
+      app.appendChild(form);
 
-      const list = purchaseMonth ? PURCHASES.filter(p => String(p.purchase_date).startsWith(purchaseMonth)) : PURCHASES;
+      const $ = (id) => form.querySelector('#' + id);
+      const syncDate = () => { $('exDateTh').textContent = $('exDate').value ? thDate($('exDate').value) : ''; };
+      $('exDate').addEventListener('change', syncDate);
+      syncDate();
 
+      $('exSave').addEventListener('click', async () => {
+        const msg = $('exMsg');
+        msg.textContent = ''; msg.className = 'msg';
+        const cat = $('exCat').value.trim();
+        const total = parseFloat($('exTotal').value);
+        if (!cat) { msg.textContent = 'ใส่หมวดรายจ่ายก่อน'; msg.className = 'msg error'; return; }
+        if (!(total >= 0)) { msg.textContent = 'ใส่ยอดที่จ่ายก่อน'; msg.className = 'msg error'; return; }
+
+        $('exSave').disabled = true;
+        const { error } = await sb.rpc('expense_create', {
+          p_date: $('exDate').value || dateKey(),
+          p_category: cat,
+          p_total: total,
+          p_vendor: $('exVendor').value.trim() || null,
+          p_note: $('exNote').value.trim() || null,
+          p_order_id: $('exOrder').value || null,
+          p_by: (ME && ME.email) ? prettyLogin(ME.email) : null,
+        });
+        $('exSave').disabled = false;
+        if (error) { msg.textContent = 'บันทึกไม่สำเร็จ: ' + error.message; msg.className = 'msg error'; return; }
+        await loadPurchases();
+      });
+    }
+
+    // ---- ตารางรายการ ----
+    function renderPurchaseTable(app, list) {
+      const isExp = purchaseTab === 'expense';
       const card = document.createElement('div');
       card.className = 'lot-card';
       card.innerHTML = !list.length
-        ? '<div class="empty-cell" style="padding:28px">ยังไม่มีรายจ่ายในช่วงนี้</div>'
+        ? `<div class="empty-cell" style="padding:28px">ยังไม่มี${isExp ? 'รายจ่ายอื่น' : 'การซื้อของ'}ในช่วงนี้</div>`
         : `<div class="table-wrap"><table>
-            <thead><tr><th>วันที่</th><th>รายการ</th><th class="num-col">จำนวน</th><th class="num-col">ยอด (บาท)</th><th>ซื้อจาก</th><th></th></tr></thead>
+            <thead><tr><th>วันที่</th><th>${isExp ? 'หมวด' : 'รายการ'}</th>
+              <th>${isExp ? 'ผูกออเดอร์' : 'จำนวน'}</th><th>ยอด (บาท)</th>
+              <th>${isExp ? 'จ่ายให้' : 'ซื้อจาก'}</th><th></th></tr></thead>
             <tbody>${list.map(p => `<tr>
               <td data-label="วันที่">${esc(thDate(p.purchase_date))}</td>
-              <td data-label="รายการ">${esc(p.item_name)}
+              <td data-label="${isExp ? 'หมวด' : 'รายการ'}">${esc(isExp ? (p.category || '-') : (p.item_name || '-'))}
                 ${p.note ? `<div class="hint">${esc(p.note)}</div>` : ''}
-                ${p.stock_move_id ? '<div class="hint">รับเข้าสต็อกแล้ว</div>' : '<div class="hint">ไม่ได้รับเข้าสต็อก</div>'}</td>
-              <td data-label="จำนวน" class="num-col">${Number(p.qty)} ${esc(p.unit || '')}</td>
-              <td data-label="ยอด (บาท)" class="num-col"><b>${fmtBaht(round2(p.total))}</b>
-                ${p.unit_price ? `<div class="hint">@ ${fmtBaht(round2(p.unit_price))}</div>` : ''}</td>
-              <td data-label="ซื้อจาก">${esc(p.vendor || '-')}</td>
+                ${isExp ? '' : (p.stock_move_id ? '<div class="hint">รับเข้าสต็อกแล้ว</div>' : '<div class="hint">ไม่ได้รับเข้าสต็อก</div>')}</td>
+              <td data-label="${isExp ? 'ผูกออเดอร์' : 'จำนวน'}">${isExp
+                ? esc(p.order_no || '-')
+                : Number(p.qty) + ' ' + esc(p.unit || '')}</td>
+              <td data-label="ยอด (บาท)"><b>${fmtBaht(round2(p.total))}</b>
+                ${!isExp && p.unit_price ? `<div class="hint">@ ${fmtBaht(round2(p.unit_price))}</div>` : ''}</td>
+              <td data-label="${isExp ? 'จ่ายให้' : 'ซื้อจาก'}">${esc(p.vendor || '-')}</td>
               <td data-label="" class="admin-only"><div class="field-row" style="justify-content:flex-end">
                 <button class="icon-btn pu-edit" data-id="${p.id}" aria-label="แก้ไขรายจ่าย" title="แก้ไข">${icon('edit', 18)}</button>
                 <button class="icon-btn icon-btn-delete pu-del" data-id="${p.id}" aria-label="ลบรายจ่าย" title="ลบรายจ่าย">${icon('trash', 18)}</button>
               </div></td>
             </tr>`).join('')}
             <tr><td colspan="3"><b>รวมที่แสดง</b></td>
-              <td class="num-col"><b>${fmtBaht(round2(sum(list)))}</b></td><td colspan="2"></td></tr>
+              <td><b>${fmtBaht(round2(purchSum(list)))}</b></td><td colspan="2"></td></tr>
             </tbody></table></div>`;
       app.appendChild(card);
 
@@ -5258,9 +5377,10 @@ end $$;
       card.querySelectorAll('.pu-del').forEach(b => b.addEventListener('click', async () => {
         const p = PURCHASES.find(x => x.id === b.dataset.id);
         if (!p) return;
-        if (!confirm('ลบรายจ่าย "' + p.item_name + ' · ' + fmtBaht(round2(p.total)) + ' บาท" ?')) return;
+        const what = p.kind === 'expense' ? (p.category || 'รายจ่าย') : (p.item_name || 'รายการ');
+        if (!confirm('ลบรายจ่าย "' + what + ' · ' + fmtBaht(round2(p.total)) + ' บาท" ?')) return;
 
-        // ถอนของออกจากสต็อกด้วยไหม — ถามแยก เพราะบางทีของเข้าร้านจริง แค่บันทึกเงินผิด
+        // ของเข้าสต็อกถามแยกอีกที เพราะบางทีของเข้าร้านจริง แค่บันทึกเงินผิด
         let pull = false;
         if (p.stock_move_id) {
           pull = confirm('เอาของ ' + Number(p.qty) + ' ' + (p.unit || '') + ' ออกจากสต็อกด้วยไหม?\n\n' +
@@ -5273,13 +5393,56 @@ end $$;
             if (error) throw new Error(error.message);
           }
           await trashDelete('purchases', p.id, {
-            label: p.item_name + ' · ' + fmtBaht(round2(p.total)) + ' บาท',
+            label: what + ' · ' + fmtBaht(round2(p.total)) + ' บาท',
             detail: thDate(p.purchase_date) + (p.vendor ? ' · ' + p.vendor : '') +
-              (pull ? ' · ถอนของออกจากสต็อกแล้ว' : '') + ' · กู้คืนแล้วไม่รับเข้าสต็อกซ้ำให้',
+              (pull ? ' · ถอนของออกจากสต็อกแล้ว' : '') +
+              (p.kind === 'expense' ? '' : ' · กู้คืนแล้วไม่รับเข้าสต็อกซ้ำให้'),
           });
           await loadPurchases();
         } catch (e) { alert('ลบไม่สำเร็จ: ' + e.message); b.disabled = false; }
       }));
+    }
+
+    // ---- สรุปรายเดือน: เดือน x หมวด ----
+    // คิดสดจากข้อมูลทุกครั้ง ไม่เก็บยอดสรุปซ้ำไว้อีกตาราง (แก้รายการเก่าแล้วสรุปจะตรงเสมอ)
+    function renderPurchaseSummary(app) {
+      if (!PURCHASES.length) {
+        const empty = document.createElement('div');
+        empty.className = 'lot-card';
+        empty.innerHTML = '<div class="empty-cell" style="padding:28px">ยังไม่มีรายจ่าย</div>';
+        app.appendChild(empty);
+        return;
+      }
+      const label = (p) => p.kind === 'expense' ? (p.category || 'อื่นๆ') : 'ซื้อของเข้าสต็อก';
+      const months = [...new Set(PURCHASES.map(p => String(p.purchase_date).slice(0, 7)))].sort().reverse();
+      const cols = ['ซื้อของเข้าสต็อก', ...[...new Set(PURCHASES.filter(p => p.kind === 'expense').map(p => p.category || 'อื่นๆ'))].sort()];
+
+      const cell = (m, c) => purchSum(PURCHASES.filter(p => String(p.purchase_date).startsWith(m) && label(p) === c));
+
+      const card = document.createElement('div');
+      card.className = 'lot-card';
+      card.innerHTML = `<div class="table-wrap"><table>
+        <thead><tr><th>เดือน</th>${cols.map(c => `<th>${esc(c)}</th>`).join('')}<th>รวมทั้งเดือน</th></tr></thead>
+        <tbody>${months.map(m => {
+          const tot = purchSum(PURCHASES.filter(p => String(p.purchase_date).startsWith(m)));
+          return `<tr>
+            <td data-label="เดือน"><b>${esc(purchaseMonthLabel(m))}</b></td>
+            ${cols.map(c => { const v = cell(m, c);
+              return `<td data-label="${esc(c)}">${v ? fmtBaht(round2(v)) : '-'}</td>`; }).join('')}
+            <td data-label="รวมทั้งเดือน"><b>${fmtBaht(round2(tot))}</b></td>
+          </tr>`;
+        }).join('')}
+        <tr><td><b>รวมทุกเดือน</b></td>
+          ${cols.map(c => `<td><b>${fmtBaht(round2(purchSum(PURCHASES.filter(p => label(p) === c))))}</b></td>`).join('')}
+          <td><b>${fmtBaht(round2(purchSum(PURCHASES)))}</b></td></tr>
+        </tbody></table></div>`;
+      app.appendChild(card);
+
+      const hint = document.createElement('div');
+      hint.className = 'hint no-print';
+      hint.style.marginTop = '10px';
+      hint.textContent = 'ยอดคิดสดจากรายการจริงทุกครั้งที่เปิดหน้า — แก้หรือลบรายการเก่าแล้วตัวเลขตรงนี้จะตามให้เอง';
+      app.appendChild(hint);
     }
 
     // ===== สต็อกวัตถุดิบ =====
@@ -5355,7 +5518,7 @@ end $$;
           .order('created_at', { ascending: false }).limit(60),
         isAdmin()
           ? sb.from('purchases').select('item_id,qty,total,unit_price,vendor,purchase_date')
-              .order('purchase_date', { ascending: false })
+              .eq('kind', 'stock').order('purchase_date', { ascending: false })
           : Promise.resolve({ data: [] }),
       ]);
       STOCK_PURCH = purchRes.data || [];
