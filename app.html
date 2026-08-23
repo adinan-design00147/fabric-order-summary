@@ -879,6 +879,12 @@
     font-size: 13.5px; font-weight: 500; color: var(--sub); text-align: left;
     padding: 10px var(--space-3); min-height: 42px; transition: background .15s ease, color .15s ease;
   }
+  /* ป้ายตัวเลขบนเมนู — ตัวหนังสือขาวบน --err-text ใช้ไม่ได้ในโหมดมืด (แดงอ่อน contrast 2.3:1)
+     โหมดมืดเลยสลับเป็นตัวหนังสือเข้มบนพื้นแดงอ่อนแทน */
+  .nav-badge { margin-left: auto; min-width: 20px; height: 20px; padding: 0 6px; border-radius: 10px;
+               background: #d92d20; color: #fff; font-size: 11px; font-weight: 700;
+               display: inline-flex; align-items: center; justify-content: center; }
+  html[data-theme="dark"] .nav-badge { background: #ff8b7d; color: #2a1210; }
   .nav-item:hover { background: var(--accent-soft); color: var(--accent); }
   .nav-item.active { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
   .nav-item:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
@@ -1676,6 +1682,7 @@
         ? '<div class="nav-sep"></div>'
         : `<a class="nav-item ${currentView === it.key ? 'active' : ''}" href="${routeFor(it.key)}" data-key="${it.key}">
              <span class="nav-ico">${icon(it.icon, 19)}</span><span>${esc(it.label)}</span>
+             ${it.key === 'debts' && DEBT_ALERT ? `<span class="nav-badge">${DEBT_ALERT}</span>` : ''}
            </a>`
       ).join('');
 
@@ -1875,6 +1882,11 @@
       document.getElementById('receiptForm')?.remove();
       updateHeaderTitle();
       renderNav();
+      // ยิงครั้งเดียวต่อ session แล้วค่อยวาดเมนูใหม่ ไม่ให้ถ่วงการเปิดหน้า
+      if (!debtAlertLoaded && isSuperAdmin()) {
+        debtAlertLoaded = true;
+        refreshDebtAlert().then(renderNav).catch(() => {});
+      }
       document.getElementById('app').innerHTML = '<div class="loading">กำลังโหลดข้อมูล...</div>';
       try {
         if (currentView === 'dashboard') {
@@ -3086,7 +3098,7 @@ end $$;
     // ===== เช็กว่ามีเวอร์ชันใหม่ไหม =====
     // เบราว์เซอร์ชอบจำไฟล์เก่าไว้ (cache) ทำให้ไม่เห็นของที่เพิ่งอัปเดต
     // ตัวนี้จะแอบเทียบเวอร์ชันกับไฟล์บนเซิร์ฟเวอร์ แล้วขึ้นแถบให้กดอัปเดต
-    const APP_BUILD = '20260823-1935';
+    const APP_BUILD = '20260823-2050';
 
     let lastUpdateCheck = 0;
 
@@ -3521,6 +3533,34 @@ end $$;
     // หน้าตาแบบสมุดบัญชีธนาคาร: วันที่ · รายการ · รับหนี้มา · จ่ายคืน · คงเหลือ
     // ตัวกันจริงคือ RLS ฝั่งฐานข้อมูล (policy "super admin only") ฝั่งเว็บแค่ซ่อนเมนูให้ตรงกัน
     let DEBT_ENTRIES = [], DEBT_RECUR = [];
+    // สมุดหนี้ไม่อยู่ในไฟล์สำรองของร้าน (ตั้งใจ) -> ต้องมีตัวนับวันของตัวเอง ไม่งั้นลืมกดก็คือไม่มี backup เลย
+    const DEBT_BACKUP_KEY = 'haifa_debt_backup';
+    const DEBT_BACKUP_WARN_DAYS = 7;
+    function daysSinceDebtBackup() {
+      let t = null;
+      try { t = localStorage.getItem(DEBT_BACKUP_KEY); } catch (e) {}
+      if (!t) return null;
+      return Math.floor((Date.now() - new Date(t).getTime()) / 86400000);
+    }
+    let DEBT_ALERT = 0;          // รายการประจำที่ยังไม่ได้ลงสมุดของเดือนนี้
+    let debtAlertLoaded = false;
+
+    /** นับรายการประจำที่ยังไม่ได้ลงเดือนนี้ — ยิงเบาๆ ครั้งเดียวต่อ session แล้วรีเฟรชหลังเข้าหน้าหนี้ */
+    async function refreshDebtAlert() {
+      if (!isSuperAdmin()) { DEBT_ALERT = 0; return; }
+      const now = new Date();
+      const first = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-01';
+      const nx = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+      const last = nx.getFullYear() + '-' + String(nx.getMonth() + 1).padStart(2, '0') + '-01';
+      const [rRes, eRes] = await Promise.all([
+        sb.from('debt_recurring').select('id').eq('active', true),
+        sb.from('debt_entries').select('recurring_id')
+          .gte('entry_date', first).lt('entry_date', last).not('recurring_id', 'is', null),
+      ]);
+      const done = new Set((eRes.data || []).map(x => x.recurring_id));
+      DEBT_ALERT = (rRes.data || []).filter(x => !done.has(x.id)).length;
+    }
+
     let debtOpen = {};        // จำว่าเจ้าหนี้รายไหนกางสมุดอยู่
     let debtPage = {};        // จำว่าเจ้าหนี้รายไหนเปิดสมุดหน้าที่เท่าไร
     const DEBT_PER_PAGE = 10; // แสดงทีละ 10 รายการ
@@ -3545,6 +3585,7 @@ end $$;
       DEBT_ENTRIES = eRes.data || [];
       DEBT_RECUR = rRes.data || [];
       renderDebts();
+      refreshDebtAlert().then(renderNav).catch(() => {});
       document.getElementById('statusMsg').textContent = 'อัปเดตล่าสุด: ' + new Date().toLocaleString('th-TH');
     }
 
@@ -3676,12 +3717,24 @@ end $$;
       const owing = Object.entries(byCreditor).filter(([, list]) =>
         list.reduce((a, e) => a + (e.kind === 'in' ? 1 : -1) * Number(e.amount), 0) > 0.009).length;
 
+      // แถบเตือนว่านานแล้วยังไม่ได้สำรอง
+      const bdays = daysSinceDebtBackup();
+      if (DEBT_ENTRIES.length && (bdays === null || bdays >= DEBT_BACKUP_WARN_DAYS)) {
+        const warn = document.createElement('div');
+        warn.className = 'viewer-banner no-print';
+        warn.style.cssText = 'background:var(--warn-bg);border:1px solid var(--warn-border);color:var(--warn-text)';
+        warn.textContent = bdays === null
+          ? 'ยังไม่เคยสำรองสมุดหนี้เลย — ข้อมูลนี้ไม่อยู่ในไฟล์สำรองของร้าน กดปุ่มสำรองท้ายหน้าไว้ด้วย'
+          : 'ไม่ได้สำรองสมุดหนี้มา ' + bdays + ' วันแล้ว — กดปุ่มสำรองท้ายหน้า';
+        app.appendChild(warn);
+      }
+
       const sum = document.createElement('div');
       sum.className = 'summary-grid';
       sum.innerHTML = `
         <div class="stat"><div class="num">${fmtBaht(sumIn)}</div><div class="lbl">รับหนี้มารวม (บาท)</div></div>
-        <div class="stat"><div class="num" style="color:#067647">${fmtBaht(sumOut)}</div><div class="lbl">จ่ายคืนแล้ว (บาท)</div></div>
-        <div class="stat"><div class="num" style="color:${left > 0 ? '#b42318' : '#067647'}">${fmtBaht(left)}</div><div class="lbl">ค้างอยู่ (บาท)</div></div>
+        <div class="stat"><div class="num" style="color:var(--ok-text)">${fmtBaht(sumOut)}</div><div class="lbl">จ่ายคืนแล้ว (บาท)</div></div>
+        <div class="stat"><div class="num" style="color:var(--${left > 0 ? 'err' : 'ok'}-text)">${fmtBaht(left)}</div><div class="lbl">ค้างอยู่ (บาท)</div></div>
         <div class="stat"><div class="num">${owing}</div><div class="lbl">เจ้าหนี้ที่ยังค้าง</div></div>`;
       app.appendChild(sum);
 
@@ -3899,7 +3952,7 @@ end $$;
           <div class="lot-head">
             <span>${esc(c.name)} ${clear ? '<span class="st st-paid">จ่ายครบแล้ว</span>' : ''}</span>
             <span class="lot-head-right">
-              <span class="lot-total" style="color:${clear ? '#067647' : '#b42318'}">${clear ? 'ไม่มียอดค้าง' : 'ค้าง ' + fmtBaht(c.balance)}</span>
+              <span class="lot-total" style="color:var(--${clear ? 'ok' : 'err'}-text)">${clear ? 'ไม่มียอดค้าง' : 'ค้าง ' + fmtBaht(c.balance)}</span>
               <span class="lot-price">รับมา ${fmtBaht(c.inSum)} · จ่ายคืน ${fmtBaht(c.outSum)}</span>
             </span>
           </div>
@@ -3987,12 +4040,19 @@ end $$;
       bk.className = 'field-row';
       bk.style.marginTop = 'var(--space-4)';
       bk.innerHTML = `<button class="btn secondary btn-sm" id="deBackup">${icon('box', 15)}สำรองสมุดหนี้ (ไฟล์แยก)</button>
-        <span class="hint" style="margin:0;align-self:center">ข้อมูลนี้ไม่รวมอยู่ในไฟล์สำรองของร้าน</span>`;
+        <span class="hint" style="margin:0;align-self:center">ข้อมูลนี้ไม่รวมอยู่ในไฟล์สำรองของร้าน · <b id="deBackupWhen"></b></span>`;
       app.appendChild(bk);
+      const bdText = () => {
+        const d = daysSinceDebtBackup();
+        return d === null ? 'ยังไม่เคยสำรอง' : d === 0 ? 'สำรองล่าสุดวันนี้' : 'สำรองล่าสุด ' + d + ' วันก่อน';
+      };
+      bk.querySelector('#deBackupWhen').textContent = bdText();
       bk.querySelector('#deBackup').addEventListener('click', () => {
         downloadBlob('สมุดหนี้ส่วนตัว-' + dateKey() + '.json',
           new Blob([JSON.stringify({ exported_at: new Date().toISOString(), entries: DEBT_ENTRIES, recurring: DEBT_RECUR }, null, 1)],
             { type: 'application/json' }));
+        try { localStorage.setItem(DEBT_BACKUP_KEY, new Date().toISOString()); } catch (e) {}
+        bk.querySelector('#deBackupWhen').textContent = bdText();
       });
     }
 
