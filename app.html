@@ -3077,7 +3077,7 @@ end $$;
     // ===== เช็กว่ามีเวอร์ชันใหม่ไหม =====
     // เบราว์เซอร์ชอบจำไฟล์เก่าไว้ (cache) ทำให้ไม่เห็นของที่เพิ่งอัปเดต
     // ตัวนี้จะแอบเทียบเวอร์ชันกับไฟล์บนเซิร์ฟเวอร์ แล้วขึ้นแถบให้กดอัปเดต
-    const APP_BUILD = '20260823-1650';
+    const APP_BUILD = '20260823-1735';
 
     let lastUpdateCheck = 0;
 
@@ -5010,10 +5010,11 @@ end $$;
               <div class="field"><label for="epCat">หมวดรายจ่าย</label>
                 <input id="epCat" list="epCatList" value="${esc(p.category || '')}" autocomplete="off">
                 <datalist id="epCatList">${expenseCats().map(c => `<option value="${esc(c)}"></option>`).join('')}</datalist></div>
-              <div class="field"><label for="epOrder">ผูกกับออเดอร์ (เว้นว่างได้)</label>
-                <select id="epOrder"><option value="">— ไม่ผูกออเดอร์ —</option>
-                  ${PURCH_ORDERS.map(o => `<option value="${o.id}" ${o.id === p.order_id ? 'selected' : ''}>${esc(o.order_no)} · ${esc(o.customer || '')}</option>`).join('')}
-                </select></div>
+              <div class="field"><label for="epOrder">ผูกกับออเดอร์</label>
+                <input id="epOrder" list="epOrderList" autocomplete="off" placeholder="พิมพ์เลขออเดอร์ หรือชื่อลูกค้า"
+                  value="${esc((() => { const o = PURCH_ORDERS.find(x => x.id === p.order_id); return o ? orderPickLabel(o) : ''; })())}">
+                ${orderPickDatalist('epOrderList')}
+                <div class="hint" id="epOrderHint"></div></div>
             `}
             <div class="field"><label for="epTotal">ยอดที่จ่ายจริง (บาท)</label>
               <input id="epTotal" type="number" min="0" step="any" inputmode="decimal" value="${p.total}"></div>
@@ -5045,6 +5046,7 @@ end $$;
           q('epTotal').addEventListener('input', () => { totalTouched = true; });
         }
 
+        if (!isStock) wireOrderPick(q('epOrder'), q('epOrderHint'));
         q('epCancel').addEventListener('click', () => close(null));
         back.addEventListener('click', (ev) => { if (ev.target === back) close(null); });
         q('epOk').addEventListener('click', () => {
@@ -5068,8 +5070,10 @@ end $$;
           } else {
             const cat = q('epCat').value.trim();
             if (!cat) { msg.textContent = 'ใส่หมวดรายจ่ายก่อน'; msg.className = 'msg error'; return; }
+            const ord = findOrderByText(q('epOrder').value);
+            if (ord === undefined) { msg.textContent = 'หาออเดอร์ที่พิมพ์ไม่เจอ — แก้ให้ตรง หรือลบข้อความในช่องนั้นทิ้ง'; msg.className = 'msg error'; return; }
             patch.p_category = cat;
-            patch.p_order_id = q('epOrder').value || null;
+            patch.p_order_id = ord ? ord.id : null;
           }
           close(patch);
         });
@@ -5099,7 +5103,7 @@ end $$;
       const [pRes, oRes] = await Promise.all([
         sb.from('purchases').select('*')
           .order('purchase_date', { ascending: false }).order('created_at', { ascending: false }),
-        sb.from('orders').select('id,order_no,customer').order('created_at', { ascending: false }).limit(200),
+        sb.from('orders').select('id,order_no,customer').order('created_at', { ascending: false }),
         fetchStock(),
       ]);
       if (pRes.error) throw pRes.error;
@@ -5107,6 +5111,42 @@ end $$;
       PURCH_ORDERS = oRes.data || [];
       renderPurchases();
       document.getElementById('statusMsg').textContent = 'อัปเดตล่าสุด: ' + new Date().toLocaleString('th-TH');
+    }
+
+    // ช่องผูกออเดอร์เป็น input + datalist ไม่ใช่ select
+    // ออเดอร์เยอะแล้ว dropdown เลื่อนหายาก · datalist พิมพ์กรองได้ทั้งเลขออเดอร์และชื่อลูกค้า
+    const orderPickLabel = (o) => o.order_no + (o.customer ? ' · ' + o.customer : '');
+
+    /** แปลงข้อความที่พิมพ์ -> ออเดอร์ · คืน null ถ้าว่าง · คืน undefined ถ้าพิมพ์มาแต่หาไม่เจอ */
+    function findOrderByText(text) {
+      const t = String(text || '').trim();
+      if (!t) return null;
+      const low = t.toLowerCase();
+      let hit = PURCH_ORDERS.find(o => orderPickLabel(o).toLowerCase() === low);
+      if (!hit) hit = PURCH_ORDERS.find(o => String(o.order_no).toLowerCase() === low);
+      if (!hit) {
+        const many = PURCH_ORDERS.filter(o => orderPickLabel(o).toLowerCase().includes(low));
+        if (many.length === 1) hit = many[0];
+      }
+      return hit || undefined;
+    }
+
+    function orderPickDatalist(id) {
+      return `<datalist id="${id}">${PURCH_ORDERS.map(o => `<option value="${esc(orderPickLabel(o))}"></option>`).join('')}</datalist>`;
+    }
+
+    /** ผูกช่องพิมพ์ออเดอร์กับบรรทัดบอกผลค้นหาใต้ช่อง */
+    function wireOrderPick(inputEl, hintEl) {
+      const sync = () => {
+        const v = inputEl.value.trim();
+        if (!v) { hintEl.textContent = 'เว้นว่าง = ไม่ผูกออเดอร์'; hintEl.style.color = ''; return; }
+        const hit = findOrderByText(v);
+        if (hit) { hintEl.textContent = 'ผูกกับ ' + orderPickLabel(hit); hintEl.style.color = 'var(--ok-text)'; }
+        else { hintEl.textContent = 'ยังหาออเดอร์นี้ไม่เจอ — พิมพ์เลขออเดอร์หรือชื่อลูกค้าให้ตรงกว่านี้'; hintEl.style.color = 'var(--err-text)'; }
+      };
+      inputEl.addEventListener('input', sync);
+      inputEl.addEventListener('change', sync);
+      sync();
     }
 
     function purchaseMonthLabel(ym) {
@@ -5291,10 +5331,10 @@ end $$;
             <div class="hint" id="exDateTh"></div></div>
           <div class="field"><label for="exVendor">จ่ายให้ใคร</label>
             <input id="exVendor" placeholder="เช่น ปั๊ม ปตท. · Flash"></div>
-          <div class="field"><label for="exOrder">ผูกกับออเดอร์</label>
-            <select id="exOrder"><option value="">— ไม่ผูกออเดอร์ —</option>
-              ${PURCH_ORDERS.map(o => `<option value="${o.id}">${esc(o.order_no)} · ${esc(o.customer || '')}</option>`).join('')}
-            </select></div>
+          <div class="field"><label for="exOrder">ผูกกับออเดอร์ (${PURCH_ORDERS.length} รายการ)</label>
+            <input id="exOrder" list="exOrderList" placeholder="พิมพ์เลขออเดอร์ หรือชื่อลูกค้า" autocomplete="off">
+            ${orderPickDatalist('exOrderList')}
+            <div class="hint" id="exOrderHint"></div></div>
           <div class="field pu-wide"><label for="exNote">หมายเหตุ</label>
             <input id="exNote" placeholder="เช่น ไปส่งของที่ยะลา"></div>
         </div>
@@ -5306,6 +5346,7 @@ end $$;
       const syncDate = () => { $('exDateTh').textContent = $('exDate').value ? thDate($('exDate').value) : ''; };
       $('exDate').addEventListener('change', syncDate);
       syncDate();
+      wireOrderPick($('exOrder'), $('exOrderHint'));
 
       $('exSave').addEventListener('click', async () => {
         const msg = $('exMsg');
@@ -5314,6 +5355,8 @@ end $$;
         const total = parseFloat($('exTotal').value);
         if (!cat) { msg.textContent = 'ใส่หมวดรายจ่ายก่อน'; msg.className = 'msg error'; return; }
         if (!(total >= 0)) { msg.textContent = 'ใส่ยอดที่จ่ายก่อน'; msg.className = 'msg error'; return; }
+        const ord = findOrderByText($('exOrder').value);
+        if (ord === undefined) { msg.textContent = 'หาออเดอร์ที่พิมพ์ไม่เจอ — แก้ให้ตรง หรือลบข้อความในช่องนั้นทิ้ง'; msg.className = 'msg error'; return; }
 
         $('exSave').disabled = true;
         const { error } = await sb.rpc('expense_create', {
@@ -5322,7 +5365,7 @@ end $$;
           p_total: total,
           p_vendor: $('exVendor').value.trim() || null,
           p_note: $('exNote').value.trim() || null,
-          p_order_id: $('exOrder').value || null,
+          p_order_id: ord ? ord.id : null,
           p_by: (ME && ME.email) ? prettyLogin(ME.email) : null,
         });
         $('exSave').disabled = false;
