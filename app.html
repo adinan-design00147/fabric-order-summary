@@ -3077,7 +3077,7 @@ end $$;
     // ===== เช็กว่ามีเวอร์ชันใหม่ไหม =====
     // เบราว์เซอร์ชอบจำไฟล์เก่าไว้ (cache) ทำให้ไม่เห็นของที่เพิ่งอัปเดต
     // ตัวนี้จะแอบเทียบเวอร์ชันกับไฟล์บนเซิร์ฟเวอร์ แล้วขึ้นแถบให้กดอัปเดต
-    const APP_BUILD = '20260823-1415';
+    const APP_BUILD = '20260823-1520';
 
     let lastUpdateCheck = 0;
 
@@ -4984,6 +4984,73 @@ end $$;
       });
     }
 
+    /** กล่องแก้ไขรายจ่าย — เปลี่ยน "ซื้ออะไร" ไม่ได้ ชื่อของเป็น snapshot ถ้าจะเปลี่ยนของให้ลบแล้วบันทึกใหม่ */
+    function editPurchase(p) {
+      return new Promise(resolve => {
+        const back = document.createElement('div');
+        back.className = 'modal-back no-print';
+        back.innerHTML = `
+          <div class="modal-card" role="dialog" aria-modal="true">
+            <h3>แก้ไขรายจ่าย</h3>
+            <div class="modal-sub">${esc(p.item_name)}${p.stock_move_id
+              ? ' · แก้จำนวนแล้วยอดในสต็อกจะขยับตามให้เอง'
+              : ' · รายการนี้ไม่ได้รับเข้าสต็อก แก้แล้วไม่กระทบสต็อก'}</div>
+            <div class="field"><label for="epQty">จำนวน (${esc(p.unit || '')})</label>
+              <input id="epQty" type="number" min="0" step="any" inputmode="decimal" value="${p.qty}"></div>
+            <div class="field"><label for="epPrice">ราคาต่อหน่วย (บาท)</label>
+              <input id="epPrice" type="number" min="0" step="any" inputmode="decimal" value="${p.unit_price != null ? p.unit_price : ''}"></div>
+            <div class="field"><label for="epTotal">ยอดที่จ่ายจริง (บาท)</label>
+              <input id="epTotal" type="number" min="0" step="any" inputmode="decimal" value="${p.total}"></div>
+            <div class="field"><label for="epDate">วันที่ซื้อ</label>
+              <input id="epDate" type="date" value="${esc(p.purchase_date)}"></div>
+            <div class="field"><label for="epVendor">ซื้อจากร้าน</label>
+              <input id="epVendor" value="${esc(p.vendor || '')}" placeholder="เว้นว่างได้"></div>
+            <div class="field"><label for="epNote">หมายเหตุ</label>
+              <input id="epNote" value="${esc(p.note || '')}" placeholder="เว้นว่างได้"></div>
+            <div class="msg" id="epMsg"></div>
+            <div class="field-row" style="justify-content:flex-end;margin-top:6px">
+              <button class="btn secondary" id="epCancel">ยกเลิก</button>
+              <button class="btn" id="epOk">${icon('check', 15)}บันทึกการแก้ไข</button>
+            </div>
+          </div>`;
+        document.body.appendChild(back);
+        const close = (v) => { back.remove(); resolve(v); };
+        const q = (id) => back.querySelector('#' + id);
+
+        // แก้จำนวนหรือราคา -> คิดยอดรวมให้ใหม่ เว้นแต่ผู้ใช้พิมพ์ยอดเองแล้ว
+        let totalTouched = false;
+        const recalc = () => {
+          if (totalTouched) return;
+          const a = parseFloat(q('epQty').value), b = parseFloat(q('epPrice').value);
+          if (a > 0 && b >= 0) q('epTotal').value = round2(a * b);
+        };
+        q('epQty').addEventListener('input', recalc);
+        q('epPrice').addEventListener('input', recalc);
+        q('epTotal').addEventListener('input', () => { totalTouched = true; });
+
+        q('epCancel').addEventListener('click', () => close(null));
+        back.addEventListener('click', (ev) => { if (ev.target === back) close(null); });
+        q('epOk').addEventListener('click', () => {
+          const msg = q('epMsg');
+          const qty = parseFloat(q('epQty').value);
+          const total = parseFloat(q('epTotal').value);
+          const price = parseFloat(q('epPrice').value);
+          if (!(qty > 0)) { msg.textContent = 'ใส่จำนวนก่อน'; msg.className = 'msg error'; return; }
+          if (!(total >= 0)) { msg.textContent = 'ใส่ยอดที่จ่ายจริงก่อน'; msg.className = 'msg error'; return; }
+          close({
+            p_id: p.id,
+            p_date: q('epDate').value || p.purchase_date,
+            p_qty: qty,
+            p_unit_price: price >= 0 ? price : null,
+            p_total: total,
+            p_vendor: q('epVendor').value.trim() || null,
+            p_note: q('epNote').value.trim() || null,
+          });
+        });
+        setTimeout(() => q('epQty').focus(), 50);
+      });
+    }
+
     // ===== รายจ่ายซื้อของเข้าร้าน (#/purchases) =====
     // ตาราง purchases = เงินที่จ่ายออกไปตอนซื้อของเข้าร้าน
     // ถ้าติ๊ก "รับเข้าสต็อกให้เลย" -> RPC purchase_create ยิง stock_apply_move ให้ในคำสั่งเดียว ล้มก็ล้มทั้งคู่
@@ -5168,6 +5235,7 @@ end $$;
                 ${p.unit_price ? `<div class="hint">@ ${fmtBaht(round2(p.unit_price))}</div>` : ''}</td>
               <td data-label="ซื้อจาก">${esc(p.vendor || '-')}</td>
               <td data-label="" class="admin-only"><div class="field-row" style="justify-content:flex-end">
+                <button class="icon-btn pu-edit" data-id="${p.id}" aria-label="แก้ไขรายจ่าย" title="แก้ไข">${icon('edit', 18)}</button>
                 <button class="icon-btn icon-btn-delete pu-del" data-id="${p.id}" aria-label="ลบรายจ่าย" title="ลบรายจ่าย">${icon('trash', 18)}</button>
               </div></td>
             </tr>`).join('')}
@@ -5175,6 +5243,17 @@ end $$;
               <td class="num-col"><b>${fmtBaht(round2(sum(list)))}</b></td><td colspan="2"></td></tr>
             </tbody></table></div>`;
       app.appendChild(card);
+
+      card.querySelectorAll('.pu-edit').forEach(b => b.addEventListener('click', async () => {
+        const p = PURCHASES.find(x => x.id === b.dataset.id);
+        if (!p) return;
+        const patch = await editPurchase(p);
+        if (!patch) return;
+        b.disabled = true;
+        const { error } = await sb.rpc('purchase_update', patch);
+        if (error) { alert('แก้ไขไม่สำเร็จ: ' + error.message); b.disabled = false; return; }
+        await loadPurchases();
+      }));
 
       card.querySelectorAll('.pu-del').forEach(b => b.addEventListener('click', async () => {
         const p = PURCHASES.find(x => x.id === b.dataset.id);
