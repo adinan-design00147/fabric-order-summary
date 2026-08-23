@@ -3052,7 +3052,7 @@ end $$;
     // ===== เช็กว่ามีเวอร์ชันใหม่ไหม =====
     // เบราว์เซอร์ชอบจำไฟล์เก่าไว้ (cache) ทำให้ไม่เห็นของที่เพิ่งอัปเดต
     // ตัวนี้จะแอบเทียบเวอร์ชันกับไฟล์บนเซิร์ฟเวอร์ แล้วขึ้นแถบให้กดอัปเดต
-    const APP_BUILD = '20260822-2140';
+    const APP_BUILD = '20260823-1330';
 
     let lastUpdateCheck = 0;
 
@@ -5014,10 +5014,8 @@ end $$;
           <div class="field"><label for="puDate">วันที่ซื้อ</label>
             <input id="puDate" type="date" value="${dateKey()}"></div>
           <div class="field"><label for="puItem">ซื้ออะไร</label>
-            <select id="puItem">
-              <option value="">— เลือกวัตถุดิบ —</option>
-              ${STOCK.map(s => `<option value="${s.id}">${esc(s.name)} (${esc(s.unit || '')})</option>`).join('')}
-            </select></div>
+            <input id="puItem" list="puItemList" placeholder="พิมพ์ชื่อ หรือเลือกจากที่มีอยู่" autocomplete="off">
+            <datalist id="puItemList">${STOCK.map(s => `<option value="${esc(s.name)}">${esc(s.category || '')} · ${esc(s.unit || '')}</option>`).join('')}</datalist></div>
           <div class="field"><label for="puQty">จำนวน <span class="hint" id="puUnit"></span></label>
             <input id="puQty" type="number" min="0" step="any" inputmode="decimal" placeholder="เช่น 2"></div>
           <div class="field"><label for="puPrice">ราคาต่อหน่วย (บาท)</label>
@@ -5028,6 +5026,13 @@ end $$;
             <input id="puVendor" placeholder="เช่น ร้านเครื่องเขียนหน้าปากซอย"></div>
           <div class="field" style="grid-column:1/-1"><label for="puNote">หมายเหตุ</label>
             <input id="puNote" placeholder="เว้นว่างได้"></div>
+        </div>
+        <div class="form-grid" id="puNewBox" hidden>
+          <div class="field" style="grid-column:1/-1"><div class="hint" id="puNewHint"></div></div>
+          <div class="field"><label for="puNewUnit">หน่วยนับ</label>
+            <select id="puNewUnit">${STOCK_UNITS.map(u => `<option>${esc(u)}</option>`).join('')}</select></div>
+          <div class="field"><label for="puNewCat">หมวด</label>
+            <select id="puNewCat">${STOCK_CATS.map(c => `<option>${esc(c)}</option>`).join('')}</select></div>
         </div>
         <label class="field-row" style="gap:8px;align-items:center;margin:10px 0">
           <input id="puAddStock" type="checkbox" checked style="width:auto;flex:none">
@@ -5047,26 +5052,42 @@ end $$;
       $('puQty').addEventListener('input', recalc);
       $('puPrice').addEventListener('input', recalc);
       $('puTotal').addEventListener('input', () => { totalTouched = $('puTotal').value !== ''; });
-      $('puItem').addEventListener('change', () => {
-        const it = STOCK.find(s => s.id === $('puItem').value);
+      // ชื่อที่พิมพ์ตรงกับของเดิมไหม (ไม่สนตัวพิมพ์ใหญ่เล็ก/ช่องว่างหัวท้าย — กติกาเดียวกับหน้าสต็อก)
+      const findItem = (name) => {
+        const key = String(name || '').trim().toLowerCase();
+        return key ? STOCK.find(s => String(s.name).trim().toLowerCase() === key) : null;
+      };
+      const syncItem = () => {
+        const it = findItem($('puItem').value);
+        const typed = $('puItem').value.trim();
         $('puUnit').textContent = it && it.unit ? '(' + it.unit + ')' : '';
-      });
+        // พิมพ์ชื่อที่ยังไม่มีในสต็อก -> ขอหน่วยกับหมวด แล้วจะสร้างให้ตอนบันทึก
+        const isNew = !it && typed !== '';
+        $('puNewBox').hidden = !isNew;
+        if (isNew) $('puNewHint').textContent = '"' + typed + '" ยังไม่มีในสต็อก — บันทึกแล้วจะสร้างให้อัตโนมัติ เลือกหน่วยกับหมวดด้วย';
+      };
+      $('puItem').addEventListener('input', syncItem);
+      $('puItem').addEventListener('change', syncItem);
 
       $('puSave').addEventListener('click', async () => {
         const msg = $('puMsg');
         msg.textContent = ''; msg.className = 'msg';
-        const itemId = $('puItem').value;
+        const typed = $('puItem').value.trim();
+        const found = findItem(typed);
         const qty = parseFloat($('puQty').value);
         const price = parseFloat($('puPrice').value);
         const total = parseFloat($('puTotal').value);
-        if (!itemId) { msg.textContent = 'เลือกวัตถุดิบก่อน'; msg.className = 'msg error'; return; }
+        if (!typed) { msg.textContent = 'ใส่ชื่อของที่ซื้อก่อน'; msg.className = 'msg error'; return; }
         if (!(qty > 0)) { msg.textContent = 'ใส่จำนวนก่อน'; msg.className = 'msg error'; return; }
         if (!(total >= 0)) { msg.textContent = 'ใส่ยอดที่จ่ายจริงก่อน'; msg.className = 'msg error'; return; }
 
         $('puSave').disabled = true;
         const { error } = await sb.rpc('purchase_create', {
           p_date: $('puDate').value || dateKey(),
-          p_item_id: itemId,
+          p_item_id: found ? found.id : null,
+          p_item_name: found ? null : typed,
+          p_unit: found ? null : $('puNewUnit').value,
+          p_category: found ? null : $('puNewCat').value,
           p_qty: qty,
           p_unit_price: price >= 0 ? price : null,
           p_total: total,
@@ -5215,14 +5236,22 @@ end $$;
 
     async function loadStock() {
       document.getElementById('statusMsg').textContent = 'กำลังโหลด...';
-      const [items, movesRes] = await Promise.all([
+      // ต้นทุนที่ซื้อ เห็นเฉพาะ admin ขึ้นไป (RLS ของ purchases กันอีกชั้นอยู่แล้ว)
+      const [items, movesRes, purchRes] = await Promise.all([
         fetchStock(),
         sb.from('stock_moves').select('id,item_id,kind,qty,note,order_no,created_at')
           .order('created_at', { ascending: false }).limit(60),
+        isAdmin()
+          ? sb.from('purchases').select('item_id,qty,total,unit_price,vendor,purchase_date')
+              .order('purchase_date', { ascending: false })
+          : Promise.resolve({ data: [] }),
       ]);
+      STOCK_PURCH = purchRes.data || [];
       renderStock(items, movesRes.data || []);
       document.getElementById('statusMsg').textContent = 'อัปเดตล่าสุด: ' + new Date().toLocaleString('th-TH');
     }
+
+    let STOCK_PURCH = [];   // รายจ่ายซื้อของ ใช้โชว์ต้นทุนในการ์ดวัตถุดิบ (admin เท่านั้น)
 
     function renderStock(list, moves) {
       const app = document.getElementById('app');
@@ -5379,6 +5408,21 @@ end $$;
             <div class="threshold-row">เตือนเมื่อเหลือต่ำกว่า
               <input class="s-th inline-input" type="number" min="0" step="any" value="${stockThreshold(it)}" aria-label="จุดเตือน"> ${esc(it.unit)}
             </div>
+            ${(() => {
+              const ps = STOCK_PURCH.filter(x => x.item_id === it.id);
+              if (!ps.length) return '';
+              const spent = ps.reduce((a, x) => a + Number(x.total || 0), 0);
+              const bought = ps.reduce((a, x) => a + Number(x.qty || 0), 0);
+              const last = ps[0];
+              return `<div class="threshold-row" style="display:block">
+                <b>ต้นทุนที่ซื้อ</b> · ซื้อมา ${ps.length} ครั้ง รวม ${fmtBaht(round2(spent))} บาท
+                <div class="hint">ล่าสุด ${esc(thDate(last.purchase_date))} ${fmtQty(last.qty)} ${esc(it.unit)}
+                  ${last.unit_price ? '@ ' + fmtBaht(round2(last.unit_price)) + ' บาท' : ''}
+                  ${last.vendor ? '· ' + esc(last.vendor) : ''}
+                  ${bought > 0 ? '· เฉลี่ย ' + fmtBaht(round2(spent / bought)) + ' บาท/' + esc(it.unit) : ''}</div>
+                <a class="hint" href="${routeFor('purchases')}">ดูรายจ่ายทั้งหมด →</a>
+              </div>`;
+            })()}
             ${it.category === 'ผ้าดิบ' ? `<label class="threshold-row" style="cursor:pointer">
               <input type="checkbox" class="s-default" ${it.is_default_fabric ? 'checked' : ''}>
               <span>ใช้เป็น<b>ผ้าหลัก</b> — เวลากดปริ้นงานในเมนูงานผลิต ระบบจะตัดผ้าจากรายการนี้</span>
