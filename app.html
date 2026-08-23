@@ -2,7 +2,7 @@
 <html lang="th">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Haifa Design</title>
 <!-- ติดตั้งเป็นแอปบนหน้าจอมือถือได้ (Add to Home Screen) -->
 <link rel="manifest" href="manifest.webmanifest">
@@ -96,9 +96,20 @@
 
   /* ช่องเล็กที่วางแทรกในบรรทัด (จุดเตือน, จำนวนในตาราง) */
   .inline-input { width: auto; max-width: 120px; min-height: 40px; padding: 8px 10px; font-size: 15px; }
+  html {
+    -webkit-text-size-adjust: 100%;   /* iOS Safari ขยายตัวหนังสือเองตอนตะแคงจอ ถ้าไม่ล็อกไว้ */
+    scroll-padding-bottom: 120px;     /* กดช่องกรอกแล้วเลื่อนขึ้นเหนือแถบเมนูล่าง */
+  }
   body {
     margin: 0; font-family: 'Prompt', -apple-system, "Segoe UI", Roboto, "Noto Sans Thai", sans-serif;
-    background: var(--bg); color: var(--text); padding-bottom: 96px;
+    background: var(--bg); color: var(--text);
+    padding-bottom: calc(96px + env(safe-area-inset-bottom, 0px));
+    padding-left: env(safe-area-inset-left, 0px);
+    padding-right: env(safe-area-inset-right, 0px);
+  }
+  /* iOS ขึ้นกล่องเทาทับตอนแตะ — ปิดทิ้ง ใช้ :active ของเราเองแทน */
+  a, button, .chip, .tab-btn, .job-card, .hero-stat, .att-btn, .nav-item {
+    -webkit-tap-highlight-color: transparent;
   }
   header {
     position: sticky; top: 0; z-index: 5; background: var(--card);
@@ -1005,7 +1016,7 @@
 
   @media (max-width: 900px) {
     .sidebar { display: none; }
-    body { padding-bottom: 88px; }
+    body { padding-bottom: calc(88px + env(safe-area-inset-bottom, 0px)); }
     .bottom-nav {
       display: flex; position: fixed; left: 0; right: 0; bottom: 0; z-index: 30;
       background: var(--card); border-top: 1px solid var(--border);
@@ -3113,7 +3124,7 @@ end $$;
     // ===== เช็กว่ามีเวอร์ชันใหม่ไหม =====
     // เบราว์เซอร์ชอบจำไฟล์เก่าไว้ (cache) ทำให้ไม่เห็นของที่เพิ่งอัปเดต
     // ตัวนี้จะแอบเทียบเวอร์ชันกับไฟล์บนเซิร์ฟเวอร์ แล้วขึ้นแถบให้กดอัปเดต
-    const APP_BUILD = '20260823-2245';
+    const APP_BUILD = '20260823-2340';
 
     let lastUpdateCheck = 0;
 
