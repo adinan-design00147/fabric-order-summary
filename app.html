@@ -3098,7 +3098,7 @@ end $$;
     // ===== เช็กว่ามีเวอร์ชันใหม่ไหม =====
     // เบราว์เซอร์ชอบจำไฟล์เก่าไว้ (cache) ทำให้ไม่เห็นของที่เพิ่งอัปเดต
     // ตัวนี้จะแอบเทียบเวอร์ชันกับไฟล์บนเซิร์ฟเวอร์ แล้วขึ้นแถบให้กดอัปเดต
-    const APP_BUILD = '20260823-2050';
+    const APP_BUILD = '20260823-2135';
 
     let lastUpdateCheck = 0;
 
@@ -3717,9 +3717,12 @@ end $$;
       const owing = Object.entries(byCreditor).filter(([, list]) =>
         list.reduce((a, e) => a + (e.kind === 'in' ? 1 : -1) * Number(e.amount), 0) > 0.009).length;
 
-      // แถบเตือนว่านานแล้วยังไม่ได้สำรอง
+      // แถบเตือนว่านานแล้วยังไม่ได้สำรอง — โชว์เฉพาะจอคอม
+      // การสำรองคือโหลดไฟล์ JSON ลงเครื่อง ทำจริงได้แค่บนคอม
+      // และตัวนับอยู่ใน localStorage แยกกันคนละเครื่อง มือถือจะขึ้น "ยังไม่เคยสำรอง" ค้างตลอด ทั้งที่สำรองบนคอมไปแล้ว
       const bdays = daysSinceDebtBackup();
-      if (DEBT_ENTRIES.length && (bdays === null || bdays >= DEBT_BACKUP_WARN_DAYS)) {
+      const onDesktop = window.matchMedia('(min-width: 900px)').matches;
+      if (onDesktop && DEBT_ENTRIES.length && (bdays === null || bdays >= DEBT_BACKUP_WARN_DAYS)) {
         const warn = document.createElement('div');
         warn.className = 'viewer-banner no-print';
         warn.style.cssText = 'background:var(--warn-bg);border:1px solid var(--warn-border);color:var(--warn-text)';
@@ -4040,7 +4043,8 @@ end $$;
       bk.className = 'field-row';
       bk.style.marginTop = 'var(--space-4)';
       bk.innerHTML = `<button class="btn secondary btn-sm" id="deBackup">${icon('box', 15)}สำรองสมุดหนี้ (ไฟล์แยก)</button>
-        <span class="hint" style="margin:0;align-self:center">ข้อมูลนี้ไม่รวมอยู่ในไฟล์สำรองของร้าน · <b id="deBackupWhen"></b></span>`;
+        <span class="hint" style="margin:0;align-self:center">ข้อมูลนี้ไม่รวมอยู่ในไฟล์สำรองของร้าน · <b id="deBackupWhen"></b>${
+          window.matchMedia('(min-width: 900px)').matches ? '' : ' · ตัวเลขนี้นับแยกแต่ละเครื่อง ให้สำรองจริงที่คอม'}</span>`;
       app.appendChild(bk);
       const bdText = () => {
         const d = daysSinceDebtBackup();
