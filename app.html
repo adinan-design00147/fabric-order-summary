@@ -1750,15 +1750,8 @@
       { key: 'profile',   label: 'โปรไฟล์ผู้ใช้', icon: 'user' },
     ];
     // แถบล่างมือถือ: 4 หน้าหลัก + ปุ่มเพิ่มเติมสำหรับที่เหลือ
-    const MOBILE_NAV = ['home', 'orders', 'calendar', 'fabric'];
-    // เมนูเพิ่มเติมบนมือถือ — แบ่งกลุ่มให้หาง่าย (ลำดับตามความถี่ที่ใช้จริง)
-    const MOBILE_MORE_GROUPS = [
-      { label: 'งานประจำวัน', keys: ['stock', 'purchases', 'customers', 'receipts'] },
-      { label: 'ลงเวลาทำงาน', keys: ['attendance', 'schedule', 'timesheet'] },
-      { label: 'ตั้งค่าร้าน',   keys: ['dashboard', 'products', 'users', 'trash', 'health', 'profile'] },
-      { label: 'ส่วนตัว',      keys: ['debts'], superOnly: true },
-    ];
-    const MOBILE_MORE = MOBILE_MORE_GROUPS.flatMap(g => g.keys);
+    // แถบล่าง = ทางลัด 5 อันที่กดบ่อยสุด · เมนูที่เหลือทั้งหมดอยู่ในกริดหน้าแรก (#/home)
+    const MOBILE_NAV = ['home', 'orders', 'calendar', 'fabric', 'attendance'];
     const PAY_METHODS = ['เงินสด', 'โอนธนาคาร', 'พร้อมเพย์', 'เก็บปลายทาง', 'บัตรเครดิต', 'อื่นๆ'];
 
     // ช่องทางรับออเดอร์ (แก้เพิ่ม/ลดได้ที่นี่)
@@ -1873,7 +1866,6 @@
       ).join('');
 
       const bottom = document.getElementById('bottomNav');
-      const moreActive = MOBILE_MORE.includes(currentView);
       bottom.innerHTML = MOBILE_NAV.map(k => {
         const m = viewMeta(k);
         const label = k === 'fabric' ? 'งานผลิต' : m.label;
@@ -1881,45 +1873,10 @@
         return `<a class="nav-item ${currentView === k ? 'active' : ''}" href="${routeFor(k)}" data-key="${k}">
                   <span class="nav-ico">${icon(m.icon, 21)}${dot}</span><span>${esc(label)}</span>
                 </a>`;
-      }).join('') + `
-        <button class="nav-item ${moreActive ? 'active' : ''}" id="moreBtn">
-          <span class="nav-ico">${icon('more', 21)}</span><span>เพิ่มเติม</span>
-        </button>`;
-
+      }).join('');
       // ลิงก์เปลี่ยนหน้าเองผ่าน hash — ไม่ต้องผูก click (จะได้กดค้างเปิดแท็บใหม่ได้)
-      document.getElementById('moreBtn')?.addEventListener('click', openMoreSheet);
     }
 
-    function openMoreSheet() {
-      document.getElementById('moreSheet')?.remove();
-      const wrap = document.createElement('div');
-      wrap.id = 'moreSheet';
-      wrap.className = 'sheet-backdrop no-print';
-      wrap.innerHTML = `
-        <div class="sheet">
-          <div class="sheet-bar"></div>
-          ${MOBILE_MORE_GROUPS.filter(g => !g.superOnly || isSuperAdmin()).map(g => `
-            <div class="sheet-title">${esc(g.label)}</div>
-            ${g.keys.filter(k => (k !== 'users' && k !== 'purchases') || isAdmin()).map(k => {
-              const m = viewMeta(k);
-              return `<button class="sheet-item ${currentView === k ? 'active' : ''}" data-key="${k}">
-                        <span class="nav-ico">${icon(m.icon, 20)}</span>
-                        <span class="si-label">${esc(m.label)}</span>
-                        <span class="si-go">${icon('chevron', 17)}</span>
-                      </button>`;
-            }).join('')}
-          `).join('')}
-          <button class="btn secondary block" id="sheetClose" style="margin-top:var(--space-3)">ปิด</button>
-        </div>
-      `;
-      document.body.appendChild(wrap);
-      const close = () => wrap.remove();
-      wrap.addEventListener('click', (e) => { if (e.target === wrap) close(); });
-      wrap.querySelector('#sheetClose').addEventListener('click', close);
-      wrap.querySelectorAll('.sheet-item').forEach(b => b.addEventListener('click', () => {
-        currentView = b.dataset.key; close(); boot();
-      }));
-    }
 
     function updateHeaderTitle() {
       const m = viewMeta(currentView);
@@ -3462,7 +3419,7 @@ end $$;
     // ===== เช็กว่ามีเวอร์ชันใหม่ไหม =====
     // เบราว์เซอร์ชอบจำไฟล์เก่าไว้ (cache) ทำให้ไม่เห็นของที่เพิ่งอัปเดต
     // ตัวนี้จะแอบเทียบเวอร์ชันกับไฟล์บนเซิร์ฟเวอร์ แล้วขึ้นแถบให้กดอัปเดต
-    const APP_BUILD = '20260826-2320';
+    const APP_BUILD = '20260826-2350';
 
     let lastUpdateCheck = 0;
 
