@@ -48,6 +48,7 @@
     --warn-bg: #fff6ed; --warn-border: #f5b77e; --warn-text: #92400e;
     --ok-bg: #eefbf3; --ok-text: #067647;
     --err-bg: #fdecea; --err-text: #b42318;
+    --soft: #f2f4f7;
     --radius: 14px;
     --space-1: 4px; --space-2: 8px; --space-3: 12px; --space-4: 16px;
     --space-5: 20px; --space-6: 24px; --space-8: 32px;
@@ -58,6 +59,7 @@
     --warn-bg: #3a2a17; --warn-border: #7a5320; --warn-text: #f0b866;
     --ok-bg: #16301f; --ok-text: #5fd497;
     --err-bg: #3a1a16; --err-text: #ff8b7d;
+    --soft: #232833;
   }
   html[data-theme="dark"] .switch-knob { background: #e8eaf0; }
   html[data-theme="dark"] .lot-actions { background: var(--accent-soft); }
@@ -927,6 +929,83 @@
              color: var(--accent); font-size: 13.5px; font-weight: 600; cursor: pointer; }
   .rc-thumb { width: 54px; height: 54px; border-radius: 10px; object-fit: cover; border: 1px solid var(--border); }
 
+  /* ===== หน้าแรก (#/home) ===== */
+  .home-head {
+    background: linear-gradient(135deg, var(--accent) 0%, color-mix(in srgb, var(--accent) 72%, #0b1f6b) 100%);
+    color: #fff; border-radius: var(--radius); padding: var(--space-5);
+    margin: 0 0 var(--space-4); position: relative; overflow: hidden;
+  }
+  .home-head::after {
+    content: ''; position: absolute; right: -50px; top: -70px;
+    width: 190px; height: 190px; border-radius: 50%; background: rgba(255,255,255,.08);
+  }
+  .home-head-top { display: flex; align-items: center; justify-content: space-between; }
+  .home-greet { font-size: 14px; opacity: .9; }
+  .home-out { background: rgba(255,255,255,.16); border: none; color: #fff; cursor: pointer;
+              width: 40px; height: 40px; border-radius: 12px; display: inline-flex;
+              align-items: center; justify-content: center; }
+  .home-out:active { transform: scale(.94); }
+  .home-me { display: flex; align-items: center; gap: 14px; margin-top: var(--space-4); position: relative; }
+  .home-avatar { width: 66px; height: 66px; border-radius: 18px; flex: none; position: relative;
+                 background: rgba(255,255,255,.2); border: 2px solid rgba(255,255,255,.45);
+                 display: flex; align-items: center; justify-content: center;
+                 font-size: 26px; font-weight: 800; }
+  .home-online { position: absolute; right: -3px; bottom: -3px; width: 16px; height: 16px;
+                 border-radius: 50%; background: #22c55e; border: 3px solid var(--accent); }
+  .home-me-txt { min-width: 0; }
+  .home-name { font-size: 21px; font-weight: 800; line-height: 1.25; }
+  .home-role { font-size: 13.5px; opacity: .92; margin-top: 1px; }
+  .home-login { font-size: 12px; opacity: .62; margin-top: 1px; }
+
+  .home-card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius);
+               padding: var(--space-4); margin-bottom: var(--space-4); }
+  .home-card-head { display: flex; align-items: center; gap: 8px; font-size: 15px; margin-bottom: var(--space-3); }
+  .home-card-head .ic { color: var(--accent); }
+  .home-more { margin-left: auto; font-size: 13px; font-weight: 600; color: var(--accent);
+               text-decoration: none; display: inline-flex; align-items: center; gap: 2px; }
+
+  .home-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-2); }
+  .home-slot { background: var(--soft); border-radius: 12px; padding: 12px 8px; text-align: center; }
+  .home-slot.ok { background: var(--ok-bg); }
+  .hs-l { display: block; font-size: 11.5px; color: var(--sub); }
+  .hs-v { display: block; font-size: 19px; font-weight: 800; font-variant-numeric: tabular-nums; margin-top: 2px; }
+  .home-slot.ok .hs-v { color: var(--ok-text); }
+  .home-badge { display: inline-block; margin-top: 4px; padding: 4px 10px; border-radius: 999px;
+                font-size: 12px; font-weight: 700; }
+  .home-badge.ok   { background: var(--ok-bg); color: var(--ok-text); }
+  .home-badge.late { background: var(--warn-bg); color: var(--warn-text); }
+  .home-badge.warn { background: var(--warn-bg); color: var(--warn-text); }
+  .home-badge.off  { background: var(--soft); color: var(--sub); }
+
+  .home-week { display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; }
+  .home-day { background: var(--soft); border-radius: 10px; padding: 8px 2px; text-align: center; line-height: 1.35; }
+  .home-day.today { background: var(--accent); color: #fff; }
+  .home-day.off { opacity: .55; }
+  .hd-n { display: block; font-size: 11px; color: var(--sub); }
+  .home-day.today .hd-n { color: rgba(255,255,255,.85); }
+  .hd-s { display: block; font-size: 12.5px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .hd-e { display: block; font-size: 11px; color: var(--sub); font-variant-numeric: tabular-nums; }
+  .home-day.today .hd-e { color: rgba(255,255,255,.8); }
+  .hd-off { display: block; font-size: 11px; color: var(--sub); }
+
+  .home-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-3); }
+  .home-tile { display: flex; flex-direction: column; align-items: center; gap: 8px; text-decoration: none;
+               color: var(--text); background: var(--card); border: 1px solid var(--border);
+               border-radius: 16px; padding: var(--space-4) 6px; min-height: 104px;
+               justify-content: center; transition: transform .12s ease; }
+  .home-tile:active { transform: scale(.95); }
+  .tile-ico { width: 52px; height: 52px; border-radius: 15px; color: #fff; position: relative;
+              display: inline-flex; align-items: center; justify-content: center; }
+  .tile-lbl { font-size: 12.5px; font-weight: 600; text-align: center; line-height: 1.3; }
+  .tile-dot { position: absolute; top: -5px; right: -5px; min-width: 19px; height: 19px; padding: 0 5px;
+              border-radius: 999px; background: #d92d20; color: #fff; font-size: 11px; font-weight: 700;
+              line-height: 19px; text-align: center; box-shadow: 0 0 0 2px var(--card); }
+  html[data-theme="dark"] .tile-dot { background: #ff8b7d; color: #2a1210; }
+  .home-foot { text-align: center; font-size: 11.5px; color: var(--sub); margin: var(--space-5) 0 var(--space-3); }
+
+  @media (max-width: 380px) { .home-grid { gap: var(--space-2); } .tile-ico { width: 46px; height: 46px; } }
+  @media (min-width: 901px) { .home-grid { grid-template-columns: repeat(6, 1fr); } }
+
   @media print {
     .sidebar, .bottom-nav, header, .selbar, .no-print { display: none !important; }
     .container { margin: 0 !important; padding: 0 !important; max-width: none !important; }
@@ -1633,7 +1712,7 @@
     let SETTINGS = {};   // ห้ามเป็น null — หลายหน้าอ่านค่าตรงๆ เช่น vatOn()
     let lastSelectedLotId = null;
     let activeTab = 'daily';
-    const HOME_VIEW = 'orders';        // หน้าแรกหลังเข้าระบบ = My Job
+    const HOME_VIEW = 'home';          // หน้าแรกหลังเข้าระบบ = หน้ารวมทางลัด
     let currentView = HOME_VIEW;
     let dashCharts = [];
 
@@ -1645,7 +1724,8 @@
     };
 
     const NAV_ITEMS = [
-      { key: 'dashboard', label: 'แดชบอร์ด', icon: 'dashboard' },
+      { key: 'home',      label: 'หน้าแรก',   icon: 'dashboard' },
+      { key: 'dashboard', label: 'แดชบอร์ด', icon: 'chart' },
       { key: 'calendar',  label: 'ปฏิทิน',   icon: 'calendar' },
       { sep: true },
       { key: 'orders',    label: 'My Job',       icon: 'clipboard' },
@@ -1670,12 +1750,12 @@
       { key: 'profile',   label: 'โปรไฟล์ผู้ใช้', icon: 'user' },
     ];
     // แถบล่างมือถือ: 4 หน้าหลัก + ปุ่มเพิ่มเติมสำหรับที่เหลือ
-    const MOBILE_NAV = ['dashboard', 'orders', 'calendar', 'fabric'];
+    const MOBILE_NAV = ['home', 'orders', 'calendar', 'fabric'];
     // เมนูเพิ่มเติมบนมือถือ — แบ่งกลุ่มให้หาง่าย (ลำดับตามความถี่ที่ใช้จริง)
     const MOBILE_MORE_GROUPS = [
       { label: 'งานประจำวัน', keys: ['stock', 'purchases', 'customers', 'receipts'] },
       { label: 'ลงเวลาทำงาน', keys: ['attendance', 'schedule', 'timesheet'] },
-      { label: 'ตั้งค่าร้าน',   keys: ['products', 'users', 'trash', 'health', 'profile'] },
+      { label: 'ตั้งค่าร้าน',   keys: ['dashboard', 'products', 'users', 'trash', 'health', 'profile'] },
       { label: 'ส่วนตัว',      keys: ['debts'], superOnly: true },
     ];
     const MOBILE_MORE = MOBILE_MORE_GROUPS.flatMap(g => g.keys);
@@ -1701,7 +1781,8 @@
     };
 
     function viewMeta(key) {
-      if (key === 'dashboard') return { label: 'แดชบอร์ด', icon: 'dashboard' };
+      if (key === 'home') return { label: 'หน้าแรก', icon: 'dashboard' };
+      if (key === 'dashboard') return { label: 'แดชบอร์ด', icon: 'chart' };
       if (key === 'calendar') return { label: 'ปฏิทิน', icon: 'calendar' };
       if (key === 'customers') return { label: 'ข้อมูลลูกค้า', icon: 'user' };
       if (key === 'receipts') return { label: 'ใบเสร็จ', icon: 'receipt' };
@@ -1729,7 +1810,7 @@
     let jobQuick = null;      // ตัวกรองด่วนจากแถบทักทาย: today | due | unpaid
 
     // ===== URL routing (ทำให้กดค้าง/คลิกขวา → เปิดในแท็บใหม่ได้ และปุ่ม back ใช้งานได้) =====
-    const VALID_VIEWS = ['dashboard', 'calendar', 'orders', 'products', 'fabric', 'stock', 'stockreport', 'purchases', 'customers', 'receipts', 'attendance', 'schedule', 'timesheet', 'users', 'debts', 'trash', 'health', 'profile'];
+    const VALID_VIEWS = ['home', 'dashboard', 'calendar', 'orders', 'products', 'fabric', 'stock', 'stockreport', 'purchases', 'customers', 'receipts', 'attendance', 'schedule', 'timesheet', 'users', 'debts', 'trash', 'health', 'profile'];
 
     function routeFor(view, id) {
       if (view === 'orderView') return '#/order/' + id;
@@ -2008,7 +2089,9 @@
 
       document.getElementById('app').innerHTML = '<div class="loading">กำลังโหลดข้อมูล...</div>';
       try {
-        if (currentView === 'dashboard') {
+        if (currentView === 'home') {
+          await loadHome();
+        } else if (currentView === 'dashboard') {
           await loadDashboard();
         } else if (currentView === 'calendar') {
           await loadCalendar();
@@ -2063,6 +2146,140 @@
         void appEl.offsetWidth;          // บังคับให้เบราว์เซอร์เริ่มแอนิเมชันใหม่
         appEl.classList.add('view-in');
       }
+    }
+
+    // ===== หน้าแรก (#/home) =====
+    // หน้าเปิดแอป — ดูสถานะตัวเองแล้วกดเข้าเมนูที่จะทำ ไม่ใช่หน้าอ่านตัวเลขเยอะๆ (อันนั้นคือแดชบอร์ด)
+    // เอาเฉพาะข้อมูลที่มีจริงในระบบ ไม่มีระบบลา จึงไม่มีการ์ดสิทธิ์วันลา
+    let HOME = { today: null, sched: null };
+
+    // สีไอคอนของแต่ละเมนู — จำง่ายกว่าไอคอนสีเดียวหมด
+    const HOME_TILE_COLOR = {
+      attendance: '#0ea47a', orders: '#6d3fd4', fabric: '#e8720c', dashboard: '#2563eb',
+      calendar:   '#3454d1', products: '#c026a3', stock: '#0891b2', purchases: '#16a34a',
+      customers:  '#dc2626', receipts: '#475569', schedule: '#7c3aed', timesheet: '#0d9488',
+      stockreport: '#0891b2', users: '#b45309', debts: '#be123c', trash: '#64748b',
+      health: '#0369a1', profile: '#4f46e5',
+    };
+
+    // เรียงตามที่ใช้จริงในร้าน ไม่ใช่ตามลำดับในเมนูข้าง
+    const HOME_TILES = ['attendance', 'orders', 'fabric', 'calendar', 'stock', 'purchases',
+      'customers', 'receipts', 'products', 'schedule', 'timesheet', 'dashboard',
+      'users', 'debts', 'trash', 'health', 'profile'];
+
+    async function loadHome() {
+      document.getElementById('statusMsg').textContent = 'กำลังโหลด...';
+      const [tRes, sRes] = await Promise.all([
+        sb.from('attendances').select('*').eq('user_id', ME ? ME.id : null).eq('work_date', dateKey()).maybeSingle(),
+        sb.from('work_schedules').select('*'),
+      ]);
+      ATT.schedules = sRes.data || [];      // scheduleOf() อ่านจากตรงนี้
+      HOME = { today: tRes.data || null, sched: scheduleOf(ME ? ME.id : null) };
+      renderHome();
+      document.getElementById('statusMsg').textContent = 'อัปเดตล่าสุด: ' + new Date().toLocaleString('th-TH');
+    }
+
+    function homeGreet() {
+      const h = new Date().getHours();
+      return h < 12 ? 'สวัสดีตอนเช้า' : h < 17 ? 'สวัสดีตอนบ่าย' : 'สวัสดีตอนเย็น';
+    }
+
+    function renderHome() {
+      const app = document.getElementById('app');
+      app.innerHTML = '';
+
+      const login = prettyLogin(ME ? ME.email : '') || '';
+      const name = MY_NAME || login.split('@')[0] || 'ผู้ใช้';
+      const initial = (name.trim()[0] || '?').toUpperCase();
+      const rm = roleMeta(MY_ROLE);
+      const t = HOME.today;
+      const sc = HOME.sched || { days: DEFAULT_DAYS, grace_minutes: 30 };
+
+      // ---- หัวสีน้ำเงิน ----
+      const head = document.createElement('div');
+      head.className = 'home-head';
+      head.innerHTML = `
+        <div class="home-head-top">
+          <span class="home-greet">${esc(homeGreet())}</span>
+          <button class="home-out" id="homeOut" aria-label="ออกจากระบบ" title="ออกจากระบบ">${icon('signout', 20)}</button>
+        </div>
+        <div class="home-me">
+          <div class="home-avatar">${esc(initial)}<span class="home-online"></span></div>
+          <div class="home-me-txt">
+            <div class="home-name">${esc(name)}</div>
+            <div class="home-role">${esc(rm.label)}</div>
+            <div class="home-login">${esc(login)}</div>
+          </div>
+        </div>`;
+      app.appendChild(head);
+      head.querySelector('#homeOut').addEventListener('click', async () => {
+        if (confirm('ออกจากระบบ?')) await sb.auth.signOut();
+      });
+
+      // ---- สถานะวันนี้ ----
+      const dow = new Date().getDay();
+      const plan = sc.days[dow] || DEFAULT_DAYS[dow];
+      const stTxt = !plan.work && !t ? 'วันหยุด'
+        : !t || !t.clock_in ? 'ยังไม่ลงเวลา'
+        : t.late_minutes ? 'มาสาย ' + t.late_minutes + ' น.'
+        : t.clock_out ? 'ครบแล้ว' : 'กำลังทำงาน';
+      const stCls = !t || !t.clock_in ? (plan.work ? 'warn' : 'off') : t.late_minutes ? 'late' : 'ok';
+
+      const card1 = document.createElement('div');
+      card1.className = 'home-card';
+      card1.innerHTML = `
+        <div class="home-card-head">${icon('clock', 17)}<b>สถานะวันนี้</b>
+          <a class="home-more" href="${routeFor('attendance')}">ลงเวลา ${icon('chevron', 15)}</a></div>
+        <div class="home-3">
+          <div class="home-slot ${t && t.clock_in ? 'ok' : ''}"><span class="hs-l">เข้างาน</span><span class="hs-v">${hhmm(t && t.clock_in)}</span></div>
+          <div class="home-slot ${t && t.clock_out ? 'ok' : ''}"><span class="hs-l">ออกงาน</span><span class="hs-v">${hhmm(t && t.clock_out)}</span></div>
+          <div class="home-slot"><span class="hs-l">สถานะ</span><span class="home-badge ${stCls}">${esc(stTxt)}</span></div>
+        </div>
+        ${plan.work && (!t || !t.clock_in)
+          ? `<a class="btn block" href="${routeFor('attendance')}" style="margin-top:12px">${icon('signin', 16)}ไปลงเวลาเข้างาน</a>` : ''}`;
+      app.appendChild(card1);
+
+      // ---- ตารางงานสัปดาห์นี้ ----
+      const DOW = ['อา', 'จ', 'อ', 'พ', 'พฤ', 'ศ', 'ส'];
+      const card2 = document.createElement('div');
+      card2.className = 'home-card';
+      card2.innerHTML = `
+        <div class="home-card-head">${icon('calendar', 17)}<b>ตารางงานสัปดาห์นี้</b>
+          <a class="home-more" href="${routeFor('schedule')}">รายละเอียด ${icon('chevron', 15)}</a></div>
+        <div class="home-week">${DOW.map((d, i) => {
+          const p = sc.days[i] || DEFAULT_DAYS[i];
+          return `<div class="home-day ${i === dow ? 'today' : ''} ${p.work ? '' : 'off'}">
+            <span class="hd-n">${d}</span>
+            ${p.work ? `<span class="hd-s">${esc(p.start)}</span><span class="hd-e">${esc(p.end)}</span>`
+                     : '<span class="hd-off">หยุด</span>'}
+          </div>`;
+        }).join('')}</div>`;
+      app.appendChild(card2);
+
+      // ---- กริดเมนู ----
+      const canSee = (k) => {
+        if (k === 'debts') return isSuperAdmin();
+        if (k === 'purchases' || k === 'users') return isAdmin();
+        return true;
+      };
+      const grid = document.createElement('div');
+      grid.className = 'home-grid';
+      grid.innerHTML = HOME_TILES.filter(canSee).map(k => {
+        const m = viewMeta(k);
+        const c = HOME_TILE_COLOR[k] || 'var(--accent)';
+        const badge = k === 'orders' && JOB_ALERT ? `<span class="tile-dot">${JOB_ALERT > 9 ? '9+' : JOB_ALERT}</span>`
+                    : k === 'debts' && DEBT_ALERT ? `<span class="tile-dot">${DEBT_ALERT}</span>` : '';
+        return `<a class="home-tile" href="${routeFor(k)}">
+          <span class="tile-ico" style="background:${c}">${icon(m.icon, 24)}${badge}</span>
+          <span class="tile-lbl">${esc(m.label)}</span>
+        </a>`;
+      }).join('');
+      app.appendChild(grid);
+
+      const foot = document.createElement('div');
+      foot.className = 'home-foot';
+      foot.textContent = 'Haifa Design · ' + APP_BUILD;
+      app.appendChild(foot);
     }
 
     // ===== แดชบอร์ดรวม =====
@@ -3245,7 +3462,7 @@ end $$;
     // ===== เช็กว่ามีเวอร์ชันใหม่ไหม =====
     // เบราว์เซอร์ชอบจำไฟล์เก่าไว้ (cache) ทำให้ไม่เห็นของที่เพิ่งอัปเดต
     // ตัวนี้จะแอบเทียบเวอร์ชันกับไฟล์บนเซิร์ฟเวอร์ แล้วขึ้นแถบให้กดอัปเดต
-    const APP_BUILD = '20260826-2205';
+    const APP_BUILD = '20260826-2320';
 
     let lastUpdateCheck = 0;
 
