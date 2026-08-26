@@ -1159,18 +1159,24 @@
     .tabs { gap: 6px; }
     .tab-btn { border-radius: 12px; font-size: 13px; }
 
-    /* ---- แถบล่าง: ลอยแบบแอป มีตัวชี้หน้าปัจจุบัน ---- */
+    /* ---- แถบล่าง: เต็มความกว้าง ติดขอบจอ แบบ tab bar ของ iOS ---- */
     .bottom-nav {
-      left: 10px; right: 10px; bottom: calc(8px + env(safe-area-inset-bottom, 0px));
-      border: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
-      border-radius: 20px; padding: 6px 4px;
-      background: color-mix(in srgb, var(--card) 92%, transparent);
-      backdrop-filter: saturate(1.4) blur(12px);
-      -webkit-backdrop-filter: saturate(1.4) blur(12px);
-      box-shadow: 0 8px 28px -6px rgba(16,24,40,.22);
+      left: 0; right: 0; bottom: 0;
+      border: none; border-top: 1px solid var(--border); border-radius: 0;
+      padding: 6px 4px calc(6px + env(safe-area-inset-bottom, 0px));
+      background: var(--card);
+      box-shadow: 0 -1px 12px -4px rgba(16,24,40,.14);
     }
-    .bottom-nav .nav-item { border-radius: 14px; transition: background .18s ease, color .18s ease, transform .12s ease; }
-    .bottom-nav .nav-item.active { background: var(--accent-soft); }
+    .bottom-nav .nav-item {
+      position: relative; border-radius: 12px;
+      transition: color .18s ease, transform .12s ease;
+    }
+    /* ขีดสั้นๆ เหนือปุ่มบอกว่าอยู่หน้าไหน — เต็มแถบแล้วกล่องพื้นหลังจะดูอึดอัด */
+    .bottom-nav .nav-item.active::before {
+      content: ''; position: absolute; top: -6px; left: 50%; transform: translateX(-50%);
+      width: 26px; height: 3px; border-radius: 999px; background: var(--accent);
+    }
+    .bottom-nav .nav-item.active { background: none; }
     .bottom-nav .nav-item.active .nav-ico { transform: translateY(-1px); }
     /* ตัด tap highlight ของ iOS ไปแล้ว ต้องมีฟีดแบ็กของเราเองแทน ไม่งั้นกดแล้วเงียบสนิท */
     .bottom-nav .nav-item:active { transform: scale(.94); background: var(--accent-soft); }
@@ -3239,7 +3245,7 @@ end $$;
     // ===== เช็กว่ามีเวอร์ชันใหม่ไหม =====
     // เบราว์เซอร์ชอบจำไฟล์เก่าไว้ (cache) ทำให้ไม่เห็นของที่เพิ่งอัปเดต
     // ตัวนี้จะแอบเทียบเวอร์ชันกับไฟล์บนเซิร์ฟเวอร์ แล้วขึ้นแถบให้กดอัปเดต
-    const APP_BUILD = '20260826-2115';
+    const APP_BUILD = '20260826-2205';
 
     let lastUpdateCheck = 0;
 
