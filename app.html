@@ -182,6 +182,10 @@
 
   @media (max-width: 640px) {
     .field-row { flex-direction: column; align-items: stretch; }
+    /* กฎด้านบนสั่ง flex: 1 1 170px ไว้ตอนแถวเป็นแนวนอน (170 = ความกว้าง)
+       พอแถวกลายเป็นแนวตั้ง เลข 170 จะกลายเป็น "ความสูง" แล้ว flex-grow ยืดต่ออีก
+       ช่องกรอกเลยบวมเป็น 170px ทุกที่ในระบบบนมือถือ — ต้องรีเซ็ตตรงนี้ */
+    .field-row > input:not(.inline-input), .field-row > select:not(.inline-input) { flex: 0 0 auto; }
     .field-row .btn { width: 100%; }
 
     .form-grid { grid-template-columns: repeat(2, 1fr); }
@@ -697,6 +701,12 @@
   .threshold-row { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--sub); margin-top: 12px;
                    flex-wrap: wrap; background: var(--soft); padding: 10px 12px; border-radius: 10px; }
   .threshold-row input { width: 96px; min-height: 40px; padding: 8px 10px; font-size: 15px; background: var(--card); }
+  /* แถวทำงานของการ์ดสต็อก — ช่องจำนวนกับ 2 ปุ่มอยู่แถวเดียวกันเสมอ ไม่ตกบรรทัดบนมือถือ */
+  .stock-act { display: flex; align-items: center; gap: 8px; margin-top: 12px; }
+  .stock-act input { flex: 1 1 auto; min-width: 0; }
+  .stock-act .btn { flex: 0 0 auto; white-space: nowrap; padding: 12px 14px; }
+  .lot-head .s-del { margin-left: 8px; vertical-align: middle; }
+  @media (max-width: 380px) { .stock-act .btn { padding: 12px 10px; font-size: 13px; } }
   .stock-log { margin-top: 12px; font-size: 12.5px; }
   .stock-log summary { cursor: pointer; color: var(--sub); font-weight: 600; padding: 4px 0; }
   .log-line { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 6px 0; border-top: 1px solid var(--border); }
@@ -3373,7 +3383,7 @@ end $$;
     // ===== เช็กว่ามีเวอร์ชันใหม่ไหม =====
     // เบราว์เซอร์ชอบจำไฟล์เก่าไว้ (cache) ทำให้ไม่เห็นของที่เพิ่งอัปเดต
     // ตัวนี้จะแอบเทียบเวอร์ชันกับไฟล์บนเซิร์ฟเวอร์ แล้วขึ้นแถบให้กดอัปเดต
-    const APP_BUILD = '20260827-0130';
+    const APP_BUILD = '20260827-0210';
 
     let lastUpdateCheck = 0;
 
@@ -6214,6 +6224,7 @@ end $$;
             <div>
               <span style="font-size:15px">${esc(it.name)}</span>
               <span class="st ${st.cls}" style="margin-left:8px">${esc(st.label)}</span>
+              <button class="icon-btn icon-btn-delete s-del admin-only" aria-label="ลบวัตถุดิบ" title="ลบวัตถุดิบ">${icon('trash', 17)}</button>
               <div style="font-size:11.5px;color:var(--sub);font-weight:400;margin-top:2px">
                 ${esc(it.category)} · รับเข้ารวม ${fmtQty(it.total_qty)} ${esc(it.unit)} · ใช้ไป ${fmtQty(it.used_qty)} ${esc(it.unit)}
               </div>
@@ -6225,11 +6236,10 @@ end $$;
           </div>
           <div style="padding:var(--space-4)">
             <div class="stock-bar"><div style="width:${Math.max(0, Math.min(100, left))}%;background:${st.color}"></div></div>
-            <div class="field-row" style="margin-top:12px">
+            <div class="stock-act">
               <input class="s-qty" type="number" min="0" step="any" placeholder="จำนวน (${esc(it.unit)})" aria-label="จำนวน" inputmode="decimal">
-              <button class="btn secondary btn-sm s-out">${icon('back', 15)}เบิกใช้</button>
-              <button class="btn btn-sm s-in">${icon('plus', 15)}รับเข้าเพิ่ม</button>
-              <button class="icon-btn icon-btn-delete s-del" aria-label="ลบวัตถุดิบ" title="ลบ">${icon('trash', 18)}</button>
+              <button class="btn secondary btn-sm s-out">${icon('back', 15)}เบิก</button>
+              <button class="btn btn-sm s-in">${icon('plus', 15)}รับเข้า</button>
             </div>
             <div class="msg s-msg"></div>
             <div class="threshold-row">เตือนเมื่อเหลือต่ำกว่า
