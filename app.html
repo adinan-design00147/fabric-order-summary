@@ -875,6 +875,29 @@
   }
 
   /* แถบแจ้งผลมุมล่างจอ — ลอยเหนือแถบเมนูล่างของมือถือ */
+  /* ---- ให้รู้สึกเป็นแอปมือถือ ---- */
+  @keyframes viewIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+  #app.view-in { animation: viewIn .18s ease both; }
+
+  @keyframes sheetUp { from { transform: translateY(100%); } to { transform: none; } }
+  @keyframes fadeIn  { from { opacity: 0; } to { opacity: 1; } }
+  .sheet-backdrop { animation: fadeIn .2s ease both; }
+  .sheet { animation: sheetUp .28s cubic-bezier(.32,.72,0,1) both; }
+
+  /* ป้ายจุดแดงบนไอคอนแถบล่าง */
+  .nav-dot {
+    position: absolute; top: -4px; left: 50%; margin-left: 4px;
+    min-width: 17px; height: 17px; padding: 0 4px; border-radius: 999px;
+    background: #d92d20; color: #fff; font-size: 10px; font-weight: 700; line-height: 17px;
+    text-align: center; box-shadow: 0 0 0 2px var(--card);
+  }
+  html[data-theme="dark"] .nav-dot { background: #ff8b7d; color: #2a1210; }
+
+  /* เครื่องที่ตั้ง "ลดการเคลื่อนไหว" ไว้ ให้ปิดแอนิเมชันทั้งหมด */
+  @media (prefers-reduced-motion: reduce) {
+    #app.view-in, .sheet, .sheet-backdrop, .toast { animation: none; transition: none; }
+  }
+
   .toast {
     position: fixed; left: 50%; transform: translateX(-50%) translateY(120%);
     bottom: calc(96px + env(safe-area-inset-bottom, 0px)); z-index: 500;
@@ -1146,9 +1169,20 @@
       -webkit-backdrop-filter: saturate(1.4) blur(12px);
       box-shadow: 0 8px 28px -6px rgba(16,24,40,.22);
     }
-    .bottom-nav .nav-item { border-radius: 14px; transition: background .18s ease, color .18s ease, transform .18s ease; }
+    .bottom-nav .nav-item { border-radius: 14px; transition: background .18s ease, color .18s ease, transform .12s ease; }
     .bottom-nav .nav-item.active { background: var(--accent-soft); }
     .bottom-nav .nav-item.active .nav-ico { transform: translateY(-1px); }
+    /* ตัด tap highlight ของ iOS ไปแล้ว ต้องมีฟีดแบ็กของเราเองแทน ไม่งั้นกดแล้วเงียบสนิท */
+    .bottom-nav .nav-item:active { transform: scale(.94); background: var(--accent-soft); }
+    .bottom-nav .nav-ico { position: relative; }
+    /* แถบโปร่งแบบแอป iOS — เบราว์เซอร์ที่ไม่รองรับ blur จะได้พื้นทึบตามเดิม */
+    @supports (backdrop-filter: blur(20px)) or (-webkit-backdrop-filter: blur(20px)) {
+      .bottom-nav {
+        background: color-mix(in srgb, var(--card) 78%, transparent);
+        -webkit-backdrop-filter: blur(20px) saturate(180%);
+        backdrop-filter: blur(20px) saturate(180%);
+      }
+    }
     .bottom-nav .nav-item:active { transform: scale(.94); }
 
     /* ---- ชีตเมนูเพิ่มเติม ---- */
@@ -1722,6 +1756,15 @@
       currentView = VALID_VIEWS.includes(seg) ? seg : HOME_VIEW;
     }
 
+    // ---- ตำแหน่งเลื่อนของแต่ละหน้า ----
+    // เปลี่ยนหน้า = ขึ้นบนสุดเสมอ (เหมือนแอปมือถือ) · กด back = คืนตำแหน่งเดิมที่เคยดูค้างไว้
+    let navIsBack = false;
+    let lastRenderedView = null;
+    const scrollMemo = {};
+    const viewKey = () => currentView + (viewingOrderId || viewingReceiptId || '');
+
+    window.addEventListener('popstate', () => { navIsBack = true; });
+
     window.addEventListener('hashchange', () => {
       if (suppressHash) return;
       applyHash();
@@ -1747,8 +1790,9 @@
       bottom.innerHTML = MOBILE_NAV.map(k => {
         const m = viewMeta(k);
         const label = k === 'fabric' ? 'งานผลิต' : m.label;
+        const dot = k === 'orders' && JOB_ALERT ? `<span class="nav-dot">${JOB_ALERT > 9 ? '9+' : JOB_ALERT}</span>` : '';
         return `<a class="nav-item ${currentView === k ? 'active' : ''}" href="${routeFor(k)}" data-key="${k}">
-                  <span class="nav-ico">${icon(m.icon, 21)}</span><span>${esc(label)}</span>
+                  <span class="nav-ico">${icon(m.icon, 21)}${dot}</span><span>${esc(label)}</span>
                 </a>`;
       }).join('') + `
         <button class="nav-item ${moreActive ? 'active' : ''}" id="moreBtn">
@@ -1943,6 +1987,19 @@
         debtAlertLoaded = true;
         refreshDebtAlert().then(renderNav).catch(() => {});
       }
+      if (!jobAlertLoaded) {
+        jobAlertLoaded = true;
+        refreshJobAlert().then(renderNav).catch(() => {});
+      }
+      // เก็บตำแหน่งเลื่อนของหน้าเดิมไว้ก่อน เผื่อกด back กลับมา
+      const nextKey = viewKey();
+      if (lastRenderedView && lastRenderedView !== nextKey) {
+        scrollMemo[lastRenderedView] = window.scrollY;
+      }
+      const sameView = lastRenderedView === nextKey;
+      const restoreTo = navIsBack ? (scrollMemo[nextKey] || 0) : 0;
+      navIsBack = false;
+
       document.getElementById('app').innerHTML = '<div class="loading">กำลังโหลดข้อมูล...</div>';
       try {
         if (currentView === 'dashboard') {
@@ -1989,6 +2046,16 @@
         }
       } catch (err) {
         document.getElementById('statusMsg').textContent = 'โหลดไม่สำเร็จ: ' + err.message;
+      }
+
+      lastRenderedView = viewKey();
+      if (!sameView) {
+        window.scrollTo({ top: restoreTo, behavior: 'auto' });
+        // เนื้อหาค่อยๆ ขึ้น ไม่กระพริบ (เครื่องที่ตั้งลดการเคลื่อนไหว CSS จะข้ามให้เอง)
+        const appEl = document.getElementById('app');
+        appEl.classList.remove('view-in');
+        void appEl.offsetWidth;          // บังคับให้เบราว์เซอร์เริ่มแอนิเมชันใหม่
+        appEl.classList.add('view-in');
       }
     }
 
@@ -3172,7 +3239,7 @@ end $$;
     // ===== เช็กว่ามีเวอร์ชันใหม่ไหม =====
     // เบราว์เซอร์ชอบจำไฟล์เก่าไว้ (cache) ทำให้ไม่เห็นของที่เพิ่งอัปเดต
     // ตัวนี้จะแอบเทียบเวอร์ชันกับไฟล์บนเซิร์ฟเวอร์ แล้วขึ้นแถบให้กดอัปเดต
-    const APP_BUILD = '20260826-1955';
+    const APP_BUILD = '20260826-2115';
 
     let lastUpdateCheck = 0;
 
@@ -3616,6 +3683,16 @@ end $$;
       if (!t) return null;
       return Math.floor((Date.now() - new Date(t).getTime()) / 86400000);
     }
+    let JOB_ALERT = 0;           // ออเดอร์ที่เลยกำหนดส่งแล้วและยังไม่ได้ส่ง
+    let jobAlertLoaded = false;
+
+    /** นับงานเลยกำหนดส่ง — ยิงเบาๆ ครั้งเดียวต่อ session แล้วรีเฟรชหลังเข้าหน้า My Job */
+    async function refreshJobAlert() {
+      const { data } = await sb.from('orders').select('id')
+        .lt('due_date', dateKey()).is('delivered_at', null).neq('status', 'cancelled');
+      JOB_ALERT = (data || []).length;
+    }
+
     let DEBT_ALERT = 0;          // รายการประจำที่ยังไม่ได้ลงสมุดของเดือนนี้
     let debtAlertLoaded = false;
 
@@ -6249,6 +6326,7 @@ end $$;
       const [ordRes] = await Promise.all([q, fetchProducts()]);
       if (ordRes.error) throw ordRes.error;
       renderOrders(ordRes.data);
+      refreshJobAlert().then(renderNav).catch(() => {});
       document.getElementById('statusMsg').textContent = 'อัปเดตล่าสุด: ' + new Date().toLocaleString('th-TH');
     }
 
