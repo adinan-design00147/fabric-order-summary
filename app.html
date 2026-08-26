@@ -3373,7 +3373,7 @@ end $$;
     // ===== เช็กว่ามีเวอร์ชันใหม่ไหม =====
     // เบราว์เซอร์ชอบจำไฟล์เก่าไว้ (cache) ทำให้ไม่เห็นของที่เพิ่งอัปเดต
     // ตัวนี้จะแอบเทียบเวอร์ชันกับไฟล์บนเซิร์ฟเวอร์ แล้วขึ้นแถบให้กดอัปเดต
-    const APP_BUILD = '20260827-0020';
+    const APP_BUILD = '20260827-0130';
 
     let lastUpdateCheck = 0;
 
@@ -6428,18 +6428,19 @@ end $$;
     }
 
     // ===== ออเดอร์ (รับออเดอร์ลูกค้า) =====
-    async function nextOrderNo() {
-      const now = new Date();
-      const prefix = 'OD' + String((now.getFullYear() + 543) % 100) + String(now.getMonth() + 1).padStart(2, '0');
-      const { data } = await sb.from('orders').select('order_no').like('order_no', prefix + '%')
-        .order('order_no', { ascending: false }).limit(1);
-      let run = 1;
-      if (data && data.length) {
-        const m = String(data[0].order_no).match(/-(\d+)$/);
-        if (m) run = parseInt(m[1]) + 1;
-      }
-      return prefix + '-' + String(run).padStart(3, '0');
+    /**
+     * เลขเอกสารออกจากฐานข้อมูล ไม่ใช่จากเว็บ
+     * เพราะเว็บอ่านเลขล่าสุดแล้วบวกเองไม่ได้ — 2 คนกดพร้อมกันจะได้เลขเดียวกัน
+     * และต้องนับ "สูงสุดของเดือนนั้น" ไม่ใช่จำนวนเอกสารทั้งหมด เลขถึงจะรีเซ็ตทุกเดือน
+     * ตัวกันเลขซ้ำจริงคือ unique index + insertWithDocNo() ที่ลองใหม่ให้อัตโนมัติ
+     */
+    async function nextDocNo(prefix) {
+      const { data, error } = await sb.rpc('next_doc_no', { p_prefix: prefix });
+      if (error) throw new Error('ออกเลขเอกสารไม่สำเร็จ: ' + error.message);
+      return data;
     }
+
+    const nextOrderNo = () => nextDocNo('OD');
 
     // โหลดเฉพาะช่วงล่าสุดก่อน (ค่าเริ่มต้น 3 เดือน) กดปุ่มขยายช่วงได้
     // พอข้อมูลโตขึ้นเป็นหลักพัน จะได้ไม่ดึงทั้งตารางทุกครั้งที่เปิดหน้า
@@ -7624,21 +7625,7 @@ end $$;
       });
     }
 
-    async function nextReceiptNo() {
-      const { data } = await sb.from('receipts').select('receipt_no').order('created_at', { ascending: false }).limit(1);
-      const now = new Date();
-      const prefix = 'RC' + String((now.getFullYear() + 543) % 100) + String(now.getMonth() + 1).padStart(2, '0');
-      let run = 1;
-      if (data && data.length) {
-        const m = String(data[0].receipt_no).match(/^RC(\d{4})-(\d+)$/);
-        if (m && m[1] === prefix.slice(2)) run = parseInt(m[2]) + 1;
-        else {
-          const { count } = await sb.from('receipts').select('id', { count: 'exact', head: true });
-          run = (count || 0) + 1;
-        }
-      }
-      return prefix + '-' + String(run).padStart(3, '0');
-    }
+    const nextReceiptNo = () => nextDocNo('RC');
 
     async function createReceipt(items, recipient, note, total) {
       const { no: receipt_no, id: receiptId } = await insertWithDocNo('receipts', nextReceiptNo, (no) => ({
