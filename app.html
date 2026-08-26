@@ -874,6 +874,36 @@
     #puSave { width: 100%; justify-content: center; }
   }
 
+  /* แถบแจ้งผลมุมล่างจอ — ลอยเหนือแถบเมนูล่างของมือถือ */
+  .toast {
+    position: fixed; left: 50%; transform: translateX(-50%) translateY(120%);
+    bottom: calc(96px + env(safe-area-inset-bottom, 0px)); z-index: 500;
+    display: inline-flex; align-items: center; gap: 8px; max-width: calc(100vw - 32px);
+    padding: 12px 18px; border-radius: 999px; font-size: 14px; font-weight: 600;
+    box-shadow: 0 8px 24px rgba(15,18,25,.22); opacity: 0; pointer-events: none;
+    transition: transform .25s ease, opacity .25s ease;
+  }
+  .toast.show { transform: translateX(-50%) translateY(0); opacity: 1; }
+  .toast.ok { background: var(--ok-bg); color: var(--ok-text); border: 1px solid var(--ok-text); }
+  .toast.error { background: var(--err-bg); color: var(--err-text); border: 1px solid var(--err-text); }
+  @media (min-width: 901px) { .toast { bottom: 28px; } }
+
+  /* ชิปเลือกหมวดรายจ่าย — แตะทีเดียว ไม่ต้องพิมพ์ */
+  .cat-chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0 2px; }
+  .cat-chip {
+    font-family: inherit; font-size: 13px; font-weight: 600; padding: 9px 14px; min-height: 42px;
+    border: 1px solid var(--border); border-radius: 999px; background: var(--card);
+    color: var(--sub); cursor: pointer;
+  }
+  .cat-chip.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+
+  /* แนบรูปใบเสร็จ */
+  .rc-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: var(--space-3); }
+  .rc-pick { display: inline-flex; align-items: center; gap: 8px; min-height: 46px; padding: 10px 16px;
+             border: 1px dashed var(--accent); border-radius: var(--radius); background: var(--accent-soft);
+             color: var(--accent); font-size: 13.5px; font-weight: 600; cursor: pointer; }
+  .rc-thumb { width: 54px; height: 54px; border-radius: 10px; object-fit: cover; border: 1px solid var(--border); }
+
   @media print {
     .sidebar, .bottom-nav, header, .selbar, .no-print { display: none !important; }
     .container { margin: 0 !important; padding: 0 !important; max-width: none !important; }
@@ -2980,6 +3010,24 @@
       return new Blob([...chunks, ...cdChunks, end], { type: 'application/zip' });
     }
 
+    /** แจ้งผลสั้นๆ มุมล่างจอ — บนมือถือกดบันทึกแล้วต้องรู้ทันทีว่าติดไหม ไม่ต้องเดา */
+    let toastTimer = null;
+    function toast(text, kind) {
+      let el = document.getElementById('toast');
+      if (!el) {
+        el = document.createElement('div');
+        el.id = 'toast';
+        el.className = 'toast no-print';
+        document.body.appendChild(el);
+      }
+      el.className = 'toast no-print ' + (kind === 'error' ? 'error' : 'ok');
+      el.innerHTML = (kind === 'error' ? icon('close', 17) : icon('check', 17)) + '<span></span>';
+      el.querySelector('span').textContent = text;
+      requestAnimationFrame(() => el.classList.add('show'));
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => el.classList.remove('show'), kind === 'error' ? 4000 : 2200);
+    }
+
     function downloadBlob(filename, blob) {
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -3124,7 +3172,7 @@ end $$;
     // ===== เช็กว่ามีเวอร์ชันใหม่ไหม =====
     // เบราว์เซอร์ชอบจำไฟล์เก่าไว้ (cache) ทำให้ไม่เห็นของที่เพิ่งอัปเดต
     // ตัวนี้จะแอบเทียบเวอร์ชันกับไฟล์บนเซิร์ฟเวอร์ แล้วขึ้นแถบให้กดอัปเดต
-    const APP_BUILD = '20260823-2340';
+    const APP_BUILD = '20260826-1955';
 
     let lastUpdateCheck = 0;
 
@@ -5479,7 +5527,12 @@ end $$;
           p_by: (ME && ME.email) ? prettyLogin(ME.email) : null,
         });
         $('puSave').disabled = false;
-        if (error) { msg.textContent = 'บันทึกไม่สำเร็จ: ' + error.message; msg.className = 'msg error'; return; }
+        if (error) {
+          msg.textContent = 'บันทึกไม่สำเร็จ: ' + error.message; msg.className = 'msg error';
+          toast('บันทึกไม่สำเร็จ', 'error');
+          return;
+        }
+        toast('บันทึกแล้ว ' + fmtBaht(round2(total)) + ' บาท');
         await loadPurchases();
       });
     }
@@ -5492,7 +5545,9 @@ end $$;
         <h2>${icon('plus', 16)}บันทึกรายจ่ายอื่น</h2>
         <div class="pu-form">
           <div class="field pu-wide"><label for="exCat">หมวดรายจ่าย</label>
-            <input id="exCat" list="exCatList" placeholder="เช่น ค่าน้ำมัน · พิมพ์หมวดใหม่เองได้" autocomplete="off">
+            <div class="cat-chips" id="exCatChips">${expenseCats().map(c =>
+              `<button type="button" class="cat-chip" data-c="${esc(c)}">${esc(c)}</button>`).join('')}</div>
+            <input id="exCat" list="exCatList" placeholder="หรือพิมพ์หมวดใหม่เอง" autocomplete="off">
             <datalist id="exCatList">${expenseCats().map(c => `<option value="${esc(c)}"></option>`).join('')}</datalist></div>
           <div class="field"><label for="exTotal">จ่ายไปเท่าไหร่ (บาท)</label>
             <input id="exTotal" type="number" min="0" step="any" inputmode="decimal" placeholder="เช่น 120"></div>
@@ -5506,7 +5561,13 @@ end $$;
           <div class="field pu-wide"><label for="exNote">หมายเหตุ</label>
             <input id="exNote" placeholder="เช่น ไปส่งของที่ยะลา"></div>
         </div>
-        <button class="btn" id="exSave">${icon('check', 15)}บันทึกรายจ่าย</button>
+        <div class="rc-row">
+          <label class="rc-pick">${icon('camera', 17)}<span id="exRcLabel">แนบรูปใบเสร็จ (ไม่บังคับ)</span>
+            <input id="exRc" type="file" accept="image/*" hidden></label>
+          <img id="exRcThumb" class="rc-thumb" alt="" hidden>
+          <button class="btn secondary btn-sm" id="exRcClear" hidden>${icon('close', 15)}เอารูปออก</button>
+        </div>
+        <button class="btn block" id="exSave">${icon('check', 15)}บันทึกรายจ่าย</button>
         <div class="msg" id="exMsg"></div>`;
       app.appendChild(form);
 
@@ -5516,6 +5577,44 @@ end $$;
       syncDate();
       const exOrders = wireOrderMulti(form, 'exOrder', [], () => parseFloat($('exTotal').value));
       $('exTotal').addEventListener('input', exOrders.refresh);
+
+      // ---- ชิปหมวด: แตะแล้วเติมให้ + ดึงร้านที่เคยจ่ายบ่อยของหมวดนั้นมาใส่ให้เลย ----
+      const markChips = () => {
+        const v = $('exCat').value.trim();
+        form.querySelectorAll('.cat-chip').forEach(b => b.classList.toggle('active', b.dataset.c === v));
+      };
+      const recallVendor = (cat) => {
+        // ร้านล่าสุดของหมวดนี้ เอาจากรายการที่เคยบันทึกจริง ไม่ต้องพิมพ์ซ้ำทุกวัน
+        const last = PURCHASES.find(p => p.kind === 'expense' && p.category === cat && p.vendor);
+        if (last && !$('exVendor').value.trim()) $('exVendor').value = last.vendor;
+      };
+      form.querySelectorAll('.cat-chip').forEach(b => b.addEventListener('click', () => {
+        $('exCat').value = b.dataset.c;
+        markChips();
+        recallVendor(b.dataset.c);
+        $('exTotal').focus();
+      }));
+      $('exCat').addEventListener('input', markChips);
+
+      // ---- รูปใบเสร็จ ----
+      let rcFile = null;
+      const rcReset = () => {
+        rcFile = null;
+        $('exRc').value = '';
+        $('exRcLabel').textContent = 'แนบรูปใบเสร็จ (ไม่บังคับ)';
+        $('exRcThumb').hidden = true;
+        $('exRcClear').hidden = true;
+      };
+      $('exRc').addEventListener('change', () => {
+        const f = $('exRc').files && $('exRc').files[0];
+        if (!f) return rcReset();
+        rcFile = f;
+        $('exRcLabel').textContent = 'แนบแล้ว · แตะเพื่อเปลี่ยนรูป';
+        $('exRcThumb').src = URL.createObjectURL(f);
+        $('exRcThumb').hidden = false;
+        $('exRcClear').hidden = false;
+      });
+      $('exRcClear').addEventListener('click', rcReset);
 
       $('exSave').addEventListener('click', async () => {
         const msg = $('exMsg');
@@ -5527,7 +5626,7 @@ end $$;
         if (exOrders.hasPending()) { msg.textContent = 'ยังมีออเดอร์ที่พิมพ์ค้างไว้ — กด Enter เพื่อเพิ่ม หรือลบข้อความทิ้ง'; msg.className = 'msg error'; return; }
 
         $('exSave').disabled = true;
-        const { error } = await sb.rpc('expense_create', {
+        const { data, error } = await sb.rpc('expense_create', {
           p_date: $('exDate').value || dateKey(),
           p_category: cat,
           p_total: total,
@@ -5536,8 +5635,31 @@ end $$;
           p_order_ids: exOrders.getIds(),
           p_by: (ME && ME.email) ? prettyLogin(ME.email) : null,
         });
+        if (error) {
+          $('exSave').disabled = false;
+          msg.textContent = 'บันทึกไม่สำเร็จ: ' + error.message; msg.className = 'msg error';
+          toast('บันทึกไม่สำเร็จ', 'error');
+          return;
+        }
+
+        // อัปรูปใบเสร็จหลังบันทึกสำเร็จแล้ว — รูปล้มก็ไม่ทำให้รายจ่ายหาย บอกให้รู้แล้วไปแนบทีหลังได้
+        if (rcFile && data) {
+          $('exSave').innerHTML = 'กำลังอัปรูป...';
+          try {
+            const up = await drivePost({
+              action: 'upload', root: 'order',
+              lot: 'ใบเสร็จรายจ่าย-' + String($('exDate').value || dateKey()).slice(0, 7),
+              filename: rcFile.name, mimeType: rcFile.type, data: await fileToBase64(rcFile),
+            });
+            await sb.from('purchases').update({ receipt_file_id: up.file.id, receipt_name: up.file.name }).eq('id', data);
+            toast('บันทึกแล้ว · แนบรูปเรียบร้อย');
+          } catch (err) {
+            toast('บันทึกรายจ่ายแล้ว แต่อัปรูปไม่สำเร็จ', 'error');
+          }
+        } else {
+          toast('บันทึกแล้ว ' + fmtBaht(round2(total)) + ' บาท');
+        }
         $('exSave').disabled = false;
-        if (error) { msg.textContent = 'บันทึกไม่สำเร็จ: ' + error.message; msg.className = 'msg error'; return; }
         await loadPurchases();
       });
     }
@@ -5556,6 +5678,7 @@ end $$;
             <tbody>${list.map(p => `<tr>
               <td data-label="วันที่">${esc(thDate(p.purchase_date))}</td>
               <td data-label="${isExp ? 'หมวด' : 'รายการ'}">${esc(isExp ? (p.category || '-') : (p.item_name || '-'))}
+                ${p.receipt_file_id ? `<div class="hint"><a href="https://drive.google.com/file/d/${esc(p.receipt_file_id)}/view" target="_blank" rel="noreferrer">ดูรูปใบเสร็จ</a></div>` : ''}
                 ${p.note ? `<div class="hint">${esc(p.note)}</div>` : ''}
                 ${isExp ? '' : (p.stock_move_id ? '<div class="hint">รับเข้าสต็อกแล้ว</div>' : '<div class="hint">ไม่ได้รับเข้าสต็อก</div>')}</td>
               <td data-label="${isExp ? 'ผูกออเดอร์' : 'จำนวน'}">${isExp
