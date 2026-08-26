@@ -1346,11 +1346,49 @@
     }
 
     // root: 'fabric' = โฟลเดอร์งานป้ายผ้า (แยกตามล็อต) · 'order' = รูปงานออเดอร์ลูกค้า (แยกตามเลขออเดอร์)
+    /**
+     * ยิง query ซ้ำให้อัตโนมัติเมื่อ "เน็ตสะดุด" เท่านั้น
+     * เคสจริงที่เจอบ่อย: มือถือสลับ wifi/4G · Supabase เพิ่งตื่นจาก pause รอบแรกช้า
+     * error เรื่องสิทธิ์หรือข้อมูลผิด (มี code) ไม่ลองซ้ำ เพราะลองกี่ครั้งก็ได้ผลเดิม
+     * ต้องส่ง "ฟังก์ชันที่สร้าง query" มา ไม่ใช่ตัว query เพราะ query ของ supabase-js ใช้ซ้ำไม่ได้
+     */
+    const NET_ERR = /failed to fetch|networkerror|network request failed|load failed|timeout|aborted/i;
+    async function sbRetry(makeQuery, tries) {
+      tries = tries || 3;
+      let last = null;
+      for (let i = 0; i < tries; i++) {
+        try {
+          const res = await makeQuery();
+          if (!res || !res.error) return res;
+          last = res.error;
+          const retryable = !res.error.code || NET_ERR.test(res.error.message || '');
+          if (!retryable) return res;
+        } catch (e) {
+          last = e;
+          if (!NET_ERR.test(e.message || '')) throw e;
+        }
+        if (i < tries - 1) await new Promise(r => setTimeout(r, 500 * (i + 1)));
+      }
+      return { data: null, error: last };
+    }
+
+    /** fetch ที่มีเวลาจำกัด — Apps Script ค้างได้เป็นนาที ถ้าไม่ตัดเองหน้าจะหมุนไม่จบ */
+    async function fetchTimeout(url, opts, ms) {
+      const ctrl = new AbortController();
+      const t = setTimeout(() => ctrl.abort(), ms || 12000);
+      try {
+        return await fetch(url, Object.assign({}, opts, { signal: ctrl.signal }));
+      } catch (e) {
+        if (e.name === 'AbortError') throw new Error('เชื่อมต่อไม่ทัน (เกิน ' + Math.round((ms || 12000) / 1000) + ' วินาที)');
+        throw e;
+      } finally { clearTimeout(t); }
+    }
+
     async function driveList(lot, root) {
       if (!DRIVE_API_URL) return [];
       const url = DRIVE_API_URL + '?action=list&root=' + encodeURIComponent(root || 'fabric')
         + '&lot=' + encodeURIComponent(lot);
-      const res = await fetch(url);
+      const res = await fetchTimeout(url, null, 12000);
       const data = await res.json();
       if (!data.ok) throw new Error(data.error || 'โหลดรูปไม่สำเร็จ');
       return data.files || [];
@@ -1359,11 +1397,12 @@
     async function drivePost(payload) {
       if (!DRIVE_API_URL) throw new Error('ยังไม่ได้ตั้งค่า DRIVE_API_URL');
       // ใช้ text/plain เพื่อเลี่ยง CORS preflight ที่ Apps Script รองรับไม่ได้
-      const res = await fetch(DRIVE_API_URL, {
+      // อัปรูปให้เวลานานกว่าอ่าน เพราะไฟล์ใหญ่กว่า
+      const res = await fetchTimeout(DRIVE_API_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'text/plain;charset=utf-8' },
         body: JSON.stringify(payload),
-      });
+      }, 45000);
       const data = await res.json();
       if (!data.ok) throw new Error(data.error || 'ทำรายการไม่สำเร็จ');
       return data;
@@ -2055,7 +2094,20 @@
           await loadProducts(currentView);
         }
       } catch (err) {
-        document.getElementById('statusMsg').textContent = 'โหลดไม่สำเร็จ: ' + err.message;
+        // เดิมแก้แค่ข้อความเล็กๆ ข้างบน ตัวหน้ายังค้างคำว่า "กำลังโหลดข้อมูล..." ตลอดไป
+        // ดูเหมือนแอปแฮงก์ ทั้งที่จริงคือโหลดไม่ผ่าน
+        document.getElementById('statusMsg').textContent = 'โหลดไม่สำเร็จ';
+        const box = document.getElementById('app');
+        box.innerHTML = '';
+        const card = document.createElement('div');
+        card.className = 'lot-card';
+        card.style.cssText = 'padding:28px 20px;text-align:center';
+        card.innerHTML = `<div style="font-size:15px;font-weight:600;margin-bottom:6px">โหลดข้อมูลไม่สำเร็จ</div>
+          <div class="hint" style="margin:0 0 16px">${esc(err.message || 'เชื่อมต่อไม่ได้')}</div>
+          <div class="hint" style="margin:0 0 16px">ลองเช็กสัญญาณเน็ตแล้วกดลองใหม่</div>
+          <button class="btn" id="bootRetry">${icon('refresh', 15)}ลองใหม่</button>`;
+        box.appendChild(card);
+        card.querySelector('#bootRetry').addEventListener('click', () => boot());
       }
 
       lastRenderedView = viewKey();
@@ -3383,7 +3435,7 @@ end $$;
     // ===== เช็กว่ามีเวอร์ชันใหม่ไหม =====
     // เบราว์เซอร์ชอบจำไฟล์เก่าไว้ (cache) ทำให้ไม่เห็นของที่เพิ่งอัปเดต
     // ตัวนี้จะแอบเทียบเวอร์ชันกับไฟล์บนเซิร์ฟเวอร์ แล้วขึ้นแถบให้กดอัปเดต
-    const APP_BUILD = '20260827-0210';
+    const APP_BUILD = '20260827-0300';
 
     let lastUpdateCheck = 0;
 
@@ -8745,8 +8797,10 @@ end $$;
 
     async function loadSettings(force) {
       if (SETTINGS_CACHE && !force) return SETTINGS_CACHE;
-      const { data, error } = await sb.from('settings').select('key,value');
-      if (error) throw error;
+      const { data, error } = await sbRetry(() => sb.from('settings').select('key,value'));
+      // ล้มแล้วคืน {} ไม่ใช่ throw — ค่าร้านโหลดไม่ได้ไม่ควรทำให้ทั้งหน้าเปิดไม่ขึ้น
+      // และห้ามคืน null เด็ดขาด หน้าที่อ่าน SETTINGS.xxx จะพังทั้งหน้า
+      if (error || !data) return SETTINGS_CACHE || {};
       const s = {};
       data.forEach(r => s[r.key] = Number(r.value));
       SETTINGS_CACHE = s;
@@ -8803,13 +8857,14 @@ end $$;
       // ยิงพร้อมกันทีเดียว ไม่ต้องรอต่อคิวทีละคำสั่ง
       const [st, lotsRes, piecesRes, wasteRes] = await Promise.all([
         loadSettings(),
-        sb.from('lots').select('id,name,lot_date,created_at'),
-        sb.from('pieces').select('id,lot_id,width_cm,length_cm,label,price,paid,item_type,printed,printed_at,stock_move_id,redo_count,vendor'),
+        sbRetry(() => sb.from('lots').select('id,name,lot_date,created_at')),
+        sbRetry(() => sb.from('pieces').select('id,lot_id,width_cm,length_cm,label,price,paid,item_type,printed,printed_at,stock_move_id,redo_count,vendor')),
         // ดึงทุกแถว (เฉพาะคอลัมน์ที่ใช้) ยอดสรุปจะได้ตรงเสมอ ไม่ตัดที่ 300 แถวแบบเงียบๆ
-        sb.from('fabric_waste').select('id,lot_id,piece_id,kind,reason,note,yards,cost,created_at')
-          .order('created_at', { ascending: false }),
+        sbRetry(() => sb.from('fabric_waste').select('id,lot_id,piece_id,kind,reason,note,yards,cost,created_at')
+          .order('created_at', { ascending: false })),
       ]);
       SETTINGS = st;
+      // ล็อตกับชิ้นงานคือแกนหลักของหน้านี้ ขาดไม่ได้ · ผ้าเสียขาดได้ แค่แท็บนั้นว่าง
       if (lotsRes.error) throw lotsRes.error;
       if (piecesRes.error) throw piecesRes.error;
       const lots = lotsRes.data, pieces = piecesRes.data;
