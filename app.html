@@ -1745,7 +1745,7 @@
       { sep: true },
       { key: 'fabric',    label: 'งานผลิต',     icon: 'factory' },
       { key: 'stock',     label: 'สต็อกของ',   icon: 'box' },
-      { key: 'purchases', label: 'รายจ่าย', icon: 'cash', adminOnly: true },
+      { key: 'purchases', label: 'รายรับรายจ่าย', icon: 'cash', adminOnly: true },
       { sep: true },
       { key: 'customers', label: 'ลูกค้า',     icon: 'user' },
       { key: 'receipts',  label: 'ใบเสร็จ',    icon: 'receipt' },
@@ -1796,7 +1796,7 @@
       if (key === 'fabric') return { label: 'งานผลิต', icon: 'factory' };
       if (key === 'stock') return { label: 'สต็อกของ', icon: 'box' };
       if (key === 'stockreport') return { label: 'ตารางวัตถุดิบคงเหลือ', icon: 'box' };
-      if (key === 'purchases') return { label: 'รายจ่าย', icon: 'cash' };
+      if (key === 'purchases') return { label: 'รายรับรายจ่าย', icon: 'cash' };
       if (key === 'attendance') return { label: 'ลงเวลา', icon: 'clock' };
       if (key === 'schedule') return { label: 'ตารางงาน', icon: 'calendar' };
       if (key === 'timesheet') return { label: 'ประวัติลงเวลา', icon: 'chart' };
@@ -3435,7 +3435,7 @@ end $$;
     // ===== เช็กว่ามีเวอร์ชันใหม่ไหม =====
     // เบราว์เซอร์ชอบจำไฟล์เก่าไว้ (cache) ทำให้ไม่เห็นของที่เพิ่งอัปเดต
     // ตัวนี้จะแอบเทียบเวอร์ชันกับไฟล์บนเซิร์ฟเวอร์ แล้วขึ้นแถบให้กดอัปเดต
-    const APP_BUILD = '20260827-0300';
+    const APP_BUILD = '20260827-0730';
 
     let lastUpdateCheck = 0;
 
@@ -5271,7 +5271,7 @@ end $$;
       product_orders: { label: 'ออเดอร์สินค้า', view: 'products',  children: [] },
       receipts:       { label: 'ใบเสร็จ',      view: 'receipts',  children: [{ table: 'receipt_items', fk: 'receipt_id' }] },
       order_payments: { label: 'รายการรับเงิน', view: 'orders',    children: [] },
-      purchases:      { label: 'รายจ่าย',      view: 'purchases', children: [{ table: 'purchase_orders', fk: 'purchase_id' }] },
+      purchases:      { label: 'รายรับรายจ่าย', view: 'purchases', children: [{ table: 'purchase_orders', fk: 'purchase_id' }] },
       fabric_waste:   { label: 'ผ้าเสีย',      view: 'fabric',    children: [] },
       debt_entries:   { label: 'รายการหนี้',   view: 'debts',     children: [] },
       debt_recurring: { label: 'หนี้รายเดือน', view: 'debts',     children: [] },
@@ -5524,6 +5524,46 @@ end $$;
     let PURCHASES = [];
     let PURCH_ORDERS = [];
     let PURCH_LINKS = [];   // purchase_orders — 1 รายจ่าย ผูกได้หลายออเดอร์ พร้อมส่วนแบ่งเงิน
+    let PURCH_PAY = [];     // order_payments — ใช้หาว่า "เงินครบ" เมื่อไหร่
+    let PURCH_PIECES = [];  // pieces — ค่าจ้างร้านผลิต (อยู่คนละหน้ากับรายจ่าย ต้องดึงมารวมเอง)
+
+    /**
+     * รายรับ = ออเดอร์ที่ **เก็บเงินครบแล้วเท่านั้น**
+     * ค้างจ่ายอยู่ ยังไม่นับเป็นรายรับ (ตกลงกันไว้ 27 ส.ค. 69)
+     * เดือนที่นับ = เดือนที่จ่าย "งวดสุดท้าย" คือวันที่เงินครบจริง ไม่ใช่วันรับงาน
+     */
+    function incomeRows() {
+      const lastPay = {};
+      PURCH_PAY.forEach(p => {
+        const t = p.paid_at || '';
+        if (!lastPay[p.order_id] || t > lastPay[p.order_id]) lastPay[p.order_id] = t;
+      });
+      return PURCH_ORDERS
+        .filter(o => o.status !== 'cancelled'
+          && Number(o.total) > 0
+          && Number(o.paid_amount || 0) >= Number(o.total) - 0.009)
+        .map(o => ({
+          ...o,
+          // ไม่มีประวัติจ่าย (เช่นข้อมูลเก่า) ให้ตกไปใช้วันรับงานแทน จะได้ไม่หายไปจากสรุป
+          paid_month: String(lastPay[o.id] || o.created_at || '').slice(0, 7),
+        }))
+        .filter(o => o.paid_month)
+        .sort((a, b) => (a.paid_month < b.paid_month ? 1 : -1));
+    }
+
+    /** ออเดอร์ที่ยังเก็บไม่ครบ — ยังไม่นับเป็นรายรับ แต่ต้องเห็นว่าค้างเท่าไหร่ */
+    function pendingRows() {
+      return PURCH_ORDERS
+        .filter(o => o.status !== 'cancelled' && Number(o.paid_amount || 0) < Number(o.total) - 0.009)
+        .map(o => ({ ...o, left: round2(Number(o.total) - Number(o.paid_amount || 0)) }));
+    }
+
+    /** ค่าจ้างร้านผลิตที่ "จ่ายแล้ว" — ยังไม่มีคอลัมน์วันจ่าย เลยใช้วันที่สร้างชิ้นงานแทน */
+    function vendorPaidByMonth(ym) {
+      return PURCH_PIECES
+        .filter(p => p.paid && String(p.created_at || '').startsWith(ym))
+        .reduce((a, p) => a + Number(p.price || 0), 0);
+    }
     let purchaseMonth = '';            // '' = ทั้งหมด · 'YYYY-MM' = เฉพาะเดือนนั้น
     let purchaseTab = 'stock';         // stock | expense | summary
 
@@ -5536,17 +5576,22 @@ end $$;
 
     async function loadPurchases() {
       document.getElementById('statusMsg').textContent = 'กำลังโหลด...';
-      const [pRes, oRes, lRes] = await Promise.all([
-        sb.from('purchases').select('*')
-          .order('purchase_date', { ascending: false }).order('created_at', { ascending: false }),
-        sb.from('orders').select('id,order_no,customer').order('created_at', { ascending: false }),
-        sb.from('purchase_orders').select('purchase_id,order_id,share_amount'),
+      const [pRes, oRes, lRes, payRes, pcRes] = await Promise.all([
+        sbRetry(() => sb.from('purchases').select('*')
+          .order('purchase_date', { ascending: false }).order('created_at', { ascending: false })),
+        sbRetry(() => sb.from('orders').select('id,order_no,customer,total,paid_amount,status,created_at')
+          .order('created_at', { ascending: false })),
+        sbRetry(() => sb.from('purchase_orders').select('purchase_id,order_id,share_amount')),
+        sbRetry(() => sb.from('order_payments').select('order_id,amount,paid_at')),
+        sbRetry(() => sb.from('pieces').select('price,paid,created_at')),
         fetchStock(),
       ]);
       if (pRes.error) throw pRes.error;
       PURCHASES = pRes.data || [];
       PURCH_ORDERS = oRes.data || [];
       PURCH_LINKS = lRes.data || [];
+      PURCH_PAY = payRes.data || [];
+      PURCH_PIECES = pcRes.data || [];
       renderPurchases();
       document.getElementById('statusMsg').textContent = 'อัปเดตล่าสุด: ' + new Date().toLocaleString('th-TH');
     }
@@ -5648,26 +5693,30 @@ end $$;
     function renderPurchases() {
       const app = document.getElementById('app');
       app.innerHTML = '';
-      app.appendChild(buildPageHead('รายจ่าย', 'เงินที่จ่ายออกทั้งหมด — ซื้อของเข้าสต็อก และรายจ่ายอื่นเช่นค่าส่ง ค่าน้ำมัน'));
+      app.appendChild(buildPageHead('รายรับรายจ่าย', 'เงินเข้า-เงินออกของร้าน — รายรับนับเฉพาะออเดอร์ที่เก็บเงินครบแล้ว'));
 
       const now = new Date();
       const thisMonth = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');
-      const thisYear = String(now.getFullYear());
       const ofMonth = PURCHASES.filter(p => String(p.purchase_date).startsWith(thisMonth));
-      const ofYear = PURCHASES.filter(p => String(p.purchase_date).startsWith(thisYear));
+
+      const inMonth = incomeRows().filter(o => o.paid_month === thisMonth)
+        .reduce((a, o) => a + Number(o.total), 0);
+      const outMonth = purchSum(ofMonth) + vendorPaidByMonth(thisMonth);
+      const leftMonth = round2(inMonth - outMonth);
 
       const stats = document.createElement('div');
       stats.className = 'month-stats';
       stats.style.marginBottom = 'var(--space-4)';
       stats.innerHTML =
-        `<div class="stat"><div class="num">${fmtBaht(round2(purchSum(ofMonth)))}</div><div class="lbl">เดือนนี้ (บาท)</div></div>
-         <div class="stat"><div class="num">${fmtBaht(round2(purchSum(ofYear)))}</div><div class="lbl">ปีนี้ (บาท)</div></div>
-         <div class="stat"><div class="num">${ofMonth.length}</div><div class="lbl">ครั้งเดือนนี้</div></div>`;
+        `<div class="stat"><div class="num" style="color:var(--ok-text)">${fmtBaht(round2(inMonth))}</div><div class="lbl">รับเดือนนี้ (บาท)</div></div>
+         <div class="stat"><div class="num" style="color:var(--err-text)">${fmtBaht(round2(outMonth))}</div><div class="lbl">จ่ายเดือนนี้ (บาท)</div></div>
+         <div class="stat"><div class="num" style="color:var(--${leftMonth < 0 ? 'err' : 'ok'}-text)">${fmtBaht(leftMonth)}</div><div class="lbl">เหลือ (บาท)</div></div>`;
       app.appendChild(stats);
 
       const tabs = document.createElement('div');
       tabs.className = 'tabs no-print';
       tabs.innerHTML = [
+        ['income', 'รายรับ'],
         ['stock', 'ซื้อของเข้าสต็อก'],
         ['expense', 'รายจ่ายอื่น'],
         ['summary', 'สรุปรายเดือน'],
@@ -5678,6 +5727,7 @@ end $$;
       }));
 
       if (purchaseTab === 'summary') { renderPurchaseSummary(app); return; }
+      if (purchaseTab === 'income') { renderIncomeTab(app); return; }
       if (purchaseTab === 'stock') renderStockPurchaseForm(app);
       else renderExpenseForm(app);
 
@@ -6017,46 +6067,129 @@ end $$;
       }));
     }
 
-    // ---- สรุปรายเดือน: เดือน x หมวด ----
-    // คิดสดจากข้อมูลทุกครั้ง ไม่เก็บยอดสรุปซ้ำไว้อีกตาราง (แก้รายการเก่าแล้วสรุปจะตรงเสมอ)
-    function renderPurchaseSummary(app) {
-      if (!PURCHASES.length) {
-        const empty = document.createElement('div');
-        empty.className = 'lot-card';
-        empty.innerHTML = '<div class="empty-cell" style="padding:28px">ยังไม่มีรายจ่าย</div>';
-        app.appendChild(empty);
+    // ---- แท็บรายรับ ----
+    function renderIncomeTab(app) {
+      const rows = incomeRows();
+      const pend = pendingRows();
+      const months = [...new Set(rows.map(o => o.paid_month))].sort().reverse();
+
+      if (pend.length) {
+        const w = document.createElement('div');
+        w.className = 'lot-card';
+        w.style.marginBottom = 'var(--space-3)';
+        w.innerHTML = `<div class="lot-head"><span>${icon('clock', 16)}ยังไม่นับเป็นรายรับ</span>
+            <span class="st st-cancel">ค้างเก็บ ${fmtBaht(round2(pend.reduce((a, o) => a + o.left, 0)))} บาท</span></div>
+          <div style="padding:var(--space-4)">
+            <div class="hint" style="margin:0 0 10px">ออเดอร์ที่ยังเก็บเงินไม่ครบ จะเข้ามาอยู่ในรายรับเองเมื่อเก็บครบ</div>
+            ${pend.map(o => `<div class="threshold-row" style="justify-content:space-between;margin-top:6px">
+              <span>${esc(o.order_no)} · ${esc(o.customer || 'ไม่ระบุชื่อ')}</span>
+              <span style="color:var(--err-text);font-weight:700">ค้าง ${fmtBaht(o.left)}</span>
+            </div>`).join('')}
+          </div>`;
+        app.appendChild(w);
+      }
+
+      if (!rows.length) {
+        const e = document.createElement('div');
+        e.className = 'lot-card';
+        e.innerHTML = '<div class="empty-cell" style="padding:28px">ยังไม่มีออเดอร์ที่เก็บเงินครบ</div>';
+        app.appendChild(e);
         return;
       }
-      const label = (p) => p.kind === 'expense' ? (p.category || 'อื่นๆ') : 'ซื้อของเข้าสต็อก';
-      const months = [...new Set(PURCHASES.map(p => String(p.purchase_date).slice(0, 7)))].sort().reverse();
-      const cols = ['ซื้อของเข้าสต็อก', ...[...new Set(PURCHASES.filter(p => p.kind === 'expense').map(p => p.category || 'อื่นๆ'))].sort()];
 
-      const cell = (m, c) => purchSum(PURCHASES.filter(p => String(p.purchase_date).startsWith(m) && label(p) === c));
+      const chips = document.createElement('div');
+      chips.className = 'chips no-print';
+      chips.innerHTML = `<button class="chip ${purchaseMonth === '' ? 'active' : ''}" data-m="">ทั้งหมด (${rows.length})</button>` +
+        months.map(m => {
+          const n = rows.filter(o => o.paid_month === m).length;
+          return `<button class="chip ${purchaseMonth === m ? 'active' : ''}" data-m="${m}">${esc(purchaseMonthLabel(m))} (${n})</button>`;
+        }).join('');
+      app.appendChild(chips);
+      chips.querySelectorAll('.chip').forEach(b => b.addEventListener('click', () => {
+        purchaseMonth = b.dataset.m; renderPurchases();
+      }));
+
+      const list = purchaseMonth ? rows.filter(o => o.paid_month === purchaseMonth) : rows;
+      const sum = list.reduce((a, o) => a + Number(o.total), 0);
 
       const card = document.createElement('div');
       card.className = 'lot-card';
       card.innerHTML = `<div class="table-wrap"><table>
-        <thead><tr><th>เดือน</th>${cols.map(c => `<th>${esc(c)}</th>`).join('')}<th>รวมทั้งเดือน</th></tr></thead>
-        <tbody>${months.map(m => {
-          const tot = purchSum(PURCHASES.filter(p => String(p.purchase_date).startsWith(m)));
-          return `<tr>
-            <td data-label="เดือน"><b>${esc(purchaseMonthLabel(m))}</b></td>
-            ${cols.map(c => { const v = cell(m, c);
-              return `<td data-label="${esc(c)}">${v ? fmtBaht(round2(v)) : '-'}</td>`; }).join('')}
-            <td data-label="รวมทั้งเดือน"><b>${fmtBaht(round2(tot))}</b></td>
-          </tr>`;
-        }).join('')}
-        <tr><td><b>รวมทุกเดือน</b></td>
-          ${cols.map(c => `<td><b>${fmtBaht(round2(purchSum(PURCHASES.filter(p => label(p) === c))))}</b></td>`).join('')}
-          <td><b>${fmtBaht(round2(purchSum(PURCHASES)))}</b></td></tr>
+        <thead><tr><th>เดือนที่เก็บครบ</th><th>เลขใบงาน</th><th>ลูกค้า</th><th>ยอด (บาท)</th></tr></thead>
+        <tbody>${list.map(o => `<tr>
+          <td data-label="เดือนที่เก็บครบ">${esc(purchaseMonthLabel(o.paid_month))}</td>
+          <td data-label="เลขใบงาน"><a href="${routeFor('orderView', o.id)}">${esc(o.order_no)}</a></td>
+          <td data-label="ลูกค้า">${esc(o.customer || '-')}</td>
+          <td data-label="ยอด (บาท)"><b>${fmtBaht(round2(o.total))}</b></td>
+        </tr>`).join('')}
+        <tr><td colspan="3"><b>รวมที่แสดง</b></td><td><b>${fmtBaht(round2(sum))}</b></td></tr>
         </tbody></table></div>`;
       app.appendChild(card);
 
       const hint = document.createElement('div');
       hint.className = 'hint no-print';
       hint.style.marginTop = '10px';
-      hint.textContent = 'ยอดคิดสดจากรายการจริงทุกครั้งที่เปิดหน้า — แก้หรือลบรายการเก่าแล้วตัวเลขตรงนี้จะตามให้เอง';
+      hint.textContent = 'นับตามเดือนที่จ่ายงวดสุดท้าย ไม่ใช่เดือนที่รับงาน — เงินเข้ากระเป๋าเดือนไหน ก็นับเดือนนั้น';
       app.appendChild(hint);
+    }
+
+    // ---- สรุปรายเดือน: เงินเข้า vs เงินออก ----
+    // คิดสดจากข้อมูลจริงทุกครั้ง ไม่เก็บยอดสรุปซ้ำไว้อีกตาราง แก้รายการเก่าแล้วตรงเสมอ
+    function renderPurchaseSummary(app) {
+      const inc = incomeRows();
+      const months = [...new Set([
+        ...inc.map(o => o.paid_month),
+        ...PURCHASES.map(p => String(p.purchase_date).slice(0, 7)),
+        ...PURCH_PIECES.filter(p => p.paid).map(p => String(p.created_at || '').slice(0, 7)),
+      ])].filter(Boolean).sort().reverse();
+
+      if (!months.length) {
+        const e = document.createElement('div');
+        e.className = 'lot-card';
+        e.innerHTML = '<div class="empty-cell" style="padding:28px">ยังไม่มีข้อมูล</div>';
+        app.appendChild(e);
+        return;
+      }
+
+      const row = (m) => {
+        const income = inc.filter(o => o.paid_month === m).reduce((a, o) => a + Number(o.total), 0);
+        const stock = purchSum(PURCHASES.filter(p => p.kind === 'stock' && String(p.purchase_date).startsWith(m)));
+        const other = purchSum(PURCHASES.filter(p => p.kind === 'expense' && String(p.purchase_date).startsWith(m)));
+        const vendor = vendorPaidByMonth(m);
+        return { m, income, stock, other, vendor, left: round2(income - stock - other - vendor) };
+      };
+      const rows = months.map(row);
+      const tot = rows.reduce((a, r) => ({
+        income: a.income + r.income, stock: a.stock + r.stock,
+        other: a.other + r.other, vendor: a.vendor + r.vendor, left: a.left + r.left,
+      }), { income: 0, stock: 0, other: 0, vendor: 0, left: 0 });
+
+      const cell = (v) => v ? fmtBaht(round2(v)) : '-';
+      const card = document.createElement('div');
+      card.className = 'lot-card';
+      card.innerHTML = `<div class="table-wrap"><table>
+        <thead><tr><th>เดือน</th><th>รับ</th><th>ซื้อของ</th><th>รายจ่ายอื่น</th><th>จ่ายร้านผลิต</th><th>เหลือ</th></tr></thead>
+        <tbody>${rows.map(r => `<tr>
+          <td data-label="เดือน"><b>${esc(purchaseMonthLabel(r.m))}</b></td>
+          <td data-label="รับ" style="color:var(--ok-text)">${cell(r.income)}</td>
+          <td data-label="ซื้อของ">${cell(r.stock)}</td>
+          <td data-label="รายจ่ายอื่น">${cell(r.other)}</td>
+          <td data-label="จ่ายร้านผลิต">${cell(r.vendor)}</td>
+          <td data-label="เหลือ"><b style="color:var(--${r.left < 0 ? 'err' : 'ok'}-text)">${fmtBaht(r.left)}</b></td>
+        </tr>`).join('')}
+        <tr><td><b>รวมทุกเดือน</b></td>
+          <td><b>${cell(tot.income)}</b></td><td><b>${cell(tot.stock)}</b></td>
+          <td><b>${cell(tot.other)}</b></td><td><b>${cell(tot.vendor)}</b></td>
+          <td><b style="color:var(--${tot.left < 0 ? 'err' : 'ok'}-text)">${fmtBaht(round2(tot.left))}</b></td></tr>
+        </tbody></table></div>`;
+      app.appendChild(card);
+
+      const note = document.createElement('div');
+      note.className = 'hint no-print';
+      note.style.marginTop = '10px';
+      note.innerHTML = '<b>"เหลือ" ไม่ใช่กำไร</b> — ยังไม่ได้หักค่าแรงตัวเอง ค่าเช่า ค่าน้ำค่าไฟ ที่ยังไม่ได้บันทึกในระบบ<br>'
+        + 'รับ = ออเดอร์ที่เก็บเงินครบแล้ว นับตามเดือนที่จ่ายงวดสุดท้าย · จ่ายร้านผลิต = ชิ้นงานที่ติ๊กว่าจ่ายแล้ว';
+      app.appendChild(note);
     }
 
     // ===== สต็อกวัตถุดิบ =====
