@@ -3435,7 +3435,7 @@ end $$;
     // ===== เช็กว่ามีเวอร์ชันใหม่ไหม =====
     // เบราว์เซอร์ชอบจำไฟล์เก่าไว้ (cache) ทำให้ไม่เห็นของที่เพิ่งอัปเดต
     // ตัวนี้จะแอบเทียบเวอร์ชันกับไฟล์บนเซิร์ฟเวอร์ แล้วขึ้นแถบให้กดอัปเดต
-    const APP_BUILD = '20260827-0730';
+    const APP_BUILD = '20260827-0820';
 
     let lastUpdateCheck = 0;
 
@@ -5558,10 +5558,14 @@ end $$;
         .map(o => ({ ...o, left: round2(Number(o.total) - Number(o.paid_amount || 0)) }));
     }
 
-    /** ค่าจ้างร้านผลิตที่ "จ่ายแล้ว" — ยังไม่มีคอลัมน์วันจ่าย เลยใช้วันที่สร้างชิ้นงานแทน */
+    /**
+     * ค่าจ้างร้านผลิตที่จ่ายแล้ว นับตาม paid_at (วันที่จ่ายจริง)
+     * ชิ้นเก่าที่ยังไม่มี paid_at ตกไปใช้ created_at เหมือนเดิม จะได้ไม่หายจากสรุป
+     */
+    const piecePaidMonth = (p) => String(p.paid_at || p.created_at || '').slice(0, 7);
     function vendorPaidByMonth(ym) {
       return PURCH_PIECES
-        .filter(p => p.paid && String(p.created_at || '').startsWith(ym))
+        .filter(p => p.paid && piecePaidMonth(p) === ym)
         .reduce((a, p) => a + Number(p.price || 0), 0);
     }
     let purchaseMonth = '';            // '' = ทั้งหมด · 'YYYY-MM' = เฉพาะเดือนนั้น
@@ -5583,7 +5587,7 @@ end $$;
           .order('created_at', { ascending: false })),
         sbRetry(() => sb.from('purchase_orders').select('purchase_id,order_id,share_amount')),
         sbRetry(() => sb.from('order_payments').select('order_id,amount,paid_at')),
-        sbRetry(() => sb.from('pieces').select('price,paid,created_at')),
+        sbRetry(() => sb.from('pieces').select('price,paid,paid_at,created_at')),
         fetchStock(),
       ]);
       if (pRes.error) throw pRes.error;
@@ -6140,7 +6144,7 @@ end $$;
       const months = [...new Set([
         ...inc.map(o => o.paid_month),
         ...PURCHASES.map(p => String(p.purchase_date).slice(0, 7)),
-        ...PURCH_PIECES.filter(p => p.paid).map(p => String(p.created_at || '').slice(0, 7)),
+        ...PURCH_PIECES.filter(p => p.paid).map(piecePaidMonth),
       ])].filter(Boolean).sort().reverse();
 
       if (!months.length) {
@@ -7837,7 +7841,8 @@ end $$;
       if (e2) throw new Error('บันทึกรายการไม่สำเร็จ: ' + e2.message);
 
       // มาร์คชิ้นที่อยู่ในใบเสร็จว่าจ่ายแล้ว
-      const { error: e3 } = await sb.from('pieces').update({ paid: true }).in('id', items.map(p => p.id));
+      const { error: e3 } = await sb.from('pieces')
+        .update({ paid: true, paid_at: dateKey() }).in('id', items.map(p => p.id));
       if (e3) throw new Error('อัปเดตสถานะจ่ายไม่สำเร็จ: ' + e3.message);
 
       await logActivity('receipt', rc.id, receipt_no, 'created',
@@ -9150,7 +9155,9 @@ end $$;
           </div>` : ''}
           <div class="lot-actions">
             ${rows.some(r => !r.printed) ? `<button class="btn secondary btn-sm print-lot" data-lot="${lot.id}">${icon('printer', 15)}ปริ้นทั้งล็อต</button>` : ''}
-            ${hasUnpaid ? `<button class="btn secondary btn-sm mark-lot-paid" data-lot="${lot.id}">${icon('check', 15)}จ่ายครบล็อต</button>` : ''}
+            ${hasUnpaid
+              ? `<button class="btn secondary btn-sm mark-lot-paid" data-lot="${lot.id}">${icon('check', 15)}จ่ายครบล็อต</button>`
+              : `<button class="btn secondary btn-sm edit-lot-paid admin-only" data-lot="${lot.id}">${icon('calendar', 15)}แก้วันที่จ่าย</button>`}
             <button class="btn secondary btn-sm toggle-gallery" data-lot="${esc(lot.name)}">${icon('image', 15)}<span class="gal-label">รูปงาน</span></button>
             <button class="btn secondary btn-sm lot-more" aria-expanded="false">${icon('more', 15)}เพิ่มเติม</button>
             <span class="lot-more-box" hidden>
@@ -9614,7 +9621,9 @@ end $$;
           const id = el.dataset.id;
           const next = el.dataset.paid !== 'true';
           el.textContent = '...';
-          const { error } = await sb.from('pieces').update({ paid: next }).eq('id', id);
+          // จ่ายแล้วต้องรู้ว่าจ่ายวันไหน ไม่งั้นหน้ารายรับรายจ่ายต้องเดาจากวันที่สร้างชิ้นงาน
+          const { error } = await sb.from('pieces')
+            .update({ paid: next, paid_at: next ? dateKey() : null }).eq('id', id);
           if (error) { alert('อัปเดตไม่สำเร็จ: ' + error.message); }
           await loadAll();
         });
@@ -9795,15 +9804,59 @@ end $$;
 
       renderSelBar();
 
+      // ล็อตที่จ่ายครบแล้ว แก้วันที่จ่ายย้อนหลังได้ (เช่นงานเก่าที่เพิ่งมากรอกเข้าระบบ)
+      app.querySelectorAll('.edit-lot-paid').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const when = await askPaidDate('แก้วันที่จ่ายของล็อตนี้');
+          if (!when) return;
+          btn.disabled = true; btn.textContent = 'กำลังบันทึก...';
+          const { error } = await sb.from('pieces')
+            .update({ paid_at: when }).eq('lot_id', btn.dataset.lot).eq('paid', true);
+          if (error) { alert('อัปเดตไม่สำเร็จ: ' + error.message); btn.disabled = false; return; }
+          toast('แก้วันที่จ่ายแล้ว');
+          await loadAll();
+        });
+      });
+
       app.querySelectorAll('.mark-lot-paid').forEach(btn => {
         btn.addEventListener('click', async () => {
-          if (!confirm('มาร์คทุกชิ้นในล็อตนี้ว่าจ่ายแล้ว?')) return;
+          // ถามวันที่จ่ายด้วย — จ่ายย้อนหลังได้ ยอดจะเข้าเดือนที่จ่ายจริง
+          const when = await askPaidDate('มาร์คทุกชิ้นในล็อตนี้ว่าจ่ายแล้ว');
+          if (!when) return;
           const lotId = btn.dataset.lot;
           btn.disabled = true; btn.textContent = 'กำลังบันทึก...';
-          const { error } = await sb.from('pieces').update({ paid: true }).eq('lot_id', lotId);
+          const { error } = await sb.from('pieces').update({ paid: true, paid_at: when }).eq('lot_id', lotId);
           if (error) { alert('อัปเดตไม่สำเร็จ: ' + error.message); btn.disabled = false; return; }
           await loadAll();
         });
+      });
+    }
+
+    /** กล่องถามวันที่จ่ายร้านผลิต — ค่าเริ่มต้นเป็นวันนี้ ย้อนหลังได้ */
+    function askPaidDate(title) {
+      return new Promise(resolve => {
+        const back = document.createElement('div');
+        back.className = 'modal-back no-print';
+        back.innerHTML = `
+          <div class="modal-card" role="dialog" aria-modal="true">
+            <h3>${esc(title)}</h3>
+            <div class="modal-sub">จ่ายเงินให้ร้านผลิตวันไหน — ยอดจะไปเข้าเดือนนั้นในหน้ารายรับรายจ่าย</div>
+            <div class="field"><label for="pdDate">วันที่จ่าย</label>
+              <input id="pdDate" type="date" value="${dateKey()}">
+              <div class="hint" id="pdTh"></div></div>
+            <div class="field-row" style="justify-content:flex-end;margin-top:6px">
+              <button class="btn secondary" id="pdCancel">ยกเลิก</button>
+              <button class="btn" id="pdOk">${icon('check', 15)}บันทึก</button>
+            </div>
+          </div>`;
+        document.body.appendChild(back);
+        const close = (v) => { back.remove(); resolve(v); };
+        const inp = back.querySelector('#pdDate');
+        const sync = () => { back.querySelector('#pdTh').textContent = inp.value ? thDate(inp.value) : ''; };
+        inp.addEventListener('change', sync); sync();
+        back.querySelector('#pdCancel').addEventListener('click', () => close(null));
+        back.addEventListener('click', (e) => { if (e.target === back) close(null); });
+        back.querySelector('#pdOk').addEventListener('click', () => close(inp.value || dateKey()));
       });
     }
 
